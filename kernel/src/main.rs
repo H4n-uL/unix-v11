@@ -9,9 +9,8 @@
 extern crate alloc;
 
 mod ram;
-
 use core::panic::PanicInfo;
-use ram::{RAMDescriptor, PAGE_4KIB};
+use ram::RAMDescriptor;
 
 macro_rules! arch {
     ($arch:literal, $modname:ident) => {
@@ -24,12 +23,6 @@ arch!("aarch64", aarch64);
 arch!("x86_64", amd64);
 
 fn init_metal(efi_ram_layout: &[RAMDescriptor]) {
-    let last_ram_desc = efi_ram_layout[efi_ram_layout.len() - 1];
-    let ram_size = last_ram_desc.phys_start + last_ram_desc.page_count * PAGE_4KIB as u64;
-    arch::serial_print("RAM Size: ");
-    arch::print_hex64(ram_size);
-    arch::serial_print("\n");
-    unsafe { arch::map_identity(ram_size); }
     ram::init_ram(efi_ram_layout);
     // init_storage();
 }
@@ -38,12 +31,26 @@ fn schedule() -> ! { loop { arch::halt(); } }
 
 #[no_mangle]
 pub extern "win64" fn ignite(layout_ptr: *const RAMDescriptor, layout_len: usize) -> ! {
+    let efi_ram_layout = unsafe { core::slice::from_raw_parts(layout_ptr, layout_len) };
     arch::init_serial();
     arch::serial_print("Research UNIX Version 11\n");
-    let efi_ram_layout = unsafe { core::slice::from_raw_parts(layout_ptr, layout_len) };
     init_metal(efi_ram_layout);
     exec_aleph();
     schedule();
+}
+
+extern "C" {
+    static _kernel_start: u8;
+    static _kernel_end: u8;
+}
+
+pub fn kernel_size() -> usize {
+    // let start = unsafe { &_kernel_start as *const u8 as usize };
+    // let end = unsafe { &_kernel_end as *const u8 as usize };
+    // let size = end - start;
+    let size = 0x200000; // 2MB, temporary
+
+    return size;
 }
 
 #[panic_handler]
