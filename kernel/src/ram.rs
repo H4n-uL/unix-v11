@@ -1,5 +1,4 @@
 use crate::arch;
-use core::ptr::write_volatile;
 use linked_list_allocator::LockedHeap;
 
 pub const STACK_SIZE: usize = 0x10_0000;
@@ -53,18 +52,5 @@ pub fn init_ram(efi_ram_layout: &[RAMDescriptor]) {
     let available_from = unsafe { arch::identity_map(raminfo) };
     unsafe { arch::move_stack(raminfo, STACK_SIZE); }
     if raminfo.available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
-
-    unsafe {
-        let ptr = available_from as *mut u8;
-        arch::serial_print("Heap end: ");
-        arch::print_u64(ptr.add(HEAP_SIZE) as u64);
-        arch::serial_print("\nRSP: ");
-        arch::print_u64(arch::rsp() as u64);
-        arch::serial_print("\n");
-        for i in 0..HEAP_SIZE { write_volatile(ptr.add(i), 0); }
-        core::ptr::write_bytes(ptr, 0, HEAP_SIZE);
-        arch::serial_print("Heap init...");
-        ALLOCATOR.lock().init(ptr, HEAP_SIZE);
-    }
-    arch::serial_print(" OK\n");
+    unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
 }
