@@ -1,4 +1,5 @@
 use crate::arch;
+use core::cmp::Ordering;
 use linked_list_allocator::LockedHeap;
 
 pub const STACK_SIZE: usize = 0x10_0000;
@@ -29,6 +30,32 @@ pub struct RAMInfo {
     pub base: u64,
     pub size: u64,
     pub available: u64
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn memcpy(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
+    for i in 0..size { *(dst.add(i)) = *(src.add(i)); }
+    return dst;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
+    match (src as usize).cmp(&(dst as usize)) {
+        Ordering::Greater => { for i in 0..size {
+            *dst.add(i) = *src.add(i);
+        }}
+        Ordering::Less => { for i in (0..size).rev() {
+            *dst.add(i) = *src.add(i);
+        }}
+        Ordering::Equal => {}
+    }
+    return dst;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn memset(dst: *mut u8, value: u8, size: usize) -> *mut u8 {
+    for i in 0..size { *(dst.add(i)) = value; }
+    return dst;
 }
 
 pub fn get_largest_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescriptor {
