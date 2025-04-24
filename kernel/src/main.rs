@@ -36,6 +36,12 @@ pub extern "win64" fn ignite(layout_ptr: *const RAMDescriptor, layout_len: usize
     arch::serial_print("Research UNIX Version 11\n");
     init_metal(efi_ram_layout);
     exec_aleph();
+
+    let heap_variable = alloc::boxed::Box::new(0xfeedfacecafebabe as u64);
+    arch::serial_print("Heap variable: ");
+    arch::print_u64(*heap_variable.as_ref());
+    arch::serial_print("\n");
+
     schedule();
 }
 
