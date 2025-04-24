@@ -11,4 +11,12 @@ SECTIONS {
 
     . = ALIGN(0x1000);
     PROVIDE(_kernel_end = .);
+
+    /DISCARD/ : {
+        *(.comment)
+        *(.dynamic)
+        *(.eh_frame)
+        *(.interp)
+        *(.note*)
+    }
 }
