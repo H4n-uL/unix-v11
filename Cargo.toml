@@ -1,5 +1,2 @@
 [workspace]
-members = [
-    "efi",
-    "kernel",
-]
+members = ["efi", "kernel"]
