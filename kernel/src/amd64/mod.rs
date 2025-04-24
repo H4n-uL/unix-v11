@@ -189,17 +189,17 @@ pub fn rsp() -> usize {
 }
 
 pub unsafe fn move_stack(raminfo: RAMInfo, stack_size: usize) {
-    let stack_src = rsp();
-    let stack_dst = (raminfo.base + raminfo.available) as usize;
+    let stack_src = (rsp() - stack_size) as *const u8;
+    let stack_dst = (raminfo.base + raminfo.available - stack_size as u64) as *mut u8;
 
-    match stack_src.cmp(&stack_dst) {
-        Ordering::Less => { for i in (1..=stack_size).rev() {
-            *((stack_dst - i) as *mut u8) = *((stack_src - i) as *const u8);
+    match (stack_src as usize).cmp(&(stack_dst as usize)) {
+        Ordering::Greater => { for i in 0..stack_size {
+            *stack_dst.add(i) = *stack_src.add(i);
         }}
-        Ordering::Greater => { for i in 1..=stack_size {
-            *((stack_dst - i) as *mut u8) = *((stack_src - i) as *const u8);
+        Ordering::Less => { for i in (0..stack_size).rev() {
+            *stack_dst.add(i) = *stack_src.add(i);
         }}
-        Ordering::Equal => { return; }
+        Ordering::Equal => {}
     }
 
     core::arch::asm!("mov rsp, {}", in(reg) stack_dst);
