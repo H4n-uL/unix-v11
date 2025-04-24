@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 aarch64 = "0.0.13"
 linked_list_allocator = "0.10.5"
-uefi = "0.34.1"
 x86_64 = "0.15.2"
 
 [profile.dev]
