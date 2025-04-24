@@ -1,11 +1,11 @@
+use crate::{kernel_size, ram::{RAMInfo, PAGE_4KIB}};
+use core::cmp::Ordering;
 use x86_64::{
     instructions::{hlt, interrupts, tlb},
-    registers::control::{Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
+    registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
     structures::paging::PhysFrame,
     PhysAddr
 };
-
-use crate::ram::PAGE_4KIB;
 
 pub fn halt() {
     interrupts::disable();
@@ -61,14 +61,44 @@ pub fn print_hex64(num: u64) {
     });
 }
 
-const PAGE_TABLE_ADDR: u64 = 0x200000;
+pub fn print_u64(num: u64) {
+    let mut num = num;
+    let mut digits = [0u8; 20];
+    let mut i = 0;
+
+    if num == 0 {
+        serial_write_byte(b'0');
+        return;
+    }
+
+    while num > 0 {
+        digits[i] = (num % 10) as u8 + b'0';
+        num /= 10;
+        i += 1;
+    }
+
+    for j in (0..i).rev() {
+        serial_write_byte(digits[j]);
+    }
+}
+
 const ENTRIES_PER_TABLE: usize = 0x200;
 
-pub unsafe fn map_identity(ram_size: u64) {
-    let pml4_addr = PAGE_TABLE_ADDR;
+pub unsafe fn identity_map(raminfo: RAMInfo) -> usize {
+    // Enable PAE and PSE
+    let mut cr4 = Cr4::read();
+    cr4 |= Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION;
+    Cr4::write(cr4);
 
-    // Calculate counts
-    let num_4kib_pages = (ram_size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
+    // Enable long mode
+    let mut efer = Efer::read();
+    efer |= EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE;
+    Efer::write(efer);
+
+    let pml4_addr = kernel_size() as u64 + raminfo.base;
+
+    // Calculate page table counts, sizes, and base addresses
+    let num_4kib_pages = (raminfo.size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
     let num_pt = (num_4kib_pages + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
@@ -126,64 +156,51 @@ pub unsafe fn map_identity(ram_size: u64) {
     }
 
     let mut phys = 0u64;
-    for pt_idx in 0..num_pt { // Allocate Pages
+    for pt_idx in 0..num_pt { // Allocate Pages (Identity Mapping)
         let pt_table_addr = pt_base + (pt_idx as u64 * PAGE_4KIB as u64);
         for j in 0..ENTRIES_PER_TABLE {
-            if phys >= ram_size { break; }
+            if phys >= raminfo.size { break; }
             let entry = (pt_table_addr + (j as u64 * 8)) as *mut u64;
             *entry = phys | 0x03; // PRESENT | WRITABLE
             phys += PAGE_4KIB as u64;
         }
     }
 
-    let mut cr4 = Cr4::read();
-    cr4 |= Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION;
-    Cr4::write(cr4);
-
-    let mut efer = Efer::read();
-    efer |= EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE;
-    Efer::write(efer);
-
-    serial_print("Table size = 0x");
-    print_hex64(table_size as u64);
-    serial_print(" bytes\n");
-
+    // Register PML4 in CR3
     Cr3::write(
         PhysFrame::containing_address(PhysAddr::new(pml4_addr)),
         Cr3Flags::empty()
     );
 
+    // Warrant that paging is enabled
+    let mut cr0 = Cr0::read();
+    cr0 |= Cr0Flags::PAGING;
+    Cr0::write(cr0);
+
+    // Flush TLB
     tlb::flush_all();
-    serial_print("TLB flushed\n");
-    test_memory_areas();
+    return pml4_addr as usize + table_size;
 }
 
-unsafe fn test_memory_areas() {
-    let test_addresses = [
-        0x300000,   // 3 MB
-        0x500000,   // 5 MB
-        0xa00000,   // 10 MB
-        0x1000000,  // 16 MB
-        0x5000000,  // 80 MB
-    ];
+pub fn rsp() -> usize {
+    let rsp: usize;
+    unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
+    return rsp;
+}
 
-    for &addr in &test_addresses {
-        serial_print("Testing memory at 0x");
-        print_hex64(addr);
-        serial_print("... ");
+pub unsafe fn move_stack(raminfo: RAMInfo, stack_size: usize) {
+    let stack_src = rsp();
+    let stack_dst = (raminfo.base + raminfo.available) as usize;
 
-        let test_value = 0xFEEDFACECAFEBABEu64;
-        let test_ptr = addr as *mut u64;
-
-        core::ptr::write_volatile(test_ptr, test_value);
-        let read_value = core::ptr::read_volatile(test_ptr);
-
-        if read_value == test_value {
-            serial_print("SUCCESS\n");
-        } else {
-            serial_print("FAILED (read 0x");
-            print_hex64(read_value as u64);
-            serial_print(")\n");
-        }
+    match stack_src.cmp(&stack_dst) {
+        Ordering::Less => { for i in (1..=stack_size).rev() {
+            *((stack_dst - i) as *mut u8) = *((stack_src - i) as *const u8);
+        }}
+        Ordering::Greater => { for i in 1..=stack_size {
+            *((stack_dst - i) as *mut u8) = *((stack_src - i) as *const u8);
+        }}
+        Ordering::Equal => { return; }
     }
+
+    core::arch::asm!("mov rsp, {}", in(reg) stack_dst);
 }
