@@ -33,12 +33,13 @@ pub struct RAMInfo {
 }
 
 #[no_mangle]
+#[inline(never)]
 pub unsafe extern "C" fn memcpy(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
-    for i in 0..size { *(dst.add(i)) = *(src.add(i)); }
-    return dst;
+    for i in 0..size { *(dst.add(i)) = *(src.add(i)); } return dst;
 }
 
 #[no_mangle]
+#[inline(never)]
 pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
     match (src as usize).cmp(&(dst as usize)) {
         Ordering::Greater => { for i in 0..size {
@@ -48,14 +49,18 @@ pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, size: usize) -> *
             *dst.add(i) = *src.add(i);
         }}
         Ordering::Equal => {}
-    }
-    return dst;
+    } return dst;
 }
 
 #[no_mangle]
+#[inline(never)]
 pub unsafe extern "C" fn memset(dst: *mut u8, value: u8, size: usize) -> *mut u8 {
-    for i in 0..size { *(dst.add(i)) = value; }
-    return dst;
+    for i in 0..size { *(dst.add(i)) = value; } return dst;
+}
+
+pub fn align_up(size: usize, align: usize) -> usize {
+    let mask = align - 1;
+    return (size + mask) & !mask;
 }
 
 pub fn get_largest_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescriptor {
