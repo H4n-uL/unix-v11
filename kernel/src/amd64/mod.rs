@@ -1,4 +1,4 @@
-use crate::{kernel_size, ram::{RAMInfo, PAGE_4KIB}};
+use crate::ram::{RAMInfo, PAGE_4KIB};
 use core::cmp::Ordering;
 use x86_64::{
     instructions::{hlt, interrupts, tlb},
@@ -84,7 +84,7 @@ pub fn print_u64(num: u64) {
 
 const ENTRIES_PER_TABLE: usize = 0x200;
 
-pub unsafe fn identity_map(raminfo: RAMInfo) -> usize {
+pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
     // Enable PAE and PSE
     let mut cr4 = Cr4::read();
     cr4 |= Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION;
@@ -95,39 +95,22 @@ pub unsafe fn identity_map(raminfo: RAMInfo) -> usize {
     efer |= EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE;
     Efer::write(efer);
 
-    let pml4_addr = kernel_size() as u64 + raminfo.base;
-
     // Calculate page table counts, sizes, and base addresses
     let num_4kib_pages = (raminfo.size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
     let num_pt = (num_4kib_pages + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
 
-    let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
-
+    let pml4_addr = kernel_size as u64 + raminfo.base;
     let pdpt_base = pml4_addr + PAGE_4KIB as u64;
     let pd_base = pdpt_base + (num_pdpt as u64 * PAGE_4KIB as u64);
     let pt_base = pd_base + (num_pd as u64 * PAGE_4KIB as u64);
 
-    for i in 0..ENTRIES_PER_TABLE { // Zero out PML4
-        let entry = (pml4_addr + (i as u64 * 8)) as *mut u64;
-        *entry = 0;
-    }
+    let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
 
-    for t in 0..num_pdpt { // Zero out PDPTs
-        let table_addr = pdpt_base + (t as u64 * PAGE_4KIB as u64);
-        for i in 0..ENTRIES_PER_TABLE {
-            let entry = (table_addr + (i as u64 * 8)) as *mut u64;
-            *entry = 0;
-        }
-    }
-
-    for t in 0..num_pd { // Zero out PDs
-        let table_addr = pd_base + (t as u64 * PAGE_4KIB as u64);
-        for i in 0..ENTRIES_PER_TABLE {
-            let entry = (table_addr + (i as u64 * 8)) as *mut u64;
-            *entry = 0;
-        }
+    for i in 0..table_size { // Zero out table
+        let addr = (pml4_addr + i as u64) as *mut u8;
+        *addr = 0;
     }
 
     for i in 0..num_pdpt { // Link PML4 -> PDPTs
