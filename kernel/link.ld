@@ -1,22 +1,15 @@
 ENTRY(ignite)
 
 SECTIONS {
-    . = 0x0;
+    KERNEL_BASE = 0x0;
+    . = KERNEL_BASE;
 
-    PROVIDE(_kernel_start = .);
-    .text   ALIGN(0x1000) : AT(.) { *(.text*) }
-    .rodata ALIGN(0x1000) : AT(.) { *(.rodata*) }
-    .data   ALIGN(0x1000) : AT(.) { *(.data*) }
-    .bss    ALIGN(0x1000) : AT(.) { *(.bss*) }
+    .text     ALIGN(0x1000) : { *(.text*) }
+    .rodata   ALIGN(0x1000) : { *(.rodata*) }
+    .data     ALIGN(0x1000) : { *(.data*) }
+    .rela.dyn ALIGN(8)      : { *(.rela.dyn) }
+    .got      ALIGN(0x1000) : { *(.got*) }
+    .bss      ALIGN(0x1000) : { *(.bss*) }
 
     . = ALIGN(0x1000);
-    PROVIDE(_kernel_end = .);
-
-    /DISCARD/ : {
-        *(.comment)
-        *(.dynamic)
-        *(.eh_frame)
-        *(.interp)
-        *(.note*)
-    }
 }

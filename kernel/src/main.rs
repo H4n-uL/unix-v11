@@ -10,7 +10,7 @@ extern crate alloc;
 
 mod ram;
 use core::panic::PanicInfo;
-use ram::RAMDescriptor;
+use ram::{RAMDescriptor, PAGE_4KIB};
 
 macro_rules! arch {
     ($arch:literal, $modname:ident) => {
@@ -19,44 +19,41 @@ macro_rules! arch {
     };
 }
 
+#[macro_export]
+macro_rules! printk {
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {{
+        use core::fmt::Write;
+        let _ = core::write!($crate::arch::SerialWriter, $fmt $(, $arg)*);
+    }};
+}
+
 arch!("aarch64", aarch64);
 arch!("x86_64", amd64);
 
-fn init_metal(efi_ram_layout: &[RAMDescriptor]) {
-    ram::init_ram(efi_ram_layout);
+fn init_metal(efi_ram_layout: &[RAMDescriptor], kernel_size: usize) {
+    let raminfo = ram::get_ram_info(efi_ram_layout);
+    ram::init_ram(raminfo, kernel_size);
     // init_storage();
 }
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
 #[no_mangle]
-pub extern "win64" fn ignite(layout_ptr: *const RAMDescriptor, layout_len: usize) -> ! {
+pub extern "win64" fn ignite(layout_ptr: *const RAMDescriptor, layout_len: usize, kernel_size: usize) -> ! {
     let efi_ram_layout = unsafe { core::slice::from_raw_parts(layout_ptr, layout_len) };
+    let kernel_size = ram::align_up(kernel_size, PAGE_4KIB);
     arch::init_serial();
     arch::serial_print("Research UNIX Version 11\n");
-    init_metal(efi_ram_layout);
+    init_metal(efi_ram_layout, kernel_size);
     exec_aleph();
 
+    printk!("printk test: {}\n", 1234);
+    let stack_variable = 0xfeedfacecafebabe as u64;
+    printk!("Stack test variable: {:#x}\n", stack_variable);
     let heap_variable = alloc::boxed::Box::new(0xfeedfacecafebabe as u64);
-    arch::serial_print("Heap variable: ");
-    arch::print_u64(*heap_variable.as_ref());
-    arch::serial_print("\n");
+    printk!("Heap test variable: {:#x}\n", *heap_variable.as_ref());
 
     schedule();
-}
-
-extern "C" {
-    static _kernel_start: u8;
-    static _kernel_end: u8;
-}
-
-pub fn kernel_size() -> usize {
-    // let start = unsafe { &_kernel_start as *const u8 as usize };
-    // let end = unsafe { &_kernel_end as *const u8 as usize };
-    // let size = end - start;
-    let size = 0x200000; // 2MB, temporary
-
-    return size;
 }
 
 #[panic_handler]
