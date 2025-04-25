@@ -43,12 +43,6 @@ pub fn serial_putchar(byte: u8) {
     }
 }
 
-pub fn serial_print(s: &str) {
-    for b in s.bytes() {
-        serial_putchar(b);
-    }
-}
-
 pub struct SerialWriter;
 
 impl fmt::Write for SerialWriter {
@@ -63,15 +57,9 @@ impl fmt::Write for SerialWriter {
 const ENTRIES_PER_TABLE: usize = 0x200;
 
 pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
-    // Enable PAE and PSE
-    let mut cr4 = Cr4::read();
-    cr4 |= Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION;
-    Cr4::write(cr4);
-
-    // Enable long mode
-    let mut efer = Efer::read();
-    efer |= EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE;
-    Efer::write(efer);
+    // Enable PAE, PSE, and Long mode
+    Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
+    Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
 
     // Calculate page table counts, sizes, and base addresses
     let num_4kib_pages = (raminfo.size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
@@ -86,7 +74,7 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
 
     let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
 
-    for i in 0..table_size { // Zero out table
+    for i in 0..table_size { // Zero out tables
         let addr = (pml4_addr + i as u64) as *mut u8;
         *addr = 0;
     }
@@ -134,9 +122,7 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
     );
 
     // Warrant that paging is enabled
-    let mut cr0 = Cr0::read();
-    cr0 |= Cr0Flags::PAGING;
-    Cr0::write(cr0);
+    Cr0::write(Cr0::read() | Cr0Flags::PAGING);
 
     // Flush TLB
     tlb::flush_all();
