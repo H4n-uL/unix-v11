@@ -74,9 +74,8 @@ pub fn get_ram_info(efi_ram_layout: &[RAMDescriptor]) -> RAMInfo {
     return RAMInfo { base, size, available };
 }
 
-pub fn init_ram(efi_ram_layout: &[RAMDescriptor]) {
-    let raminfo = get_ram_info(efi_ram_layout);
-    let available_from = unsafe { arch::identity_map(raminfo) };
+pub fn init_ram(raminfo: RAMInfo, kernel_size: usize) {
+    let available_from = unsafe { arch::identity_map(raminfo, kernel_size) };
     unsafe { arch::move_stack(raminfo, STACK_SIZE); }
     if raminfo.available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
     unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
