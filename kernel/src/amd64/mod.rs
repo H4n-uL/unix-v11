@@ -1,7 +1,7 @@
 use crate::ram::{RAMInfo, PAGE_4KIB};
-use core::cmp::Ordering;
+use core::{cmp::Ordering, fmt};
 use x86_64::{
-    instructions::{hlt, interrupts, tlb},
+    instructions::{hlt, interrupts, port::Port, tlb},
     registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
     structures::paging::PhysFrame,
     PhysAddr
@@ -16,8 +16,6 @@ const COM1: u16 = 0x3F8;
 
 pub fn init_serial() {
     unsafe {
-        use x86_64::instructions::port::Port;
-
         let mut port = Port::new(COM1 + 1);
         port.write(0x00u8); // Disable all interrupts
         let mut port = Port::new(COM1 + 3);
@@ -35,10 +33,8 @@ pub fn init_serial() {
     }
 }
 
-pub fn serial_write_byte(byte: u8) {
+pub fn serial_putchar(byte: u8) {
     unsafe {
-        use x86_64::instructions::port::Port;
-
         let mut line_status = Port::<u8>::new(COM1 + 5);
         while line_status.read() & 0x20 == 0 {}
 
@@ -49,36 +45,18 @@ pub fn serial_write_byte(byte: u8) {
 
 pub fn serial_print(s: &str) {
     for b in s.bytes() {
-        serial_write_byte(b);
+        serial_putchar(b);
     }
 }
 
-pub fn print_hex64(num: u64) {
-    (0..16).rev().for_each(|i| {
-        let nibble = (num >> (i * 4)) & 0xF;
-        let hex_char = b"0123456789abcdef"[nibble as usize];
-        serial_write_byte(hex_char);
-    });
-}
+pub struct SerialWriter;
 
-pub fn print_u64(num: u64) {
-    let mut num = num;
-    let mut digits = [0u8; 20];
-    let mut i = 0;
-
-    if num == 0 {
-        serial_write_byte(b'0');
-        return;
-    }
-
-    while num > 0 {
-        digits[i] = (num % 10) as u8 + b'0';
-        num /= 10;
-        i += 1;
-    }
-
-    for j in (0..i).rev() {
-        serial_write_byte(digits[j]);
+impl fmt::Write for SerialWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for byte in s.bytes() {
+            serial_putchar(byte);
+        }
+        Ok(())
     }
 }
 
