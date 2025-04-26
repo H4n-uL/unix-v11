@@ -76,7 +76,7 @@ pub fn init_acpi(rsdp_addr: usize) -> Result<AcpiTables<KernelAcpiHandler>, &'st
 
 pub fn init_device(ember: &Ember) {
     let acpi = init_acpi(ember.acpi_rsdp_ptr);
-    if acpi.is_err() { panic!("ACPI init failed: {:?}", e); }
+    if let Err(e) = acpi { panic!("ACPI init failed: {}", e); }
     let tables = acpi.unwrap();
     let mcfg = tables.find_table::<Mcfg>();
     if mcfg.is_err() { panic!("MCFG not found! Cannot scan PCIe devices."); }
