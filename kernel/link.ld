@@ -1,4 +1,4 @@
-ENTRY(ignite)
+ENTRY(flare)
 
 SECTIONS {
     KERNEL_BASE = 0x0;

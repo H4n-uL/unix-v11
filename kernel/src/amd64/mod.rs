@@ -1,5 +1,5 @@
 use crate::ram::{RAMInfo, PAGE_4KIB};
-use core::{cmp::Ordering, fmt};
+use core::fmt;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
     registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
@@ -129,25 +129,18 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
     return pml4_addr as usize + table_size;
 }
 
-pub fn rsp() -> usize {
+#[inline(always)]
+pub fn stack_ptr() -> usize {
     let rsp: usize;
     unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
     return rsp;
 }
 
-pub unsafe fn move_stack(raminfo: RAMInfo, stack_size: usize) {
-    let stack_src = (rsp() - stack_size) as *const u8;
+pub unsafe fn move_stack(raminfo: RAMInfo, stack_base: usize) {
+    let stack_size = stack_base - stack_ptr();
+    let stack_src = (stack_base - stack_size) as *mut u8;
     let stack_dst = (raminfo.base + raminfo.available - stack_size as u64) as *mut u8;
 
-    match (stack_src as usize).cmp(&(stack_dst as usize)) {
-        Ordering::Greater => { for i in 0..stack_size {
-            *stack_dst.add(i) = *stack_src.add(i);
-        }}
-        Ordering::Less => { for i in (0..stack_size).rev() {
-            *stack_dst.add(i) = *stack_src.add(i);
-        }}
-        Ordering::Equal => {}
-    }
-
+    core::ptr::copy(stack_src, stack_dst, stack_size);
     core::arch::asm!("mov rsp, {}", in(reg) stack_dst);
 }

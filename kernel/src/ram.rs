@@ -1,8 +1,6 @@
-use crate::arch;
-use core::cmp::Ordering;
+use crate::{arch, ember::RAMDescriptor};
 use linked_list_allocator::LockedHeap;
 
-pub const STACK_SIZE: usize = 0x10_0000;
 pub const HEAP_SIZE: usize = 0x10_0000;
 
 pub const PAGE_4KIB: usize = 0x1000;
@@ -14,48 +12,10 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct RAMDescriptor {
-    pub ty: u32,
-    pub reserved: u32,
-    pub phys_start: u64,
-    pub virt_start: u64,
-    pub page_count: u64,
-    pub attr: u64,
-    pub padding: u64
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
 pub struct RAMInfo {
     pub base: u64,
     pub size: u64,
     pub available: u64
-}
-
-#[no_mangle]
-#[inline(never)]
-pub unsafe extern "C" fn memcpy(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
-    for i in 0..size { *(dst.add(i)) = *(src.add(i)); } return dst;
-}
-
-#[no_mangle]
-#[inline(never)]
-pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, size: usize) -> *mut u8 {
-    match (src as usize).cmp(&(dst as usize)) {
-        Ordering::Greater => { for i in 0..size {
-            *dst.add(i) = *src.add(i);
-        }}
-        Ordering::Less => { for i in (0..size).rev() {
-            *dst.add(i) = *src.add(i);
-        }}
-        Ordering::Equal => {}
-    } return dst;
-}
-
-#[no_mangle]
-#[inline(never)]
-pub unsafe extern "C" fn memset(dst: *mut u8, value: u8, size: usize) -> *mut u8 {
-    for i in 0..size { *(dst.add(i)) = value; } return dst;
 }
 
 pub fn align_up(size: usize, align: usize) -> usize {
@@ -79,9 +39,10 @@ pub fn get_ram_info(efi_ram_layout: &[RAMDescriptor]) -> RAMInfo {
     return RAMInfo { base, size, available };
 }
 
-pub fn init_ram(raminfo: RAMInfo, kernel_size: usize) {
+pub fn init_ram(raminfo: RAMInfo, mut kernel_size: usize, stack_ptr: usize) {
+    kernel_size = align_up(kernel_size, PAGE_4KIB);
     let available_from = unsafe { arch::identity_map(raminfo, kernel_size) };
-    unsafe { arch::move_stack(raminfo, STACK_SIZE); }
+    unsafe { arch::move_stack(raminfo, stack_ptr); }
     if raminfo.available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
     unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
 }
