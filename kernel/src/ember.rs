@@ -1,18 +1,4 @@
 #[repr(C)]
-pub struct Ember {
-    pub layout_ptr: *const RAMDescriptor,
-    pub layout_len: usize,
-    pub kernel_size: usize,
-    pub stack_ptr: usize
-}
-
-impl Ember {
-    pub fn efi_ram_layout(self: &Self) -> &[RAMDescriptor] {
-        unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) }
-    }
-}
-
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMDescriptor {
     pub ty: u32,
@@ -22,4 +8,22 @@ pub struct RAMDescriptor {
     pub page_count: u64,
     pub attr: u64,
     pub padding: u64
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Ember {
+    pub layout_ptr: *const RAMDescriptor,
+    pub layout_len: usize,
+    pub acpi_rsdp_ptr: usize,
+    pub stack_ptr: usize,
+    pub kernel_base: usize,
+    pub kernel_size: usize
+}
+
+impl Ember {
+    #[inline(always)]
+    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
+    }
 }
