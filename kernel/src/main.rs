@@ -27,21 +27,21 @@ macro_rules! printk {
     }};
 }
 
-arch!("aarch64", aarch64);
 arch!("x86_64", amd64);
+arch!("aarch64", aarch64);
+arch!("riscv64", riscv64);
 
-fn init_metal(ember: Ember) {
+fn init_metal(ember: &Ember) {
     arch::init_serial();
-    let raminfo = ram::get_ram_info(ember.efi_ram_layout());
-    ram::init_ram(raminfo, ember.kernel_size, ember.stack_ptr);
-    device::init_device();
+    ram::init_ram(ember);
+    device::init_device(ember);
 }
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
 #[no_mangle]
 pub extern "efiapi" fn flare(ember: Ember) -> ! {
-    init_metal(ember);
+    init_metal(&ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
     exec_aleph();
     schedule();

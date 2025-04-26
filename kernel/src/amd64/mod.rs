@@ -16,20 +16,13 @@ const COM1: u16 = 0x3F8;
 
 pub fn init_serial() {
     unsafe {
-        let mut port = Port::new(COM1 + 1);
-        port.write(0x00u8); // Disable all interrupts
-        let mut port = Port::new(COM1 + 3);
-        port.write(0x80u8); // Enable DLAB (set baud rate divisor)
-        let mut port = Port::new(COM1 + 0);
-        port.write(0x03u8); // Set divisor to 3 (lo byte) 38400 baud
-        let mut port = Port::new(COM1 + 1);
-        port.write(0x00u8); //                  (hi byte)
-        let mut port = Port::new(COM1 + 3);
-        port.write(0x03u8); // 8 bits, no parity, one stop bit
-        let mut port = Port::new(COM1 + 2);
-        port.write(0xC7u8); // Enable FIFO, clear them, with 14-byte threshold
-        let mut port = Port::new(COM1 + 4);
-        port.write(0x0Bu8); // IRQs enabled, RTS/DSR set
+        Port::new(COM1 + 1).write(0x00u8); // Disable all interrupts
+        Port::new(COM1 + 3).write(0x80u8); // Enable DLAB (set baud rate divisor)
+        Port::new(COM1 + 0).write(0x03u8); // Set divisor to 3 (lo byte) 38400 baud
+        Port::new(COM1 + 1).write(0x00u8); //                  (hi byte)
+        Port::new(COM1 + 3).write(0x03u8); // 8 bits, no parity, one stop bit
+        Port::new(COM1 + 2).write(0xC7u8); // Enable FIFO, clear them, with 14-byte threshold
+        Port::new(COM1 + 4).write(0x0Bu8); // IRQs enabled, RTS/DSR set
     }
 }
 
@@ -56,7 +49,7 @@ impl fmt::Write for SerialWriter {
 
 const ENTRIES_PER_TABLE: usize = 0x200;
 
-pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
+pub unsafe fn identity_map(raminfo: RAMInfo, kernel_base: usize, kernel_size: usize) -> usize {
     // Enable PAE, PSE, and Long mode
     Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
     Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
@@ -67,7 +60,7 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_size: usize) -> usize {
     let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
 
-    let pml4_addr = kernel_size as u64 + raminfo.base;
+    let pml4_addr = (kernel_base + kernel_size) as u64;
     let pdpt_base = pml4_addr + PAGE_4KIB as u64;
     let pd_base = pdpt_base + (num_pdpt as u64 * PAGE_4KIB as u64);
     let pt_base = pd_base + (num_pd as u64 * PAGE_4KIB as u64);

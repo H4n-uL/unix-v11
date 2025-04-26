@@ -28,8 +28,9 @@ macro_rules! arch {
     };
 }
 
-arch!("aarch64", aarch64);
 arch!("x86_64", amd64);
+arch!("aarch64", aarch64);
+arch!("riscv64", riscv64);
 
 #[repr(C)]
 pub struct RelaEntry {
@@ -38,13 +39,30 @@ pub struct RelaEntry {
     addend: u64,
 }
 
+#[cfg(target_arch = "x86_64")]  const R_RELATIVE: u64 = 8;
+#[cfg(target_arch = "aarch64")] const R_RELATIVE: u64 = 1027;
+#[cfg(target_arch = "riscv64")] const R_RELATIVE: u64 = 3;
+
 #[entry]
 fn ignite() -> Status {
+    let systemtable = system_table_raw().unwrap();
+    let mut acpi_rsdp_ptr = 0;
+    unsafe {
+        let config_ptr = systemtable.as_ref().configuration_table;
+        let config_size = systemtable.as_ref().number_of_configuration_table_entries;
+        let config = core::slice::from_raw_parts(config_ptr, config_size);
+
+        for cfg in config.iter() {
+            if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_rsdp_ptr = cfg.vendor_table as usize; }
+            if cfg.vendor_guid == cfg::ACPI2_GUID { acpi_rsdp_ptr = cfg.vendor_table as usize; break; }
+        }
+    }
+
     let efi_ram_layout = memory_map(MemoryType::LOADER_DATA).unwrap();
     let descriptor_largest = efi_ram_layout.entries()
         .filter(|e| e.ty == MemoryType::CONVENTIONAL)
         .max_by_key(|e| e.page_count).unwrap();
-    let ram_base = descriptor_largest.phys_start;
+    let kernel_base = descriptor_largest.phys_start as usize;
 
     let mut filesys_protocol = get_image_file_system(image_handle()).unwrap();
     let mut root = filesys_protocol.open_volume().unwrap();
@@ -67,7 +85,7 @@ fn ignite() -> Status {
         match ph.get_type() {
             Ok(Type::Load) | Ok(Type::Dynamic) => {
                 let mem_size = ph.mem_size() as usize;
-                let phys_addr = (ram_base + ph.physical_addr()) as *mut u8;
+                let phys_addr = (kernel_base + ph.physical_addr() as usize) as *mut u8;
                 let offset = ph.offset() as usize;
                 let file_size = ph.file_size() as usize;
 
@@ -82,26 +100,26 @@ fn ignite() -> Status {
 
     let rela_addr = elf.find_section_by_name(".rela.dyn").unwrap().address();
     let rela_size = elf.find_section_by_name(".rela.dyn").unwrap().size();
-    let rela_ptr = (ram_base + rela_addr) as *mut RelaEntry;
+    let rela_ptr = (kernel_base + rela_addr as usize) as *mut RelaEntry;
     let entry_count = rela_size as usize / core::mem::size_of::<RelaEntry>();
     for i in 0..entry_count {
         let entry = unsafe { &*rela_ptr.add(i) };
-        let typ = entry.info & 0xffffffff;
-        if typ == 8 { // R_X86_64_RELATIVE
-            let reloc_addr = (ram_base + entry.offset) as *mut u64;
-            unsafe { *reloc_addr = ram_base + entry.addend; }
+        let ty = entry.info & 0xffffffff;
+        if ty == R_RELATIVE {
+            let reloc_addr = (kernel_base + entry.offset as usize) as *mut u64;
+            unsafe { *reloc_addr = kernel_base as u64 + entry.addend; }
         }
     }
 
-    let entrypoint = elf.header.pt2.entry_point() as usize + ram_base as usize;
+    let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base as usize;
     let spark: extern "efiapi" fn(Ember) -> ! = unsafe { core::mem::transmute(entrypoint) };
-    let efi_ram_layout = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
     let stack_ptr = arch::stack_ptr();
+    let efi_ram_layout = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
     let ember = Ember {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
-        kernel_size,
-        stack_ptr
+        acpi_rsdp_ptr,
+        stack_ptr, kernel_base, kernel_size
     };
     spark(ember);
 }

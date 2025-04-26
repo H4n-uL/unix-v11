@@ -1,4 +1,4 @@
-use crate::{arch, ember::RAMDescriptor};
+use crate::{arch, ember::{Ember, RAMDescriptor}};
 use linked_list_allocator::LockedHeap;
 
 pub const HEAP_SIZE: usize = 0x10_0000;
@@ -18,9 +18,9 @@ pub struct RAMInfo {
     pub available: u64
 }
 
-pub fn align_up(size: usize, align: usize) -> usize {
+pub fn align_up(ptr: usize, align: usize) -> usize {
     let mask = align - 1;
-    return (size + mask) & !mask;
+    return (ptr + mask) & !mask;
 }
 
 pub fn get_largest_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescriptor {
@@ -39,10 +39,12 @@ pub fn get_ram_info(efi_ram_layout: &[RAMDescriptor]) -> RAMInfo {
     return RAMInfo { base, size, available };
 }
 
-pub fn init_ram(raminfo: RAMInfo, mut kernel_size: usize, stack_ptr: usize) {
-    kernel_size = align_up(kernel_size, PAGE_4KIB);
-    let available_from = unsafe { arch::identity_map(raminfo, kernel_size) };
-    unsafe { arch::move_stack(raminfo, stack_ptr); }
+pub fn init_ram(ember: &Ember) {
+    let raminfo = get_ram_info(ember.efi_ram_layout());
+    let kernel_size = align_up(ember.kernel_size, PAGE_4KIB);
+    let kernel_base = align_up(ember.kernel_base, PAGE_4KIB);
+    let available_from = unsafe { arch::identity_map(raminfo, kernel_base, kernel_size) };
+    unsafe { arch::move_stack(raminfo, ember.stack_ptr); }
     if raminfo.available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
     unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
 }
