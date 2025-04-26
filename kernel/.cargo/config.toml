@@ -1,7 +1,24 @@
 [build]
 target = "x86_64-unknown-none"
 
+[unstable]
+build-std = ["core", "alloc"]
+
 [target.x86_64-unknown-none]
+rustflags = [
+  "-C", "relocation-model=pic",
+  "-C", "link-arg=-Tkernel/link.ld",
+  "-C", "link-arg=-pie"
+]
+
+[target.aarch64-unknown-none]
+rustflags = [
+  "-C", "relocation-model=pic",
+  "-C", "link-arg=-Tkernel/link.ld",
+  "-C", "link-arg=-pie"
+]
+
+[target.riscv64-unknown-none]
 rustflags = [
   "-C", "relocation-model=pic",
   "-C", "link-arg=-Tkernel/link.ld",
