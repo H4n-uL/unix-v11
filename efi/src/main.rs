@@ -9,7 +9,7 @@
 
 mod ember;
 
-use core::{panic::PanicInfo, ptr::{copy, write_bytes}, slice::from_raw_parts_mut};
+use core::{panic::PanicInfo, ptr::{copy, write_bytes}, slice::{from_raw_parts, from_raw_parts_mut}};
 use ember::{Ember, RAMDescriptor};
 use uefi::{
     boot::{allocate_pages, exit_boot_services, get_image_file_system, image_handle, memory_map, AllocateType, MemoryType},
@@ -50,7 +50,7 @@ fn ignite() -> Status {
     unsafe {
         let config_ptr = systemtable.as_ref().configuration_table;
         let config_size = systemtable.as_ref().number_of_configuration_table_entries;
-        let config = core::slice::from_raw_parts(config_ptr, config_size);
+        let config = from_raw_parts(config_ptr, config_size);
 
         for cfg in config.iter() {
             if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_rsdp_ptr = cfg.vendor_table as usize; }
@@ -113,13 +113,11 @@ fn ignite() -> Status {
 
     let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base as usize;
     let spark: extern "efiapi" fn(Ember) -> ! = unsafe { core::mem::transmute(entrypoint) };
-    let stack_ptr = arch::stack_ptr();
     let efi_ram_layout = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
     let ember = Ember {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
-        acpi_rsdp_ptr,
-        stack_ptr, kernel_base, kernel_size
+        acpi_rsdp_ptr, stack_base: arch::stack_ptr(), kernel_base, kernel_size
     };
     spark(ember);
 }
