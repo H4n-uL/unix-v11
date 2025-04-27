@@ -16,7 +16,7 @@ pub struct Ember {
     pub layout_ptr: *const RAMDescriptor,
     pub layout_len: usize,
     pub acpi_rsdp_ptr: usize,
-    pub stack_ptr: usize,
+    pub stack_base: usize,
     pub kernel_base: usize,
     pub kernel_size: usize
 }
