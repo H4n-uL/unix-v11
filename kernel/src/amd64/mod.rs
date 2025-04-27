@@ -1,5 +1,5 @@
-use crate::ram::{RAMInfo, PAGE_4KIB};
-use core::fmt;
+use crate::{ember::Ember, ram::{RAMInfo, PAGE_4KIB}};
+use core::{fmt, ptr::{copy, write_bytes}};
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
     registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
@@ -12,7 +12,7 @@ pub fn halt() {
     hlt();
 }
 
-const COM1: u16 = 0x3F8;
+const COM1: u16 = 0x3f8;
 
 pub fn init_serial() {
     unsafe {
@@ -21,18 +21,15 @@ pub fn init_serial() {
         Port::new(COM1 + 0).write(0x03u8); // Set divisor to 3 (lo byte) 38400 baud
         Port::new(COM1 + 1).write(0x00u8); //                  (hi byte)
         Port::new(COM1 + 3).write(0x03u8); // 8 bits, no parity, one stop bit
-        Port::new(COM1 + 2).write(0xC7u8); // Enable FIFO, clear them, with 14-byte threshold
-        Port::new(COM1 + 4).write(0x0Bu8); // IRQs enabled, RTS/DSR set
+        Port::new(COM1 + 2).write(0xc7u8); // Enable FIFO, clear them, with 14-byte threshold
+        Port::new(COM1 + 4).write(0x0bu8); // IRQs enabled, RTS/DSR set
     }
 }
 
 pub fn serial_putchar(byte: u8) {
     unsafe {
-        let mut line_status = Port::<u8>::new(COM1 + 5);
-        while line_status.read() & 0x20 == 0 {}
-
-        let mut data = Port::<u8>::new(COM1);
-        data.write(byte);
+        while Port::<u8>::new(COM1 + 5).read() & 0x20 == 0 {}
+        Port::<u8>::new(COM1).write(byte);
     }
 }
 
@@ -67,10 +64,7 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_base: usize, kernel_size: us
 
     let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
 
-    for i in 0..table_size { // Zero out tables
-        let addr = (pml4_addr + i as u64) as *mut u8;
-        *addr = 0;
-    }
+    write_bytes(pml4_addr as *mut u8, 0, table_size);
 
     for i in 0..num_pdpt { // Link PML4 -> PDPTs
         let pml4_entry = (pml4_addr + (i as u64 * 8)) as *mut u64;
@@ -129,11 +123,16 @@ pub fn stack_ptr() -> usize {
     return rsp;
 }
 
-pub unsafe fn move_stack(raminfo: RAMInfo, stack_base: usize) {
-    let stack_size = stack_base - stack_ptr();
-    let stack_src = (stack_base - stack_size) as *mut u8;
-    let stack_dst = (raminfo.base + raminfo.available - stack_size as u64) as *mut u8;
+pub unsafe fn move_stack(ember: &mut Ember, raminfo: RAMInfo) {
+    let current_sp = stack_ptr();
+    let old_stack_base = ember.stack_base;
+    let stack_size = old_stack_base - current_sp;
 
-    core::ptr::copy(stack_src, stack_dst, stack_size);
-    core::arch::asm!("mov rsp, {}", in(reg) stack_dst);
+    let new_stack_base = (raminfo.base + raminfo.available) as usize;
+    let new_stack_bottom = new_stack_base - stack_size;
+
+    copy(current_sp as *const u8, new_stack_bottom as *mut u8, stack_size);
+    core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
+
+    ember.set_new_stack_base(new_stack_base);
 }

@@ -31,7 +31,7 @@ arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
-fn init_metal(ember: &Ember) {
+fn init_metal(ember: &mut Ember) {
     arch::init_serial();
     ram::init_ram(ember);
     device::init_device(ember);
@@ -40,9 +40,14 @@ fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
 #[no_mangle]
-pub extern "efiapi" fn flare(ember: Ember) -> ! {
-    init_metal(&ember);
+pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
+    init_metal(&mut ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
+    let mut ram_layout = ember.efi_ram_layout().to_vec();
+    ram_layout.sort_by(|a, b| a.phys_start.cmp(&b.phys_start));
+    for desc in ram_layout.iter() {
+        printk!("{:?}\n", desc);
+    }
     exec_aleph();
     schedule();
 }
