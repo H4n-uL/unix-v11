@@ -29,12 +29,15 @@ pub fn get_largest_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescripto
     .max_by_key(|e| e.page_count).unwrap();
 }
 
+pub fn get_last_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescriptor {
+    return efi_ram_layout.iter().max_by_key(|e| e.phys_start).unwrap();
+}
+
 pub fn get_ram_info(efi_ram_layout: &[RAMDescriptor]) -> RAMInfo {
     let descriptor_largest = get_largest_descriptor(efi_ram_layout);
+    let last_ram_desc = get_last_descriptor(efi_ram_layout);
     let base = descriptor_largest.phys_start;
     let available = descriptor_largest.page_count * PAGE_4KIB as u64;
-
-    let last_ram_desc = efi_ram_layout[efi_ram_layout.len() - 1];
     let size = last_ram_desc.phys_start + last_ram_desc.page_count * PAGE_4KIB as u64;
     return RAMInfo { base, size, available };
 }
