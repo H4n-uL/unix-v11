@@ -9,10 +9,10 @@
 
 mod ember;
 
-use core::{panic::PanicInfo, ptr::{copy, write_bytes}, slice::{from_raw_parts, from_raw_parts_mut}};
+use core::panic::PanicInfo;
 use ember::{Ember, RAMDescriptor};
 use uefi::{
-    boot::{allocate_pages, exit_boot_services, get_image_file_system, image_handle, memory_map, AllocateType, MemoryType},
+    boot::{allocate_pages, exit_boot_services, get_image_file_system, image_handle, AllocateType, MemoryType},
     cstr16, entry, mem::memory_map::MemoryMap, println,
     proto::media::file::{File, FileAttribute, FileInfo, FileMode},
     table::{cfg, system_table_raw}, Status
@@ -43,6 +43,11 @@ pub struct RelaEntry {
 #[cfg(target_arch = "aarch64")] const R_RELATIVE: u64 = 1027;
 #[cfg(target_arch = "riscv64")] const R_RELATIVE: u64 = 3;
 
+pub fn align_up(ptr: usize, align: usize) -> usize {
+    let mask = align - 1;
+    return (ptr + mask) & !mask;
+}
+
 #[entry]
 fn ignite() -> Status {
     let systemtable = system_table_raw().unwrap();
@@ -50,19 +55,13 @@ fn ignite() -> Status {
     unsafe {
         let config_ptr = systemtable.as_ref().configuration_table;
         let config_size = systemtable.as_ref().number_of_configuration_table_entries;
-        let config = from_raw_parts(config_ptr, config_size);
+        let config = core::slice::from_raw_parts(config_ptr, config_size);
 
         for cfg in config.iter() {
             if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_rsdp_ptr = cfg.vendor_table as usize; }
             if cfg.vendor_guid == cfg::ACPI2_GUID { acpi_rsdp_ptr = cfg.vendor_table as usize; break; }
         }
     }
-
-    let efi_ram_layout = memory_map(MemoryType::LOADER_DATA).unwrap();
-    let descriptor_largest = efi_ram_layout.entries()
-        .filter(|e| e.ty == MemoryType::CONVENTIONAL)
-        .max_by_key(|e| e.page_count).unwrap();
-    let kernel_base = descriptor_largest.phys_start as usize;
 
     let mut filesys_protocol = get_image_file_system(image_handle()).unwrap();
     let mut root = filesys_protocol.open_volume().unwrap();
@@ -73,28 +72,34 @@ fn ignite() -> Status {
 
     let mut info_buf = [0u8; 512];
     let info = file.get_info::<FileInfo>(&mut info_buf).unwrap();
-    let kernel_size = info.file_size() as usize;
+    let file_size = info.file_size() as usize;
 
-    let pages = (kernel_size + PAGE_4KIB - 1) / PAGE_4KIB;
-    let ptr = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, pages).unwrap();
-    let kernel = unsafe { from_raw_parts_mut(ptr.as_ptr(), kernel_size) };
-    file.read(kernel).unwrap();
+    let file_pages = align_up(file_size, PAGE_4KIB) / PAGE_4KIB;
+    let file_ptr = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, file_pages).unwrap();
+    let file_binary = unsafe { core::slice::from_raw_parts_mut(file_ptr.as_ptr(), file_size) };
+    file.read(file_binary).unwrap();
 
-    let elf = ElfFile::new(&kernel).unwrap();
+    let elf = ElfFile::new(&file_binary).unwrap();
+
+    let kernel_size = elf.program_iter()
+        .filter(|ph| ph.get_type() == Ok(Type::Load))
+        .map(|ph| ph.virtual_addr() + ph.mem_size())
+        .max().unwrap() as usize;
+
+    let kernel_pages = align_up(kernel_size, PAGE_4KIB) / PAGE_4KIB;
+    let kernel_base = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, kernel_pages).unwrap().as_ptr() as usize;
+
     for ph in elf.program_iter() {
-        match ph.get_type() {
-            Ok(Type::Load) | Ok(Type::Dynamic) => {
-                let mem_size = ph.mem_size() as usize;
-                let phys_addr = (kernel_base + ph.physical_addr() as usize) as *mut u8;
-                let offset = ph.offset() as usize;
-                let file_size = ph.file_size() as usize;
+        if let Ok(Type::Load) = ph.get_type() {
+            let offset = ph.offset() as usize;
+            let file_size = ph.file_size() as usize;
+            let mem_size = ph.mem_size() as usize;
+            let phys_addr = (kernel_base + ph.virtual_addr() as usize) as *mut u8;
 
-                unsafe {
-                    copy(kernel[offset..offset+file_size].as_ptr(), phys_addr, file_size);
-                    write_bytes(phys_addr.add(file_size), 0, mem_size - file_size);
-                }
+            unsafe {
+                core::ptr::copy(file_binary[offset..offset + file_size].as_ptr(), phys_addr, file_size);
+                core::ptr::write_bytes(phys_addr.add(file_size), 0, mem_size - file_size);
             }
-            _ => {}
         }
     }
 
@@ -119,6 +124,7 @@ fn ignite() -> Status {
         layout_len: efi_ram_layout.len(),
         acpi_rsdp_ptr, stack_base: arch::stack_ptr(), kernel_base, kernel_size
     };
+    // unsafe { arch::identity_map(&ember); }
     spark(ember);
 }
 
