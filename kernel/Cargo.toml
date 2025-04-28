@@ -4,9 +4,10 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-aarch64 = "0.0.13"
+aarch64 = "0.0.14"
 acpi = "5.2.0"
 linked_list_allocator = "0.10.5"
+spin = "0.10.0"
 x86_64 = "0.15.2"
 
 [profile.dev]
