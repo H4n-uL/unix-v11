@@ -42,11 +42,10 @@ fn schedule() -> ! { loop { arch::halt(); } }
 #[no_mangle]
 pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
     ember.protect_layout();
+    ember.sort_ram_layout();
     init_metal(&mut ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
-    let mut ram_layout = ember.efi_ram_layout().to_vec();
-    ram_layout.sort_by(|a, b| a.phys_start.cmp(&b.phys_start));
-    for desc in ram_layout.iter() {
+    for desc in ember.efi_ram_layout() {
         printk!("{:?}\n", desc);
     }
     exec_aleph();

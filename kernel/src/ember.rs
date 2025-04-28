@@ -25,6 +25,14 @@ const PAGE_4KIB: usize = 0x1000;
 const SELF: u32 = 0xffffffff;
 
 impl Ember {
+    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
+    }
+
+    fn efi_ram_layout_mut<'a>(&self) -> &'a mut [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
+    }
+
     pub fn protect_layout(&mut self) {
         let layout_ptr = self.layout_ptr as usize;
         let layout_len_bytes = self.layout_len * size_of::<RAMDescriptor>();
@@ -38,12 +46,15 @@ impl Ember {
         });
     }
 
-    fn efi_ram_layout_mut<'a>(&self) -> &'a mut [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
-    }
-
-    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
+    pub fn sort_ram_layout(&mut self) {
+        let layout = self.efi_ram_layout_mut();
+        for i in 1..layout.len() {
+            let mut j = i;
+            while j > 0 && layout[j - 1].phys_start > layout[j].phys_start {
+                layout.swap(j - 1, j);
+                j -= 1;
+            }
+        }
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {
