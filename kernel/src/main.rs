@@ -47,7 +47,7 @@ pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
 #[no_mangle]
 pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
     *STACK_BASE.lock() = ember.stack_base;
-    ember.protect_layout();
+    ember.protect();
     ember.sort_ram_layout();
     init_metal(&mut ember);
     let ramblock = RAM_BLOCK_MANAGER.lock();

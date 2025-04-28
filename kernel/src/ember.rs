@@ -45,7 +45,8 @@ pub mod ramtype {
 
     // ...
 
-    pub const LAYOUT_SELF          : u32 = 0xffffffff;
+    pub const LAYOUT_SELF          : u32 = 0x4452414d;
+    pub const KERNEL               : u32 = 0x554e4958;
 }
 
 impl Ember {
@@ -57,15 +58,17 @@ impl Ember {
         return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }
 
-    pub fn protect_layout(&mut self) {
-        let layout_ptr = self.layout_ptr as usize;
-        let layout_len_bytes = self.layout_len * size_of::<RAMDescriptor>();
-        let layout_start = layout_ptr as u64;
-        let layout_end = (layout_ptr + layout_len_bytes) as u64;
+    pub fn protect(&mut self) {
+        let layout_start = self.layout_ptr as u64;
+        let layout_end = layout_start + (self.layout_len * size_of::<RAMDescriptor>()) as u64;
+
+        let kernel_start = self.kernel_base as u64;
+        let kernel_end = (self.kernel_base + self.kernel_size) as u64;
 
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
+            if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::LAYOUT_SELF; }
         });
     }
