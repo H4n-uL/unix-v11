@@ -8,9 +8,11 @@
 #![no_main]
 extern crate alloc;
 
-mod device; mod ember; mod ram;
+mod device; mod ember; mod ram; mod ramblock;
 use core::panic::PanicInfo;
 use ember::Ember;
+use ramblock::RAM_BLOCK_MANAGER;
+use spin::Mutex;
 
 macro_rules! arch {
     ($arch:literal, $modname:ident) => {
@@ -31,23 +33,27 @@ arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
-fn init_metal(ember: &mut Ember) {
+fn init_metal(ember: &Ember) {
     arch::init_serial();
     ram::init_ram(ember);
+    printk!("Uniplexed Information and Computing Service Version 11\n");
     device::init_device(ember);
 }
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
+pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
+
 #[no_mangle]
 pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
+    *STACK_BASE.lock() = ember.stack_base;
     ember.protect_layout();
     ember.sort_ram_layout();
     init_metal(&mut ember);
-    printk!("Uniplexed Information and Computing Service Version 11\n");
-    for desc in ember.efi_ram_layout() {
-        printk!("{:?}\n", desc);
-    }
+    let ramblock = RAM_BLOCK_MANAGER.lock();
+    for desc in ember.efi_ram_layout() { printk!("{:?}\n", desc); } printk!("\n");
+    for block in ramblock.blocks() { printk!("{:?}\n", block); } printk!("\n");
+    printk!("Kernel base: {}\n", ember.kernel_base);
     exec_aleph();
     schedule();
 }
