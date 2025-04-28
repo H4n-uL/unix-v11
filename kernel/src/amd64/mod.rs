@@ -45,11 +45,15 @@ impl fmt::Write for SerialWriter {
 }
 
 const ENTRIES_PER_TABLE: usize = 0x200;
-const NORMAL_FLAG: u64 = 0x03; // PRESENT | WRITABLE
-const MMIO_FLAG: u64 = 0x1b; // PRESENT | WRITABLE | PWT | PCD
+
+const UNAVAILABLE_FLAG: u64 = 0x01; // PRESENT
+const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
+const NORMAL_FLAG: u64 = 0x07;      // PRESENT | WRITABLE | USER
+const PROTECT_FLAG: u64 = 0x1b;     // PRESENT | WRITABLE |      | PWT | PCD
 
 pub unsafe fn identity_map(ember: &Ember) -> usize {
-    let last_desc = ember.efi_ram_layout().iter()
+    let efi_ram_layout = ember.efi_ram_layout();
+    let last_desc = efi_ram_layout.iter()
         .max_by_key(|desc| desc.phys_start).unwrap();
     let ram_size = last_desc.phys_start + last_desc.page_count * PAGE_4KIB as u64;
 
@@ -97,13 +101,34 @@ pub unsafe fn identity_map(ember: &Ember) -> usize {
         }
     }
 
-    let mut phys = 0u64;
-    for pt_idx in 0..num_pt { // Allocate Pages (Identity Mapping)
+    let mut end_ptr_cache = 0;
+    let mut flag = UNAVAILABLE_FLAG;
+
+    let mut phys = 0;
+    for pt_idx in 0..num_pt {
         let pt_table_addr = pt_base + (pt_idx as u64 * PAGE_4KIB as u64);
         for j in 0..ENTRIES_PER_TABLE {
             if phys >= ram_size { break; }
             let entry = (pt_table_addr + (j as u64 * 8)) as *mut u64;
-            *entry = phys | NORMAL_FLAG;
+
+            if phys >= end_ptr_cache {
+                flag = UNAVAILABLE_FLAG;
+                for desc in efi_ram_layout {
+                    let start = desc.phys_start;
+                    let end = start + desc.page_count * PAGE_4KIB as u64;
+                    if phys >= start && phys < end {
+                        end_ptr_cache = end;
+                        flag = match desc.ty {
+                            7 => NORMAL_FLAG,
+                            0xffffffff => KERNEL_FLAG,
+                            _ => PROTECT_FLAG,
+                        };
+                        break;
+                    }
+                }
+            }
+
+            *entry = phys | flag;
             phys += PAGE_4KIB as u64;
         }
     }
@@ -130,14 +155,14 @@ pub fn stack_ptr() -> usize {
 }
 
 pub unsafe fn move_stack(ember: &mut Ember, raminfo: RAMInfo) {
-    let current_sp = stack_ptr();
+    let stack_ptr = stack_ptr();
     let old_stack_base = ember.stack_base;
-    let stack_size = old_stack_base - current_sp;
+    let stack_size = old_stack_base - stack_ptr;
 
     let new_stack_base = (raminfo.base + raminfo.available) as usize;
     let new_stack_bottom = new_stack_base - stack_size;
 
-    copy(current_sp as *const u8, new_stack_bottom as *mut u8, stack_size);
+    copy(stack_ptr as *const u8, new_stack_bottom as *mut u8, stack_size);
     core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
 
     ember.set_new_stack_base(new_stack_base);
