@@ -41,6 +41,7 @@ fn schedule() -> ! { loop { arch::halt(); } }
 
 #[no_mangle]
 pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
+    ember.protect_layout();
     init_metal(&mut ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
     let mut ram_layout = ember.efi_ram_layout().to_vec();
