@@ -1,4 +1,4 @@
-use crate::{ember::Ember, ram::{align_up, RAMInfo, PAGE_4KIB}};
+use crate::{ember::{ramtype, Ember}, ram::{align_up, RAMInfo, PAGE_4KIB}};
 use core::{fmt, ptr::{copy, write_bytes}};
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -119,8 +119,8 @@ pub unsafe fn identity_map(ember: &Ember) -> usize {
                     if phys >= start && phys < end {
                         end_ptr_cache = end;
                         flag = match desc.ty {
-                            7 => NORMAL_FLAG,
-                            0xffffffff => KERNEL_FLAG,
+                            ramtype::CONVENTIONAL => NORMAL_FLAG,
+                            ramtype::LAYOUT_SELF  => KERNEL_FLAG,
                             _ => PROTECT_FLAG,
                         };
                         break;

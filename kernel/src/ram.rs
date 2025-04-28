@@ -1,4 +1,4 @@
-use crate::{arch, ember::{Ember, RAMDescriptor}};
+use crate::{arch, ember::{Ember, RAMDescriptor, ramtype}};
 use linked_list_allocator::LockedHeap;
 
 pub const HEAP_SIZE: usize = 0x10_0000;
@@ -25,7 +25,7 @@ pub fn align_up(ptr: usize, align: usize) -> usize {
 
 pub fn get_largest_descriptor(efi_ram_layout: &[RAMDescriptor]) -> &RAMDescriptor {
     return efi_ram_layout.iter()
-    .filter(|e| e.ty == 7) // CONVENTIONAL = 7
+    .filter(|e| e.ty == ramtype::CONVENTIONAL) // Convetional
     .max_by_key(|e| e.page_count).unwrap();
 }
 
