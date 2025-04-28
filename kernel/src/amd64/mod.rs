@@ -1,4 +1,4 @@
-use crate::{ember::Ember, ram::{RAMInfo, PAGE_4KIB}};
+use crate::{ember::Ember, ram::{align_up, RAMInfo, PAGE_4KIB}};
 use core::{fmt, ptr::{copy, write_bytes}};
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -45,19 +45,25 @@ impl fmt::Write for SerialWriter {
 }
 
 const ENTRIES_PER_TABLE: usize = 0x200;
+const NORMAL_FLAG: u64 = 0x03; // PRESENT | WRITABLE
+const MMIO_FLAG: u64 = 0x1b; // PRESENT | WRITABLE | PWT | PCD
 
-pub unsafe fn identity_map(raminfo: RAMInfo, kernel_base: usize, kernel_size: usize) -> usize {
+pub unsafe fn identity_map(ember: &Ember) -> usize {
+    let last_desc = ember.efi_ram_layout().iter()
+        .max_by_key(|desc| desc.phys_start).unwrap();
+    let ram_size = last_desc.phys_start + last_desc.page_count * PAGE_4KIB as u64;
+
     // Enable PAE, PSE, and Long mode
     Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
     Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
 
     // Calculate page table counts, sizes, and base addresses
-    let num_4kib_pages = (raminfo.size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
+    let num_4kib_pages = (ram_size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
     let num_pt = (num_4kib_pages + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
 
-    let pml4_addr = (kernel_base + kernel_size) as u64;
+    let pml4_addr = align_up(ember.kernel_base + ember.kernel_size, PAGE_4KIB) as u64;
     let pdpt_base = pml4_addr + PAGE_4KIB as u64;
     let pd_base = pdpt_base + (num_pdpt as u64 * PAGE_4KIB as u64);
     let pt_base = pd_base + (num_pd as u64 * PAGE_4KIB as u64);
@@ -95,9 +101,9 @@ pub unsafe fn identity_map(raminfo: RAMInfo, kernel_base: usize, kernel_size: us
     for pt_idx in 0..num_pt { // Allocate Pages (Identity Mapping)
         let pt_table_addr = pt_base + (pt_idx as u64 * PAGE_4KIB as u64);
         for j in 0..ENTRIES_PER_TABLE {
-            if phys >= raminfo.size { break; }
+            if phys >= ram_size { break; }
             let entry = (pt_table_addr + (j as u64 * 8)) as *mut u64;
-            *entry = phys | 0x03; // PRESENT | WRITABLE
+            *entry = phys | NORMAL_FLAG;
             phys += PAGE_4KIB as u64;
         }
     }

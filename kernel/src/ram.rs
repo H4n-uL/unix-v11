@@ -44,9 +44,7 @@ pub fn get_ram_info(efi_ram_layout: &[RAMDescriptor]) -> RAMInfo {
 
 pub fn init_ram(ember: &mut Ember) {
     let raminfo = get_ram_info(ember.efi_ram_layout());
-    let kernel_size = align_up(ember.kernel_size, PAGE_4KIB);
-    let kernel_base = align_up(ember.kernel_base, PAGE_4KIB);
-    let available_from = unsafe { arch::identity_map(raminfo, kernel_base, kernel_size) };
+    let available_from = unsafe { arch::identity_map(ember) };
     unsafe { arch::move_stack(ember, raminfo); }
     if raminfo.available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
     unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
