@@ -4,7 +4,7 @@ use spin::Mutex;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMBlock {
-    pub base: usize,
+    pub addr: usize,
     pub size: usize,
     pub used: bool
 }
@@ -12,16 +12,17 @@ pub struct RAMBlock {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMBlockManager {
-    pub blocks: *mut Option<RAMBlock>,
-    pub count: usize,
-    pub max: usize
+    blocks: *mut Option<RAMBlock>,
+    is_init: bool,
+    count: usize,
+    max: usize
 }
 
 pub const BASE_RAMBLOCK_SIZE: usize = 128;
 pub static RAM_BLOCKS: Mutex<[Option<RAMBlock>; BASE_RAMBLOCK_SIZE]> = Mutex::new([None; BASE_RAMBLOCK_SIZE]);
 pub static RAM_BLOCK_MANAGER: Mutex<RAMBlockManager> = Mutex::new(RAMBlockManager {
-    blocks: &raw const RAM_BLOCKS as *const _ as *mut _,
-    count: 0,
+    blocks: &raw const RAM_BLOCKS as *mut _,
+    is_init: false, count: 0,
     max: BASE_RAMBLOCK_SIZE,
 });
 unsafe impl Send for RAMBlockManager {}
@@ -29,6 +30,7 @@ unsafe impl Sync for RAMBlockManager {}
 
 impl RAMBlockManager {
     pub fn init(&mut self, ram_layout: &[RAMDescriptor]) {
+        if self.is_init { return; } self.count = 0;
         for desc in ram_layout {
             if desc.ty == ramtype::CONVENTIONAL {
                 self.add(desc.phys_start as usize, desc.page_count as usize * PAGE_4KIB);
@@ -44,90 +46,86 @@ impl RAMBlockManager {
         unsafe { core::slice::from_raw_parts_mut(self.blocks, self.count) }
     }
 
-    pub fn add(&mut self, base: usize, size: usize) {
-        if self.count >= self.max { self.expand(self.max * 2); }
-        let idx = self.count;
-        self.count += 1;
-        self.blocks_mut()[idx] = Some(RAMBlock { base, size, used: false });
+    pub fn sort(&mut self) {
+        self.blocks_mut().sort_by(|a, b| match (a, b) {
+            (Some(a), Some(b)) => a.addr.cmp(&b.addr),
+            (Some(_), None) => core::cmp::Ordering::Less,
+            (None, Some(_)) => core::cmp::Ordering::Greater,
+            (None, None) => core::cmp::Ordering::Equal,
+        });
     }
 
-    pub fn reserve(&mut self, base: usize, size: usize) {
-        let count = self.count;
+    pub fn find_free_ram(&mut self, size: usize) -> Option<usize> {
+        return self.blocks().iter().flatten()
+            .find(|block| !block.used && block.size >= size)
+            .map(|block| block.addr);
+    }
+
+    pub fn add(&mut self, addr: usize, size: usize) {
+        if self.count >= self.max { self.expand(self.max * 2); }
+        let idx = self.count; self.count += 1;
         let blocks = self.blocks_mut();
-        for i in 0..count {
-            if let Some(block) = blocks[i] {
-                let block_start = block.base;
-                let block_end = block.base + block.size;
-                let req_start = base;
-                let req_end = base + size;
+        blocks[idx] = Some(RAMBlock { addr, size, used: false });
+
+        for i in (1..=idx).rev() {
+            if let (Some(current), Some(prev)) = (blocks[i], blocks[i - 1]) {
+                if current.addr < prev.addr { blocks.swap(i, i - 1); }
+                else { break; }
+            }
+            else { break; }
+        }
+    }
+
+    pub fn alloc_at(&mut self, addr: usize, size: usize) {
+        for block_opt in self.blocks_mut() {
+            if let Some(block) = block_opt {
+                let block_start = block.addr;
+                let block_end = block.addr + block.size;
+                let req_start = addr;
+                let req_end = addr + size;
 
                 if req_start >= block_start && req_end <= block_end {
                     let before_size = req_start - block_start;
                     let after_size = block_end - req_end;
 
-                    blocks[i] = Some(RAMBlock { base: req_start, size, used: true });
+                    *block_opt = Some(RAMBlock { addr: req_start, size, used: true });
                     if before_size > 0 { self.add(block_start, before_size); }
                     if after_size > 0 { self.add(req_end, after_size); }
                     return;
                 }
             }
         }
-        arch::serial_puts("Tried to reserve unknown block\n");
+        arch::serial_puts("Tried to allocate unknown block\n");
     }
 
     pub fn alloc(&mut self, size: usize) -> Option<usize> {
-        let blocks = self.blocks_mut();
-        for block in blocks.iter_mut().flatten() {
-            if !block.used && block.size >= size {
-                block.used = true;
-                return Some(block.base);
-            }
-        }
-        return None;
+        let ptr = self.find_free_ram(size);
+        if let Some(addr) = ptr { self.alloc_at(addr, size); }
+        return ptr;
     }
 
-    pub fn free(&mut self, base: usize) {
-        let blocks = self.blocks_mut();
-        for block in blocks.iter_mut().flatten() {
-            if block.base == base { block.used = false; return; }
-        }
+    pub fn free(&mut self, addr: usize) {
+        let found = self.blocks_mut().iter_mut().flatten()
+            .find(|block| block.addr <= addr && block.addr + block.size > addr);
+
+        if let Some(block) = found { block.used = false; }
+        else { arch::serial_puts("Tried to free unknown block\n"); }
     }
 
     pub fn expand(&mut self, new_max: usize) {
         if new_max <= self.max { return; }
 
-        let needed_bytes = new_max * core::mem::size_of::<Option<RAMBlock>>();
-        let new_blocks_ptr = self.find_free_ram(needed_bytes) as *mut Option<RAMBlock>;
-        self.reserve(new_blocks_ptr as usize, needed_bytes);
+        let manager_size = new_max * core::mem::size_of::<Option<RAMBlock>>();
+        let old_blocks_ptr = self.blocks;
+        let new_blocks_ptr = self.find_free_ram(manager_size).unwrap() as *mut Option<RAMBlock>;
+        self.alloc_at(new_blocks_ptr as usize, manager_size);
 
         unsafe {
-            let count = self.count;
-            let old_blocks = self.blocks();
-            let new_blocks = core::slice::from_raw_parts_mut(new_blocks_ptr, new_max);
-
-            for i in 0..count {
-                new_blocks[i] = old_blocks[i];
-            }
-
+            core::ptr::copy(self.blocks().as_ptr(), new_blocks_ptr, self.count);
             self.blocks = new_blocks_ptr;
             self.max = new_max;
         }
-    }
 
-    pub fn find_free_ram(&mut self, needed_bytes: usize) -> usize {
-        let blocks = self.blocks_mut();
-        for block in blocks.iter_mut().flatten() {
-            if !block.used && block.size >= needed_bytes {
-                let base = block.base;
-
-                block.base += needed_bytes;
-                block.size -= needed_bytes;
-
-                return base;
-            }
-        }
-        arch::serial_puts("No free RAM block big enough for");
-        arch::serial_puthex(needed_bytes);
-        arch::serial_puts(" bytes\n"); panic!();
+        self.free(old_blocks_ptr as usize);
     }
 }
