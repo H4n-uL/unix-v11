@@ -13,8 +13,8 @@ pub struct RAMDescriptor {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Ember {
-    pub layout_ptr: *const RAMDescriptor,
-    pub layout_len: usize,
+    layout_ptr: *const RAMDescriptor,
+    layout_len: usize,
     pub acpi_rsdp_ptr: usize,
     pub stack_base: usize,
     pub kernel_base: usize,
@@ -74,14 +74,9 @@ impl Ember {
     }
 
     pub fn sort_ram_layout(&mut self) {
-        let layout = self.efi_ram_layout_mut();
-        for i in 1..layout.len() {
-            let mut j = i;
-            while j > 0 && layout[j - 1].phys_start > layout[j].phys_start {
-                layout.swap(j - 1, j);
-                j -= 1;
-            }
-        }
+        use crate::sort::HeaplessSort;
+        self.efi_ram_layout_mut()
+            .sort_noheap_by(|a, b| a.phys_start.cmp(&b.phys_start));
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {
