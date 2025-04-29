@@ -47,7 +47,8 @@ impl RAMBlockManager {
     }
 
     pub fn sort(&mut self) {
-        self.blocks_mut().sort_by(|a, b| match (a, b) {
+        use crate::sort::HeaplessSort;
+        self.blocks_mut().sort_noheap_by(|a, b| match (a, b) {
             (Some(a), Some(b)) => a.addr.cmp(&b.addr),
             (Some(_), None) => core::cmp::Ordering::Less,
             (None, Some(_)) => core::cmp::Ordering::Greater,
@@ -118,14 +119,12 @@ impl RAMBlockManager {
         let manager_size = new_max * core::mem::size_of::<Option<RAMBlock>>();
         let old_blocks_ptr = self.blocks;
         let new_blocks_ptr = self.find_free_ram(manager_size).unwrap() as *mut Option<RAMBlock>;
-        self.alloc_at(new_blocks_ptr as usize, manager_size);
-
         unsafe {
             core::ptr::copy(self.blocks().as_ptr(), new_blocks_ptr, self.count);
             self.blocks = new_blocks_ptr;
             self.max = new_max;
         }
-
+        self.alloc_at(new_blocks_ptr as usize, manager_size);
         self.free(old_blocks_ptr as usize);
     }
 }
