@@ -8,7 +8,10 @@
 #![no_main]
 extern crate alloc;
 
-mod device; mod ember; mod ram; mod ramblock;
+mod device; mod ember;
+mod ram; mod ramblock;
+mod sort;
+
 use core::panic::PanicInfo;
 use ember::Ember;
 use ramblock::RAM_BLOCK_MANAGER;
@@ -33,7 +36,7 @@ arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
-fn init_metal(ember: &Ember) {
+fn init_metal(ember: &mut Ember) {
     arch::init_serial();
     ram::init_ram(ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
