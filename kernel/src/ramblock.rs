@@ -14,7 +14,7 @@ pub struct RAMBlock {
 pub struct RAMBlockManager {
     pub blocks: *mut Option<RAMBlock>,
     pub count: usize,
-    pub max: usize,
+    pub max: usize
 }
 
 pub const BASE_RAMBLOCK_SIZE: usize = 128;
@@ -36,69 +36,61 @@ impl RAMBlockManager {
         }
     }
 
+    pub fn blocks(&self) -> &[Option<RAMBlock>] {
+        unsafe { core::slice::from_raw_parts(self.blocks, self.count) }
+    }
+
+    fn blocks_mut(&mut self) -> &mut [Option<RAMBlock>] {
+        unsafe { core::slice::from_raw_parts_mut(self.blocks, self.count) }
+    }
+
     pub fn add(&mut self, base: usize, size: usize) {
         if self.count >= self.max { self.expand(self.max * 2); }
-        unsafe {
-            let blocks = core::slice::from_raw_parts_mut(self.blocks, self.max);
-            blocks[self.count] = Some(RAMBlock { base, size, used: false });
-        }
+        let idx = self.count;
         self.count += 1;
+        self.blocks_mut()[idx] = Some(RAMBlock { base, size, used: false });
     }
 
     pub fn reserve(&mut self, base: usize, size: usize) {
-        unsafe {
-            let blocks = core::slice::from_raw_parts_mut(self.blocks, self.max);
-            for i in 0..self.count {
-                if let Some(block) = blocks[i] {
-                    let block_start = block.base;
-                    let block_end = block.base + block.size;
-                    let req_start = base;
-                    let req_end = base + size;
+        let count = self.count;
+        let blocks = self.blocks_mut();
+        for i in 0..count {
+            if let Some(block) = blocks[i] {
+                let block_start = block.base;
+                let block_end = block.base + block.size;
+                let req_start = base;
+                let req_end = base + size;
 
-                    if req_start >= block_start && req_end <= block_end {
-                        let before_size = req_start - block_start;
-                        let after_size = block_end - req_end;
+                if req_start >= block_start && req_end <= block_end {
+                    let before_size = req_start - block_start;
+                    let after_size = block_end - req_end;
 
-                        blocks[i] = Some(RAMBlock {
-                            base: req_start,
-                            size,
-                            used: true,
-                        });
-
-                        if before_size > 0 { self.add(block_start, before_size); }
-                        if after_size > 0 { self.add(req_end, after_size); }
-                        return;
-                    }
+                    blocks[i] = Some(RAMBlock { base: req_start, size, used: true });
+                    if before_size > 0 { self.add(block_start, before_size); }
+                    if after_size > 0 { self.add(req_end, after_size); }
+                    return;
                 }
             }
         }
         arch::serial_puts("Tried to reserve unknown block\n");
     }
 
-    pub fn free(&mut self, base: usize) {
-        unsafe {
-            let blocks = core::slice::from_raw_parts_mut(self.blocks, self.max);
-            for block in blocks.iter_mut().flatten() {
-                if block.base == base {
-                    block.used = false;
-                    return;
-                }
-            }
-        }
-        arch::serial_puts("Tried to free unknown block\n");
-    }
-
     pub fn alloc(&mut self, size: usize) -> Option<usize> {
-        unsafe {
-            let blocks = core::slice::from_raw_parts_mut(self.blocks, self.max);
-            for block in blocks.iter_mut().flatten() {
-                if !block.used && block.size >= size {
-                    block.used = true;
-                    return Some(block.base);
-                }
+        let blocks = self.blocks_mut();
+        for block in blocks.iter_mut().flatten() {
+            if !block.used && block.size >= size {
+                block.used = true;
+                return Some(block.base);
             }
         }
         return None;
+    }
+
+    pub fn free(&mut self, base: usize) {
+        let blocks = self.blocks_mut();
+        for block in blocks.iter_mut().flatten() {
+            if block.base == base { block.used = false; return; }
+        }
     }
 
     pub fn expand(&mut self, new_max: usize) {
@@ -106,12 +98,14 @@ impl RAMBlockManager {
 
         let needed_bytes = new_max * core::mem::size_of::<Option<RAMBlock>>();
         let new_blocks_ptr = self.find_free_ram(needed_bytes) as *mut Option<RAMBlock>;
+        self.reserve(new_blocks_ptr as usize, needed_bytes);
 
         unsafe {
-            let old_blocks = core::slice::from_raw_parts(self.blocks, self.max);
+            let count = self.count;
+            let old_blocks = self.blocks();
             let new_blocks = core::slice::from_raw_parts_mut(new_blocks_ptr, new_max);
 
-            for i in 0..self.count {
+            for i in 0..count {
                 new_blocks[i] = old_blocks[i];
             }
 
@@ -121,25 +115,19 @@ impl RAMBlockManager {
     }
 
     pub fn find_free_ram(&mut self, needed_bytes: usize) -> usize {
-        unsafe {
-            let blocks = core::slice::from_raw_parts_mut(self.blocks, self.max);
-            for block in blocks.iter_mut().flatten() {
-                if !block.used && block.size >= needed_bytes {
-                    let base = block.base;
+        let blocks = self.blocks_mut();
+        for block in blocks.iter_mut().flatten() {
+            if !block.used && block.size >= needed_bytes {
+                let base = block.base;
 
-                    block.base += needed_bytes;
-                    block.size -= needed_bytes;
+                block.base += needed_bytes;
+                block.size -= needed_bytes;
 
-                    return base;
-                }
+                return base;
             }
         }
         arch::serial_puts("No free RAM block big enough for");
         arch::serial_puthex(needed_bytes);
         arch::serial_puts(" bytes\n"); panic!();
-    }
-
-    pub fn blocks(&self) -> &[Option<RAMBlock>] {
-        unsafe { core::slice::from_raw_parts(self.blocks, self.count) }
     }
 }
