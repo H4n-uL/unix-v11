@@ -1,8 +1,6 @@
 use crate::{arch, ember::{ramtype, Ember, RAMDescriptor}, ramblock::RAM_BLOCK_MANAGER};
 use linked_list_allocator::LockedHeap;
 
-pub const HEAP_SIZE: usize = 0x10_0000;
-
 pub const PAGE_4KIB: usize = 0x1000;
 // pub const PAGE_2MIB: usize = 0x200000;
 // pub const PAGE_1GIB: usize = 0x40000000;
@@ -60,8 +58,7 @@ pub fn init_ram(ember: &Ember) {
     // let mapinfo = unsafe { MappingInfo::new(ember) };
     // let mapinfo = unsafe { arch::identity_map(ember) };
     unsafe { arch::move_stack(conv_info); }
-    if conv_info.conv_available < HEAP_SIZE as u64 { panic!("Not enough RAM for heap"); }
-    let available_from = align_up(ember.kernel_base + ember.kernel_size, PAGE_4KIB);
-    // let available_from = align_up(mapinfo.mmu_base + mapinfo.mmu_size, PAGE_4KIB);
-    unsafe { ALLOCATOR.lock().init(available_from as *mut u8, HEAP_SIZE); }
+    let heap_size = ((conv_info.conv_available as f64 * 0.02) as usize).max(0x100000);
+    let heap_ptr = RAM_BLOCK_MANAGER.lock().alloc(heap_size).unwrap() as *mut u8;
+    unsafe { ALLOCATOR.lock().init(heap_ptr, heap_size); }
 }
