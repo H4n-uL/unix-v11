@@ -45,8 +45,9 @@ pub mod ramtype {
 
     // ...
 
-    pub const LAYOUT_SELF          : u32 = 0x4452414d;
-    pub const KERNEL               : u32 = 0x554e4958;
+    pub const KERNEL_DATA          : u32 = 0x44415441;
+    pub const KERNEL               : u32 = 0x6b726e6c;
+    pub const PAGE_TABLE           : u32 = 0x766d6170;
 }
 
 impl Ember {
@@ -59,8 +60,8 @@ impl Ember {
     }
 
     pub fn protect(&mut self) {
-        let layout_start = self.layout_ptr as u64;
-        let layout_end = layout_start + (self.layout_len * size_of::<RAMDescriptor>()) as u64;
+        use crate::STACK_BASE;
+        *STACK_BASE.lock() = self.stack_base;
 
         let kernel_start = self.kernel_base as u64;
         let kernel_end = (self.kernel_base + self.kernel_size) as u64;
@@ -69,14 +70,12 @@ impl Ember {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
-            if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::LAYOUT_SELF; }
         });
     }
 
-    pub fn sort_ram_layout(&mut self) {
+    pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {
         use crate::sort::HeaplessSort;
-        self.efi_ram_layout_mut()
-            .sort_noheap_by(|a, b| a.phys_start.cmp(&b.phys_start));
+        self.efi_ram_layout_mut().sort_noheap_by_key(key);
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {

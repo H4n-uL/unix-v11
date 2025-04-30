@@ -36,9 +36,9 @@ arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
-fn init_metal(ember: &mut Ember) {
+fn init_metal(ember: &Ember) {
     arch::init_serial();
-    ram::init_ram(ember);
+    ram::init_ram();
     printk!("Uniplexed Information and Computing Service Version 11\n");
     device::init_device(ember);
 }
@@ -49,14 +49,9 @@ pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
 
 #[no_mangle]
 pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
-    *STACK_BASE.lock() = ember.stack_base;
     ember.protect();
-    ember.sort_ram_layout();
-    init_metal(&mut ember);
-    let ramblock = RAM_BLOCK_MANAGER.lock();
-    for desc in ember.efi_ram_layout() { printk!("{:?}\n", desc); } printk!("\n");
-    for block in ramblock.blocks() { printk!("{:?}\n", block); } printk!("\n");
-    printk!("Kernel base: {}\n", ember.kernel_base);
+    RAM_BLOCK_MANAGER.lock().init(&mut ember);
+    init_metal(&ember);
     exec_aleph();
     schedule();
 }

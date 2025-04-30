@@ -1,5 +1,6 @@
-use crate::{ember::{ramtype, Ember}, ram::{align_up, MappingInfo, ConvInfo, PAGE_4KIB}, STACK_BASE};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::RAMBlockManager, STACK_BASE};
 use core::fmt;
+use spin::MutexGuard;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
     registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags, Efer, EferFlags},
@@ -63,11 +64,8 @@ const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
 const NORMAL_FLAG: u64 = 0x07;      // PRESENT | WRITABLE | USER
 const PROTECT_FLAG: u64 = 0x1b;     // PRESENT | WRITABLE |      | PWT | PCD
 
-pub unsafe fn identity_map(ember: &Ember) -> MappingInfo {
-    let efi_ram_layout = ember.efi_ram_layout();
-    let last_desc = efi_ram_layout.iter()
-        .max_by_key(|&desc| desc.phys_start).unwrap();
-    let ram_size = last_desc.phys_start + last_desc.page_count * PAGE_4KIB as u64;
+pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+    let ram_size = ramblock.identity_map_size() as u64;
 
     // Enable PAE, PSE, and Long mode
     Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
@@ -81,12 +79,15 @@ pub unsafe fn identity_map(ember: &Ember) -> MappingInfo {
 
     let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
 
-    let pml4_addr = align_up(ember.kernel_base + ember.kernel_size, PAGE_4KIB) as u64;
+    let ptr = ramblock.alloc(table_size).unwrap();
+    ramblock.from_addr_mut(ptr).unwrap().set_ty(ramtype::PAGE_TABLE);
+
+    let pml4_addr = ptr as u64;
     let pdpt_base = pml4_addr + PAGE_4KIB as u64;
     let pd_base = pdpt_base + (num_pdpt as u64 * PAGE_4KIB as u64);
     let pt_base = pd_base + (num_pd as u64 * PAGE_4KIB as u64);
 
-    core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
+    core::ptr::write_bytes(ptr, 0, table_size);
 
     for i in 0..num_pdpt { // Link PML4 -> PDPTs
         let pml4_entry = (pml4_addr + (i as u64 * 8)) as *mut u64;
@@ -125,18 +126,19 @@ pub unsafe fn identity_map(ember: &Ember) -> MappingInfo {
 
             if phys >= end_ptr_cache {
                 flag = UNAVAILABLE_FLAG;
-                for desc in efi_ram_layout {
-                    let start = desc.phys_start;
-                    let end = start + desc.page_count * PAGE_4KIB as u64;
-                    if phys >= start && phys < end {
-                        end_ptr_cache = end;
-                        flag = match desc.ty {
+                match ramblock.from_addr(phys as *const u8) {
+                    Some(block) => {
+                        end_ptr_cache = (block.addr() + block.size()) as u64;
+                        flag = match block.ty() {
                             ramtype::CONVENTIONAL => NORMAL_FLAG,
-                            ramtype::LAYOUT_SELF  => KERNEL_FLAG,
-                            _ => PROTECT_FLAG,
+                            ramtype::KERNEL =>       KERNEL_FLAG,
+                            ramtype::KERNEL_DATA =>  KERNEL_FLAG,
+                            ramtype::PAGE_TABLE =>   KERNEL_FLAG,
+                            ramtype::MMIO =>         PROTECT_FLAG,
+                            _ =>                     PROTECT_FLAG
                         };
-                        break;
                     }
+                    None => {}
                 }
             }
 
@@ -156,25 +158,24 @@ pub unsafe fn identity_map(ember: &Ember) -> MappingInfo {
 
     // Flush TLB
     tlb::flush_all();
-    return MappingInfo { mmu_base: pml4_addr as usize, mmu_size: table_size };
 }
 
 #[inline(always)]
-pub fn stack_ptr() -> usize {
+pub fn stack_ptr() -> *const u8 {
     let rsp: usize;
     unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
-    return rsp;
+    return rsp as *const u8;
 }
 
-pub unsafe fn move_stack(conv_info: ConvInfo) {
+pub unsafe fn move_stack(ptr: *mut u8, size: usize) {
     let stack_ptr = stack_ptr();
     let old_stack_base = *STACK_BASE.lock();
-    let stack_size = old_stack_base - stack_ptr;
+    let stack_size = old_stack_base - stack_ptr as usize;
 
-    let new_stack_base = (conv_info.conv_base + conv_info.conv_available) as usize;
-    let new_stack_bottom = new_stack_base - stack_size;
+    let new_stack_base = ptr as usize + size;
+    let new_stack_bottom = ptr;
 
-    core::ptr::copy(stack_ptr as *const u8, new_stack_bottom as *mut u8, stack_size);
+    core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
     core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
 
     *STACK_BASE.lock() = new_stack_base;
