@@ -48,7 +48,7 @@ fn schedule() -> ! { loop { arch::halt(); } }
 pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
 
 #[no_mangle]
-pub extern "efiapi" fn flare(mut ember: Ember) -> ! {
+pub extern "efiapi" fn flame(mut ember: Ember) -> ! {
     ember.protect();
     RAM_BLOCK_MANAGER.lock().init(&mut ember);
     init_metal(&ember);

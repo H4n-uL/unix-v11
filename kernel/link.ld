@@ -1,4 +1,4 @@
-ENTRY(flare)
+ENTRY(flame)
 
 SECTIONS {
     KERNEL_BASE = 0x0;
