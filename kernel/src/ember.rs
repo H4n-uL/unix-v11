@@ -55,6 +55,12 @@ impl Ember {
         return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
     }
 
+    pub fn layout_total(&self) -> usize {
+        let last = self.efi_ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
+        return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
+        // return self.efi_ram_layout().iter().map(|desc| desc.page_count as usize * PAGE_4KIB).sum();
+    }
+
     fn efi_ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }

@@ -38,7 +38,7 @@ arch!("riscv64", riscv64);
 
 fn init_metal(ember: &Ember) {
     arch::init_serial();
-    ram::init_ram();
+    ram::init_ram(ember);
     printk!("Uniplexed Information and Computing Service Version 11\n");
     device::init_device(ember);
 }
@@ -51,6 +51,7 @@ pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
 pub extern "efiapi" fn flame(mut ember: Ember) -> ! {
     ember.protect();
     RAM_BLOCK_MANAGER.lock().init(&mut ember);
+    ember.sort_ram_layout_by(|desc| desc.phys_start);
     init_metal(&ember);
     exec_aleph();
     schedule();

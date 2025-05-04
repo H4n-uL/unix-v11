@@ -1,4 +1,4 @@
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::RAMBlockManager, STACK_BASE};
+use crate::{ember::{ramtype, Ember}, ram::PAGE_4KIB, ramblock::RAMBlockManager, STACK_BASE};
 use core::fmt;
 use spin::MutexGuard;
 use x86_64::{
@@ -40,8 +40,11 @@ pub fn serial_puts(s: &str) {
 
 pub fn serial_puthex(n: usize) {
     serial_puts("0x");
+    if n == 0 { serial_putchar(b'0'); return; }
+    let mut start = true;
     for i in (0..16).rev() {
         let nibble = (n >> (i * 4)) & 0xF;
+        if nibble == 0 && start { continue; } start = false;
         serial_putchar(b"0123456789abcdef"[nibble]);
     }
 }
@@ -64,8 +67,55 @@ const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
 const NORMAL_FLAG: u64 = 0x07;      // PRESENT | WRITABLE | USER
 const PROTECT_FLAG: u64 = 0x1b;     // PRESENT | WRITABLE |      | PWT | PCD
 
-pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
-    let ram_size = ramblock.identity_map_size() as u64;
+pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, ramblock: &mut RAMBlockManager) {
+    let virt = virt & 0x000fffff_fffff000;
+    let phys = phys & 0x000fffff_fffff000;
+
+    fn get_index(level: usize, virt: u64) -> usize {
+        match level {
+            0 => ((virt >> 39) & 0x1FF) as usize, // PML4
+            1 => ((virt >> 30) & 0x1FF) as usize, // PDPT
+            2 => ((virt >> 21) & 0x1FF) as usize, // PD
+            3 => ((virt >> 12) & 0x1FF) as usize, // PT
+            _ => panic!("Invalid page table level"),
+        }
+    }
+
+    let mut table = pml4;
+    for level in 0..4 {
+        let index = get_index(level, virt);
+        let entry = table.add(index);
+        if level == 3 { *entry = phys | flags; }
+        else {
+            table = if *entry & 0x1 == 0 {
+                let next_phys_ptr = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE);
+                if next_phys_ptr.is_none() {
+                    serial_puts("[ERROR] alloc for page table failed!\n");
+                    halt();
+                }
+                let next_phys = next_phys_ptr.unwrap() as u64;
+                core::ptr::write_bytes(next_phys as *mut u8, 0, PAGE_4KIB);
+                *entry = next_phys | KERNEL_FLAG;
+                next_phys as *mut u64
+            }
+            else { (*entry & 0x000fffff_fffff000) as *mut u64 };
+        }
+    }
+}
+
+fn flags_for(ty: u32) -> u64 {
+    match ty {
+        ramtype::CONVENTIONAL => NORMAL_FLAG,
+        ramtype::KERNEL =>       KERNEL_FLAG,
+        ramtype::KERNEL_DATA =>  KERNEL_FLAG,
+        ramtype::PAGE_TABLE =>   KERNEL_FLAG,
+        ramtype::MMIO =>         PROTECT_FLAG,
+        _ =>                     PROTECT_FLAG
+    }
+}
+
+pub unsafe fn identity_map(ember: &Ember, ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+    let ram_size = ember.layout_total() as u64;
 
     // Enable PAE, PSE, and Long mode
     Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
@@ -78,72 +128,17 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
 
     let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
+    let pml4_addr = ramblock.reserve_as(table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false).unwrap() as u64;
+    core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
 
-    let ptr = ramblock.alloc(table_size).unwrap();
-    ramblock.from_addr_mut(ptr).unwrap().set_ty(ramtype::PAGE_TABLE);
+    // Map Page Tables
+    for desc in ember.efi_ram_layout() {
+        let block_ty = desc.ty;
+        let block_start = desc.phys_start;
+        let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
 
-    let pml4_addr = ptr as u64;
-    let pdpt_base = pml4_addr + PAGE_4KIB as u64;
-    let pd_base = pdpt_base + (num_pdpt as u64 * PAGE_4KIB as u64);
-    let pt_base = pd_base + (num_pd as u64 * PAGE_4KIB as u64);
-
-    core::ptr::write_bytes(ptr, 0, table_size);
-
-    for i in 0..num_pdpt { // Link PML4 -> PDPTs
-        let pml4_entry = (pml4_addr + (i as u64 * 8)) as *mut u64;
-        *pml4_entry = (pdpt_base + (i as u64 * PAGE_4KIB as u64)) | 0x3;
-    }
-
-    for i in 0..num_pdpt { // Link PDPTs -> PDs
-        let pdpt_entry_addr = pdpt_base + (i as u64 * PAGE_4KIB as u64);
-        for j in 0..ENTRIES_PER_TABLE {
-            let pdpt_entry = (pdpt_entry_addr + (j as u64 * 8)) as *mut u64;
-            let pd_index = i * ENTRIES_PER_TABLE + j;
-            if pd_index >= num_pd { break; }
-            *pdpt_entry = (pd_base + (pd_index as u64 * PAGE_4KIB as u64)) | 0x3;
-        }
-    }
-
-    for i in 0..num_pd { // Link PDs -> PTs
-        let pd_entry_addr = pd_base + (i as u64 * PAGE_4KIB as u64);
-        for j in 0..ENTRIES_PER_TABLE {
-            let pd_entry = (pd_entry_addr + (j as u64 * 8)) as *mut u64;
-            let pt_index = i * ENTRIES_PER_TABLE + j;
-            if pt_index >= num_pt { break; }
-            *pd_entry = (pt_base + (pt_index as u64 * PAGE_4KIB as u64)) | 0x3;
-        }
-    }
-
-    let mut end_ptr_cache = 0;
-    let mut flag = UNAVAILABLE_FLAG;
-
-    let mut phys = 0;
-    for pt_idx in 0..num_pt {
-        let pt_table_addr = pt_base + (pt_idx as u64 * PAGE_4KIB as u64);
-        for j in 0..ENTRIES_PER_TABLE {
-            if phys >= ram_size { break; }
-            let entry = (pt_table_addr + (j as u64 * 8)) as *mut u64;
-
-            if phys >= end_ptr_cache {
-                flag = UNAVAILABLE_FLAG;
-                match ramblock.from_addr(phys as *const u8) {
-                    Some(block) => {
-                        end_ptr_cache = (block.addr() + block.size()) as u64;
-                        flag = match block.ty() {
-                            ramtype::CONVENTIONAL => NORMAL_FLAG,
-                            ramtype::KERNEL =>       KERNEL_FLAG,
-                            ramtype::KERNEL_DATA =>  KERNEL_FLAG,
-                            ramtype::PAGE_TABLE =>   KERNEL_FLAG,
-                            ramtype::MMIO =>         PROTECT_FLAG,
-                            _ =>                     PROTECT_FLAG
-                        };
-                    }
-                    None => {}
-                }
-            }
-
-            *entry = phys | flag;
-            phys += PAGE_4KIB as u64;
+        for phys in (block_start..block_end).step_by(PAGE_4KIB) {
+            map_page(pml4_addr as *mut u64, phys, phys, flags_for(block_ty), ramblock);
         }
     }
 
