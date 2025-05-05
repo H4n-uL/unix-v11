@@ -51,7 +51,6 @@ pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
 pub extern "efiapi" fn flame(mut ember: Ember) -> ! {
     ember.protect();
     RAM_BLOCK_MANAGER.lock().init(&mut ember);
-    ember.sort_ram_layout_by(|desc| desc.phys_start);
     init_metal(&ember);
     exec_aleph();
     schedule();
