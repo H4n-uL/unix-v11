@@ -168,7 +168,7 @@ pub unsafe fn move_stack(ptr: *mut u8, size: usize) {
     let stack_size = old_stack_base - stack_ptr as usize;
 
     let new_stack_base = ptr as usize + size;
-    let new_stack_bottom = ptr;
+    let new_stack_bottom = (new_stack_base - stack_size) as *mut u8;
 
     core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
     core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
