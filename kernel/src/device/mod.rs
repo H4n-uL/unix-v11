@@ -25,7 +25,8 @@ pub struct PciDevice {
     pub bus: u8,
     pub device: u8,
     pub function: u8,
-    pub config: PciHeader
+    pub header: PciHeader,
+    pub config: PciConfig
 }
 
 #[repr(C)]
@@ -45,44 +46,77 @@ pub struct PciHeader {
     pub bist: u8
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct PciConfigT0 {
-    pub bar0: u32,
-    pub bar1: u32,
-    pub bar2: u32,
-    pub bar3: u32,
-    pub bar4: u32,
-    pub bar5: u32
+pub enum PciConfig {
+    Type0(PciConfigType0),
+    Type1(PciConfigType1)
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct PciConfigT1 {
-    pub bar0: u32,
-    pub bar1: u32,
+pub struct PciConfigType0 {
+    pub bar: [u32; 6],
     pub cardbus_cis_ptr: u32,
     pub subsystem_id: u16,
-    pub vendor_id: u16,
-    pub command: u16,
-    pub status: u16,
-    pub revision_id: u8,
-    pub prog_if: u8,
-    pub subclass: u8,
-    pub class: u8,
-    pub cache_line_size: u8,
-    pub latency_timer: u8,
-    pub header_type: u8,
-    pub bist: u8
+    pub subsystem_vendor_id: u16,
+    pub expansion_rom_base: u32,
+    pub capabilities_ptr: u8,
+    pub reserved: [u8; 7],
+    pub interrupt_line: u8,
+    pub interrupt_pin: u8,
+    pub min_grant: u8,
+    pub max_latency: u8
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PciConfigType1 {
+    pub bar: [u32; 2],
+    pub primary_bus: u8,
+    pub secondary_bus: u8,
+    pub subordinate_bus: u8,
+    pub secondary_latency: u8,
+    pub io_base: u8,
+    pub io_limit: u8,
+    pub secondary_status: u16,
+    pub memory_base: u16,
+    pub memory_limit: u16,
+    pub prefetch_memory_base: u16,
+    pub prefetch_memory_limit: u16,
+    pub prefetch_base_upper: u32,
+    pub prefetch_limit_upper: u32,
+    pub io_base_upper: u16,
+    pub io_limit_upper: u16,
+    pub capabilities_ptr: u8,
+    pub reserved0: [u8; 3],
+    pub expansion_rom_base: u32,
+    pub interrupt_line: u8,
+    pub interrupt_pin: u8,
+    pub bridge_control: u16
 }
 
 impl PciDevice {
     pub fn read(mcfg_base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
         let base_ptr = mcfg_base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12);
-        let config = unsafe { *(base_ptr as *const PciHeader) };
-        if config.vendor_id == 0xFFFF { return None; }
-        return Some(PciDevice { bus, device, function, config });
+        let header = unsafe { *(base_ptr as *const PciHeader) };
+        if header.vendor_id == 0xFFFF { return None; }
+
+        let config_ptr = base_ptr + size_of::<PciHeader>() as u64;
+        let config = unsafe {
+            match header.header_type & 0x7f {
+                0 => PciConfig::Type0(*(config_ptr as *const PciConfigType0)),
+                1 => PciConfig::Type1(*(config_ptr as *const PciConfigType1)),
+                _ => panic!("Unknown PCI header type")
+            }
+        };
+
+        return Some(PciDevice { bus, device, function, header, config });
     }
+
+    pub fn cfg(&self) -> &PciConfig { &self.config }
+    pub fn is_nvme(&self) -> bool { self.header.class == 0x01 && self.header.subclass == 0x08 }
+    pub fn is_vga(&self) -> bool { self.header.class == 0x03 && self.header.subclass == 0x00 }
+    pub fn is_bridge(&self) -> bool { self.header.header_type & 0x7f == 1 }
 }
 
 fn scan_pcie_devices(mcfg_base: u64, start_bus: u8, end_bus: u8) -> alloc::vec::Vec<PciDevice> {
@@ -124,12 +158,13 @@ pub fn init_device() {
             printk!(
                 "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
                 dev.bus, dev.device, dev.function,
-                dev.config.vendor_id, dev.config.device_id,
-                dev.config.class, dev.config.subclass, dev.config.prog_if
+                dev.header.vendor_id, dev.header.device_id,
+                dev.header.class, dev.header.subclass, dev.header.prog_if
             );
 
-            if dev.config.class == 0x01 && dev.config.subclass == 0x08 { printk!(" --> NVMe Controller Detected!"); }
-            if dev.config.class == 0x03 && dev.config.subclass == 0x00 { printk!(" --> VGA Compatible Controller Detected!"); }
+            if dev.is_nvme()   { printk!(" --> NVMe Controller"); }
+            if dev.is_vga()    { printk!(" --> VGA Compatible Controller"); }
+            if dev.is_bridge() { printk!(" (PCI Bridge)"); }
             printk!("\n");
         }
     }
