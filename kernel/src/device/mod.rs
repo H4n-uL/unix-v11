@@ -1,4 +1,4 @@
-use crate::{ember::Ember, printk};
+use crate::{printk, EMBER};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
 
 #[derive(Clone, Copy, Debug)]
@@ -25,14 +25,45 @@ pub struct PciDevice {
     pub bus: u8,
     pub device: u8,
     pub function: u8,
-    pub config: PciConfigSpaceHeader
+    pub config: PciHeader
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct PciConfigSpaceHeader {
+pub struct PciHeader {
     pub vendor_id: u16,
     pub device_id: u16,
+    pub command: u16,
+    pub status: u16,
+    pub revision_id: u8,
+    pub prog_if: u8,
+    pub subclass: u8,
+    pub class: u8,
+    pub cache_line_size: u8,
+    pub latency_timer: u8,
+    pub header_type: u8,
+    pub bist: u8
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PciConfigT0 {
+    pub bar0: u32,
+    pub bar1: u32,
+    pub bar2: u32,
+    pub bar3: u32,
+    pub bar4: u32,
+    pub bar5: u32
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PciConfigT1 {
+    pub bar0: u32,
+    pub bar1: u32,
+    pub cardbus_cis_ptr: u32,
+    pub subsystem_id: u16,
+    pub vendor_id: u16,
     pub command: u16,
     pub status: u16,
     pub revision_id: u8,
@@ -48,7 +79,7 @@ pub struct PciConfigSpaceHeader {
 impl PciDevice {
     pub fn read(mcfg_base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
         let base_ptr = mcfg_base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12);
-        let config = unsafe { *(base_ptr as *const PciConfigSpaceHeader) };
+        let config = unsafe { *(base_ptr as *const PciHeader) };
         if config.vendor_id == 0xFFFF { return None; }
         return Some(PciDevice { bus, device, function, config });
     }
@@ -74,8 +105,8 @@ pub fn init_acpi(rsdp_addr: usize) -> Result<AcpiTables<KernelAcpiHandler>, &'st
     return Ok(tables);
 }
 
-pub fn init_device(ember: &Ember) {
-    let acpi = init_acpi(ember.acpi_rsdp_ptr);
+pub fn init_device() {
+    let acpi = init_acpi(EMBER.lock().acpi_rsdp_ptr);
     if let Err(e) = acpi { panic!("ACPI init failed: {}", e); }
     let tables = acpi.unwrap();
     let mcfg = tables.find_table::<Mcfg>();
@@ -84,13 +115,14 @@ pub fn init_device(ember: &Ember) {
     let mcfg_data = mcfg.get();
 
     for entry in mcfg_data.entries() {
-        let devices = scan_pcie_devices(
-            entry.base_address, entry.bus_number_start, entry.bus_number_end
-        );
+        let mcfg_base = entry.base_address;
+        let start_bus = entry.bus_number_start;
+        let end_bus = entry.bus_number_end;
+        let devices = scan_pcie_devices(mcfg_base, start_bus, end_bus);
 
         for dev in devices {
             printk!(
-                "/bus{}/dev{}/fn{} | {:04X}:{:04X} Class {:02X}.{:02X} IF {:02X}",
+                "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
                 dev.bus, dev.device, dev.function,
                 dev.config.vendor_id, dev.config.device_id,
                 dev.config.class, dev.config.subclass, dev.config.prog_if

@@ -1,4 +1,4 @@
-use crate::{ember::{ramtype, Ember}, ram::PAGE_4KIB, ramblock::RAMBlockManager, STACK_BASE};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::RAMBlockManager, EMBER};
 use core::fmt;
 use spin::MutexGuard;
 use x86_64::{
@@ -38,17 +38,6 @@ pub fn serial_puts(s: &str) {
     for byte in s.bytes() { serial_putchar(byte); }
 }
 
-pub fn serial_puthex(n: usize) {
-    serial_puts("0x");
-    if n == 0 { serial_putchar(b'0'); return; }
-    let mut start = true;
-    for i in (0..16).rev() {
-        let nibble = (n >> (i * 4)) & 0xF;
-        if nibble == 0 && start { continue; } start = false;
-        serial_putchar(b"0123456789abcdef"[nibble]);
-    }
-}
-
 pub struct SerialWriter;
 
 impl fmt::Write for SerialWriter {
@@ -62,7 +51,7 @@ impl fmt::Write for SerialWriter {
 
 const ENTRIES_PER_TABLE: usize = 0x200;
 
-const UNAVAILABLE_FLAG: u64 = 0x01; // PRESENT
+// const UNAVAILABLE_FLAG: u64 = 0x01; // PRESENT
 const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
 const NORMAL_FLAG: u64 = 0x07;      // PRESENT | WRITABLE | USER
 const PROTECT_FLAG: u64 = 0x1b;     // PRESENT | WRITABLE |      | PWT | PCD
@@ -88,14 +77,10 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
         if level == 3 { *entry = phys | flags; }
         else {
             table = if *entry & 0x1 == 0 {
-                let next_phys_ptr = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE);
-                if next_phys_ptr.is_none() {
-                    serial_puts("[ERROR] alloc for page table failed!\n");
-                    halt();
-                }
-                let next_phys = next_phys_ptr.unwrap() as u64;
-                core::ptr::write_bytes(next_phys as *mut u8, 0, PAGE_4KIB);
-                *entry = next_phys | KERNEL_FLAG;
+                let next_phys = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE)
+                    .expect("[ERROR] alloc for page table failed!\n");
+                core::ptr::write_bytes(next_phys, 0, PAGE_4KIB);
+                *entry = next_phys as u64 | KERNEL_FLAG;
                 next_phys as *mut u64
             }
             else { (*entry & 0x000fffff_fffff000) as *mut u64 };
@@ -114,7 +99,8 @@ fn flags_for(ty: u32) -> u64 {
     }
 }
 
-pub unsafe fn identity_map(ember: &Ember, ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+    let ember = EMBER.lock();
     let ram_size = ember.layout_total() as u64;
 
     // Enable PAE, PSE, and Long mode
@@ -127,7 +113,8 @@ pub unsafe fn identity_map(ember: &Ember, ramblock: &mut MutexGuard<'_, RAMBlock
     let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
     let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
 
-    let table_size = (1 + num_pdpt + num_pd + num_pt) * PAGE_4KIB;
+    let total_tables = 1 + num_pdpt + num_pd + num_pt;
+    let table_size = (total_tables * 3) * PAGE_4KIB;
     let pml4_addr = ramblock.reserve_as(table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false).unwrap() as u64;
     core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
 
@@ -163,8 +150,9 @@ pub fn stack_ptr() -> *const u8 {
 }
 
 pub unsafe fn move_stack(ptr: *mut u8, size: usize) {
+    let mut ember = EMBER.lock();
     let stack_ptr = stack_ptr();
-    let old_stack_base = *STACK_BASE.lock();
+    let old_stack_base = ember.stack_base;
     let stack_size = old_stack_base - stack_ptr as usize;
 
     let new_stack_base = ptr as usize + size;
@@ -173,5 +161,5 @@ pub unsafe fn move_stack(ptr: *mut u8, size: usize) {
     core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
     core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
 
-    *STACK_BASE.lock() = new_stack_base;
+    ember.stack_base = new_stack_base;
 }

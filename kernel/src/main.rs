@@ -36,22 +36,23 @@ arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
-fn init_metal(ember: &Ember) {
+fn init_metal() {
     arch::init_serial();
-    ram::init_ram(ember);
+    ram::init_ram();
+    ram::init_heap();
     printk!("Uniplexed Information and Computing Service Version 11\n");
-    device::init_device(ember);
+    device::init_device();
 }
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
-pub static STACK_BASE: Mutex<usize> = Mutex::new(0);
+pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
 
 #[no_mangle]
-pub extern "efiapi" fn flame(mut ember: Ember) -> ! {
-    ember.protect();
-    RAM_BLOCK_MANAGER.lock().init(&mut ember);
-    init_metal(&ember);
+pub extern "efiapi" fn flame(ember: Ember) -> ! {
+    EMBER.lock().init(ember);
+    RAM_BLOCK_MANAGER.lock().init();
+    init_metal();
     exec_aleph();
     schedule();
 }

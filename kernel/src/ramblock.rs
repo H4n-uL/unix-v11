@@ -1,4 +1,4 @@
-use crate::{arch, ember::{ramtype, Ember}, ram::PAGE_4KIB};
+use crate::{arch, ember::ramtype, ram::PAGE_4KIB, EMBER};
 use spin::Mutex;
 
 #[repr(C)]
@@ -44,10 +44,8 @@ unsafe impl Send for RAMBlockManager {}
 unsafe impl Sync for RAMBlockManager {}
 
 impl RAMBlockManager {
-    pub unsafe fn ptr(&self) -> *mut Option<RAMBlock> { self.blocks }
-    pub unsafe fn max(&self) -> usize { self.max }
-
-    pub fn init(&mut self, ember: &mut Ember) {
+    pub fn init(&mut self) {
+        let mut ember = EMBER.lock();
         ember.sort_ram_layout_by(|desc| desc.page_count);
         if self.is_init { return; } self.count = 0;
         for desc in ember.efi_ram_layout().iter().rev() {

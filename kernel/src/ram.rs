@@ -1,4 +1,4 @@
-use crate::{arch, ember::{ramtype, Ember}, ramblock::RAM_BLOCK_MANAGER};
+use crate::{arch, ember::ramtype, ramblock::RAM_BLOCK_MANAGER};
 use linked_list_allocator::LockedHeap;
 
 pub const STACK_SIZE: usize = 0x100000;
@@ -11,12 +11,16 @@ pub const PAGE_4KIB: usize = 0x1000;
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub fn init_ram(ember: &Ember) {
+pub fn init_ram() {
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
-    unsafe { arch::identity_map(ember, &mut ramblock); }
+    unsafe { arch::identity_map(&mut ramblock); }
     let stack_ptr = ramblock.alloc(STACK_SIZE, ramtype::CONVENTIONAL).unwrap();
     ramblock.from_addr_mut(stack_ptr).unwrap().set_ty(ramtype::KERNEL_DATA);
     unsafe { arch::move_stack(stack_ptr, STACK_SIZE); }
+}
+
+pub fn init_heap() {
+    let mut ramblock = RAM_BLOCK_MANAGER.lock();
     let available = ramblock.available();
     let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
     let heap_ptr = ramblock.alloc(heap_size, ramtype::CONVENTIONAL).unwrap();

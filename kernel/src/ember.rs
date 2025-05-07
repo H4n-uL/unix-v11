@@ -11,7 +11,6 @@ pub struct RAMDescriptor {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
 pub struct Ember {
     layout_ptr: *const RAMDescriptor,
     layout_len: usize,
@@ -50,7 +49,30 @@ pub mod ramtype {
     pub const PAGE_TABLE           : u32 = 0x766d6170;
 }
 
+unsafe impl Sync for Ember {}
+unsafe impl Send for Ember {}
 impl Ember {
+    pub const fn empty() -> Self {
+        Ember {
+            layout_ptr: core::ptr::null(),
+            layout_len: 0,
+            acpi_rsdp_ptr: 0,
+            stack_base: 0,
+            kernel_base: 0,
+            kernel_size: 0
+        }
+    }
+
+    pub fn init(&mut self, param: Self) {
+        self.layout_ptr = param.layout_ptr;
+        self.layout_len = param.layout_len;
+        self.acpi_rsdp_ptr = param.acpi_rsdp_ptr;
+        self.stack_base = param.stack_base;
+        self.kernel_base = param.kernel_base;
+        self.kernel_size = param.kernel_size;
+        self.protect();
+    }
+
     pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
     }
@@ -66,9 +88,6 @@ impl Ember {
     }
 
     pub fn protect(&mut self) {
-        use crate::STACK_BASE;
-        *STACK_BASE.lock() = self.stack_base;
-
         let kernel_start = self.kernel_base as u64;
         let kernel_end = (self.kernel_base + self.kernel_size) as u64;
 
