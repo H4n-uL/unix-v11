@@ -45,8 +45,9 @@ pub mod ramtype {
     // ...
 
     pub const KERNEL_DATA          : u32 = 0x44415441;
-    pub const KERNEL               : u32 = 0x6b726e6c;
+    pub const RAM_LAYOUT           : u32 = 0x524c594f;
     pub const PAGE_TABLE           : u32 = 0x766d6170;
+    pub const KERNEL               : u32 = 0xffffffff;
 }
 
 unsafe impl Sync for Ember {}
@@ -73,17 +74,17 @@ impl Ember {
         self.protect();
     }
 
-    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+    pub fn ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
     }
 
     pub fn layout_total(&self) -> usize {
-        let last = self.efi_ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
+        let last = self.ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
         return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
-        // return self.efi_ram_layout().iter().map(|desc| desc.page_count as usize * PAGE_4KIB).sum();
+        // return self.ram_layout().iter().map(|desc| desc.page_count as usize * PAGE_4KIB).sum();
     }
 
-    fn efi_ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
+    fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }
 
@@ -91,16 +92,20 @@ impl Ember {
         let kernel_start = self.kernel_base as u64;
         let kernel_end = (self.kernel_base + self.kernel_size) as u64;
 
-        self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
+        let layout_start = self.layout_ptr as u64;
+        let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
+
+        self.ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
+            if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
         });
     }
 
     pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {
         use crate::sort::HeaplessSort;
-        self.efi_ram_layout_mut().sort_noheap_by_key(key);
+        self.ram_layout_mut().sort_noheap_by_key(key);
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {

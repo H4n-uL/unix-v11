@@ -48,14 +48,14 @@ impl RAMBlockManager {
         let mut ember = EMBER.lock();
         ember.sort_ram_layout_by(|desc| desc.page_count);
         if self.is_init { return; } self.count = 0;
-        for desc in ember.efi_ram_layout().iter().rev() {
+        for desc in ember.ram_layout().iter().rev() {
             if desc.ty == ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let addr = desc.phys_start as *const u8;
                 self.add(addr, size, desc.ty, false);
             }
         }
-        for desc in ember.efi_ram_layout() {
+        for desc in ember.ram_layout() {
             if desc.ty != ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let addr = desc.phys_start as *const u8;

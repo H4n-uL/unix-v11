@@ -119,7 +119,7 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
 
     // Map Page Tables
-    for desc in ember.efi_ram_layout() {
+    for desc in ember.ram_layout() {
         let block_ty = desc.ty;
         let block_start = desc.phys_start;
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
