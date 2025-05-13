@@ -14,7 +14,7 @@ pub struct RAMDescriptor {
 pub struct Ember {
     layout_ptr: *const RAMDescriptor,
     layout_len: usize,
-    pub acpi_rsdp_ptr: usize,
+    pub acpi_ptr: usize,
     pub stack_base: usize,
     pub kernel_base: usize,
     pub kernel_size: usize
@@ -57,7 +57,7 @@ impl Ember {
         Ember {
             layout_ptr: core::ptr::null(),
             layout_len: 0,
-            acpi_rsdp_ptr: 0,
+            acpi_ptr: 0,
             stack_base: 0,
             kernel_base: 0,
             kernel_size: 0
@@ -67,28 +67,11 @@ impl Ember {
     pub fn init(&mut self, param: Self) {
         self.layout_ptr = param.layout_ptr;
         self.layout_len = param.layout_len;
-        self.acpi_rsdp_ptr = param.acpi_rsdp_ptr;
+        self.acpi_ptr = param.acpi_ptr;
         self.stack_base = param.stack_base;
         self.kernel_base = param.kernel_base;
         self.kernel_size = param.kernel_size;
-        self.protect();
-    }
 
-    pub fn ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
-    }
-
-    pub fn layout_total(&self) -> usize {
-        let last = self.ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
-        return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
-        // return self.ram_layout().iter().map(|desc| desc.page_count as usize * PAGE_4KIB).sum();
-    }
-
-    fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
-    }
-
-    pub fn protect(&mut self) {
         let kernel_start = self.kernel_base as u64;
         let kernel_end = (self.kernel_base + self.kernel_size) as u64;
 
@@ -101,6 +84,19 @@ impl Ember {
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
         });
+    }
+
+    pub fn ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
+    }
+
+    pub fn layout_total(&self) -> usize {
+        let last = self.ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
+        return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
+    }
+
+    fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }
 
     pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {

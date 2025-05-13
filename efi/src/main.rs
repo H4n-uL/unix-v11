@@ -51,15 +51,15 @@ pub fn align_up(ptr: usize, align: usize) -> usize {
 #[entry]
 fn ignite() -> Status {
     let systemtable = system_table_raw().unwrap();
-    let mut acpi_rsdp_ptr = 0;
+    let mut acpi_ptr = 0;
     unsafe {
         let config_ptr = systemtable.as_ref().configuration_table;
         let config_size = systemtable.as_ref().number_of_configuration_table_entries;
         let config = core::slice::from_raw_parts(config_ptr, config_size);
 
         for cfg in config.iter() {
-            if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_rsdp_ptr = cfg.vendor_table as usize; }
-            if cfg.vendor_guid == cfg::ACPI2_GUID { acpi_rsdp_ptr = cfg.vendor_table as usize; break; }
+            if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_ptr = cfg.vendor_table as usize; }
+            if cfg.vendor_guid == cfg::ACPI2_GUID { acpi_ptr = cfg.vendor_table as usize; break; }
         }
     }
 
@@ -123,7 +123,7 @@ fn ignite() -> Status {
     let ember = Ember {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
-        acpi_rsdp_ptr, stack_base, kernel_base, kernel_size
+        acpi_ptr, stack_base, kernel_base, kernel_size
     };
     spark(ember);
 }
