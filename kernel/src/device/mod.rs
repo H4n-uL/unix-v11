@@ -1,5 +1,8 @@
-use crate::{printk, EMBER};
+use crate::{printk, printlnk, EMBER};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
+use alloc::vec::Vec;
+use fdt::Fdt;
+use spin::Mutex;
 
 #[derive(Clone, Copy, Debug)]
 pub struct KernelAcpiHandler;
@@ -106,7 +109,7 @@ impl PciDevice {
             match header.header_type & 0x7f {
                 0 => PciConfig::Type0(*(config_ptr as *const PciConfigType0)),
                 1 => PciConfig::Type1(*(config_ptr as *const PciConfigType1)),
-                _ => panic!("Unknown PCI header type")
+                _ => unreachable!()
             }
         };
 
@@ -119,8 +122,8 @@ impl PciDevice {
     pub fn is_bridge(&self) -> bool { self.header.header_type & 0x7f == 1 }
 }
 
-fn scan_pcie_devices(mcfg_base: u64, start_bus: u8, end_bus: u8) -> alloc::vec::Vec<PciDevice> {
-    let mut devices = alloc::vec::Vec::new();
+fn scan_pcie_devices(mcfg_base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
+    let mut devices = Vec::new();
 
     for bus in start_bus..=end_bus { for device in 0..32 { for function in 0..8 {
         if let Some(dev) = PciDevice::read(mcfg_base, bus, device, function) {
@@ -131,41 +134,58 @@ fn scan_pcie_devices(mcfg_base: u64, start_bus: u8, end_bus: u8) -> alloc::vec::
     return devices;
 }
 
-pub fn init_acpi(rsdp_addr: usize) -> Result<AcpiTables<KernelAcpiHandler>, &'static str> {
-    let handler = KernelAcpiHandler;
-    let tables = unsafe { AcpiTables::from_rsdp(handler, rsdp_addr) }
-        .map_err(|_| "Failed to initialize ACPI tables")?;
+pub static PCI_DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
+pub static ACPI: Mutex<Option<AcpiTables<KernelAcpiHandler>>> = Mutex::new(None);
+pub static DEVICETREE: Mutex<Option<Fdt>> = Mutex::new(None);
 
-    return Ok(tables);
+pub fn scan_pci() {
+    if let Some(acpi) = ACPI.lock().as_ref() {
+        match acpi.find_table::<Mcfg>() {
+            Ok(mcfg) => {
+                *PCI_DEVICES.lock() = mcfg.get().entries().iter().flat_map(|entry| {
+                    let mcfg_base = entry.base_address as u64;
+                    let start_bus = entry.bus_number_start;
+                    let end_bus = entry.bus_number_end;
+                    scan_pcie_devices(mcfg_base, start_bus, end_bus)
+                }).collect();
+            }
+            Err(_) => panic!("No PCIe devices found")
+        }
+    }
+    // else if DEVICETREE.lock().is_some() {}
+    else { panic!("No ACPI or Device Tree found"); }
+}
+
+pub fn init_acpi() {
+    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, EMBER.lock().acpi_ptr) } {
+        Ok(tables) => Some(tables),
+        Err(_) => None
+    };
+}
+
+pub fn init_device_tree() {
+    // *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(EMBER.lock().dtb_ptr as *const u8) } {
+    //     Ok(devtree) => Some(devtree),
+    //     Err(_) => None
+    // }
 }
 
 pub fn init_device() {
-    let acpi = init_acpi(EMBER.lock().acpi_rsdp_ptr);
-    if let Err(e) = acpi { panic!("ACPI init failed: {}", e); }
-    let tables = acpi.unwrap();
-    let mcfg = tables.find_table::<Mcfg>();
-    if mcfg.is_err() { panic!("MCFG not found! Cannot scan PCIe devices."); }
-    let mcfg = mcfg.unwrap();
-    let mcfg_data = mcfg.get();
+    init_acpi();
+    init_device_tree();
+    scan_pci();
 
-    for entry in mcfg_data.entries() {
-        let mcfg_base = entry.base_address;
-        let start_bus = entry.bus_number_start;
-        let end_bus = entry.bus_number_end;
-        let devices = scan_pcie_devices(mcfg_base, start_bus, end_bus);
+    for dev in PCI_DEVICES.lock().iter() {
+        printk!(
+            "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
+            dev.bus, dev.device, dev.function,
+            dev.header.vendor_id, dev.header.device_id,
+            dev.header.class, dev.header.subclass, dev.header.prog_if
+        );
 
-        for dev in devices {
-            printk!(
-                "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
-                dev.bus, dev.device, dev.function,
-                dev.header.vendor_id, dev.header.device_id,
-                dev.header.class, dev.header.subclass, dev.header.prog_if
-            );
-
-            if dev.is_nvme()   { printk!(" --> NVMe Controller"); }
-            if dev.is_vga()    { printk!(" --> VGA Compatible Controller"); }
-            if dev.is_bridge() { printk!(" (PCI Bridge)"); }
-            printk!("\n");
-        }
+        if dev.is_nvme()   { printk!(" --> NVMe Controller"); }
+        if dev.is_vga()    { printk!(" --> VGA Compatible Controller"); }
+        if dev.is_bridge() { printk!(" (PCI Bridge)"); }
+        printlnk!();
     }
 }
