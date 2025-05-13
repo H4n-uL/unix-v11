@@ -32,6 +32,12 @@ macro_rules! printk {
     }};
 }
 
+#[macro_export]
+macro_rules! printlnk {
+    () => { $crate::printk!("\n"); };
+    ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)); };
+}
+
 arch!("x86_64", amd64);
 arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
@@ -40,7 +46,7 @@ fn init_metal() {
     arch::init_serial();
     ram::init_ram();
     ram::init_heap();
-    printk!("Uniplexed Information and Computing Service Version 11\n");
+    printlnk!("Uniplexed Information and Computing Service Version 11");
     device::init_device();
 }
 fn exec_aleph() {}
@@ -58,6 +64,7 @@ pub extern "efiapi" fn flame(ember: Ember) -> ! {
 }
 
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    printlnk!("{}", info);
     loop { arch::halt(); }
 }
