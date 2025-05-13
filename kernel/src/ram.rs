@@ -14,16 +14,18 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 pub fn init_ram() {
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
     unsafe { arch::identity_map(&mut ramblock); }
-    let stack_ptr = ramblock.alloc(STACK_SIZE, ramtype::CONVENTIONAL).unwrap();
-    ramblock.from_addr_mut(stack_ptr).unwrap().set_ty(ramtype::KERNEL_DATA);
-    unsafe { arch::move_stack(stack_ptr, STACK_SIZE); }
+    let stack_ptr = ramblock.alloc_as(
+        STACK_SIZE, ramtype::CONVENTIONAL, ramtype::KERNEL_DATA
+    ).unwrap();
+    unsafe { arch::move_stack(&stack_ptr, STACK_SIZE); }
 }
 
 pub fn init_heap() {
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
     let available = ramblock.available();
     let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
-    let heap_ptr = ramblock.alloc(heap_size, ramtype::CONVENTIONAL).unwrap();
-    ramblock.from_addr_mut(heap_ptr).unwrap().set_ty(ramtype::KERNEL_DATA);
-    unsafe { ALLOCATOR.lock().init(heap_ptr, heap_size); }
+    let heap_ptr = ramblock.alloc_as(
+        heap_size, ramtype::CONVENTIONAL, ramtype::KERNEL_DATA
+    ).unwrap();
+    unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_size); }
 }

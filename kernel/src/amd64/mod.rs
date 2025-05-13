@@ -1,5 +1,4 @@
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::RAMBlockManager, EMBER};
-use core::fmt;
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{RAMBlockManager, RBPtr}, EMBER};
 use spin::MutexGuard;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -40,11 +39,9 @@ pub fn serial_puts(s: &str) {
 
 pub struct SerialWriter;
 
-impl fmt::Write for SerialWriter {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for byte in s.bytes() {
-            serial_putchar(byte);
-        }
+impl core::fmt::Write for SerialWriter {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        serial_puts(s);
         Ok(())
     }
 }
@@ -62,10 +59,10 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
 
     fn get_index(level: usize, virt: u64) -> usize {
         match level {
-            0 => ((virt >> 39) & 0x1FF) as usize, // PML4
-            1 => ((virt >> 30) & 0x1FF) as usize, // PDPT
-            2 => ((virt >> 21) & 0x1FF) as usize, // PD
-            3 => ((virt >> 12) & 0x1FF) as usize, // PT
+            0 => ((virt >> 39) & 0x1ff) as usize, // PML4
+            1 => ((virt >> 30) & 0x1ff) as usize, // PDPT
+            2 => ((virt >> 21) & 0x1ff) as usize, // PD
+            3 => ((virt >> 12) & 0x1ff) as usize, // PT
             _ => panic!("Invalid page table level"),
         }
     }
@@ -79,9 +76,9 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
             table = if *entry & 0x1 == 0 {
                 let next_phys = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE)
                     .expect("[ERROR] alloc for page table failed!\n");
-                core::ptr::write_bytes(next_phys, 0, PAGE_4KIB);
-                *entry = next_phys as u64 | KERNEL_FLAG;
-                next_phys as *mut u64
+                core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
+                *entry = next_phys.addr() as u64 | KERNEL_FLAG;
+                next_phys.addr() as *mut u64
             }
             else { (*entry & 0x000fffff_fffff000) as *mut u64 };
         }
@@ -115,7 +112,9 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
 
     let total_tables = 1 + num_pdpt + num_pd + num_pt;
     let table_size = (total_tables * 3) * PAGE_4KIB;
-    let pml4_addr = ramblock.reserve_as(table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false).unwrap() as u64;
+    let pml4_addr = ramblock.reserve_as(
+        table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false
+    ).unwrap().addr() as u64;
     core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
 
     // Map Page Tables
@@ -149,13 +148,13 @@ pub fn stack_ptr() -> *const u8 {
     return rsp as *const u8;
 }
 
-pub unsafe fn move_stack(ptr: *mut u8, size: usize) {
+pub unsafe fn move_stack(ptr: &RBPtr, size: usize) {
     let mut ember = EMBER.lock();
     let stack_ptr = stack_ptr();
     let old_stack_base = ember.stack_base;
     let stack_size = old_stack_base - stack_ptr as usize;
 
-    let new_stack_base = ptr as usize + size;
+    let new_stack_base = ptr.addr() + size;
     let new_stack_bottom = (new_stack_base - stack_size) as *mut u8;
 
     core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
