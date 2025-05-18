@@ -1,4 +1,7 @@
+mod exceptions;
+
 use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{RAMBlockManager, RBPtr}, EMBER};
+pub use exceptions::init_exceptions;
 use spin::MutexGuard;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -37,6 +40,17 @@ pub fn serial_puts(s: &str) {
     for byte in s.bytes() { serial_putchar(byte); }
 }
 
+pub fn serial_puthex(n: usize) {
+    serial_puts("0x");
+    if n == 0 { serial_putchar(b'0'); return; }
+    let mut leading = true;
+    for i in (0..16).rev() {
+        let nibble = (n >> (i << 2)) & 0xf;
+        if nibble != 0 { leading = false; }
+        if !leading { serial_putchar(b"0123456789abcdef"[nibble]); }
+    }
+}
+
 pub struct SerialWriter;
 
 impl core::fmt::Write for SerialWriter {
@@ -45,8 +59,6 @@ impl core::fmt::Write for SerialWriter {
         Ok(())
     }
 }
-
-const ENTRIES_PER_TABLE: usize = 0x200;
 
 // const UNAVAILABLE_FLAG: u64 = 0x01; // PRESENT
 const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
@@ -75,10 +87,10 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
         else {
             table = if *entry & 0x1 == 0 {
                 let next_phys = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE)
-                    .expect("[ERROR] alloc for page table failed!\n");
+                    .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | KERNEL_FLAG;
-                next_phys.addr() as *mut u64
+                next_phys.ptr()
             }
             else { (*entry & 0x000fffff_fffff000) as *mut u64 };
         }
@@ -96,6 +108,8 @@ fn flags_for(ty: u32) -> u64 {
     }
 }
 
+const ENTRIES_PER_TABLE: usize = 0x200;
+
 pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let ember = EMBER.lock();
     let ram_size = ember.layout_total() as u64;
@@ -112,10 +126,15 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
 
     let total_tables = 1 + num_pdpt + num_pd + num_pt;
     let table_size = (total_tables * 3) * PAGE_4KIB;
-    let pml4_addr = ramblock.reserve_as(
+    let rbptr = ramblock.reserve_as(
         table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false
-    ).unwrap().addr() as u64;
+    );
+    let pml4_addr = match rbptr {
+        Some(rbptr) => rbptr.addr() as u64,
+        None => panic!("[ERROR] Failed to reserve RAM for page tables!")
+    };
     core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
+    ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE).unwrap();
 
     // Map Page Tables
     for desc in ember.ram_layout() {

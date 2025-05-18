@@ -6,6 +6,7 @@
 
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt, abi_riscv_interrupt)]
 extern crate alloc;
 
 mod device; mod ember;
@@ -43,6 +44,7 @@ arch!("aarch64", aarch64);
 arch!("riscv64", riscv64);
 
 fn init_metal() {
+    arch::init_exceptions();
     arch::init_serial();
     ram::init_ram();
     ram::init_heap();
