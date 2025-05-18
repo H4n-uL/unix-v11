@@ -62,6 +62,7 @@ impl RAMBlockManager {
                 self.add(addr, size, desc.ty, false);
             }
         }
+        ember.sort_ram_layout_by(|desc| desc.phys_start);
         for desc in ember.ram_layout() {
             if desc.ty != ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
