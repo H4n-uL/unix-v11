@@ -152,8 +152,13 @@ pub fn scan_pci() {
             Err(_) => panic!("No PCIe devices found")
         }
     }
-    // else if DEVICETREE.lock().is_some() {}
-    else { panic!("No ACPI or Device Tree found"); }
+    else if let Some(dtb) = DEVICETREE.lock().as_ref() {
+        // dummy
+        *PCI_DEVICES.lock() = dtb.all_nodes().filter_map(|node| {
+            printlnk!("{:?}", node);
+            None
+        }).collect();
+    }
 }
 
 pub fn init_acpi() {
@@ -164,10 +169,10 @@ pub fn init_acpi() {
 }
 
 pub fn init_device_tree() {
-    // *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(EMBER.lock().dtb_ptr as *const u8) } {
-    //     Ok(devtree) => Some(devtree),
-    //     Err(_) => None
-    // }
+    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(EMBER.lock().dtb_ptr as *const u8) } {
+        Ok(devtree) => Some(devtree),
+        Err(_) => None
+    }
 }
 
 pub fn init_device() {

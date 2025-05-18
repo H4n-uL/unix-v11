@@ -51,15 +51,18 @@ pub fn align_up(ptr: usize, align: usize) -> usize {
 #[entry]
 fn ignite() -> Status {
     let systemtable = system_table_raw().unwrap();
-    let mut acpi_ptr = 0;
+    let (mut acpi_ptr, mut dtb_ptr) = (0, 0);
     unsafe {
         let config_ptr = systemtable.as_ref().configuration_table;
         let config_size = systemtable.as_ref().number_of_configuration_table_entries;
         let config = core::slice::from_raw_parts(config_ptr, config_size);
 
         for cfg in config.iter() {
-            if cfg.vendor_guid == cfg::ACPI_GUID  { acpi_ptr = cfg.vendor_table as usize; }
-            if cfg.vendor_guid == cfg::ACPI2_GUID { acpi_ptr = cfg.vendor_table as usize; break; }
+            let isacpi = cfg.vendor_guid == cfg::ACPI_GUID && acpi_ptr == 0;
+            let isacpi2 = cfg.vendor_guid == cfg::ACPI2_GUID;
+            let isdtb = cfg.vendor_guid == cfg::SMBIOS3_GUID;
+            if isacpi || isacpi2 { acpi_ptr = cfg.vendor_table as usize; }
+            if isdtb             { dtb_ptr  = cfg.vendor_table as usize; }
         }
     }
 
@@ -118,12 +121,13 @@ fn ignite() -> Status {
 
     let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base as usize;
     let spark: extern "efiapi" fn(Ember) -> ! = unsafe { core::mem::transmute(entrypoint) };
-    let efi_ram_layout = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
+    let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr() as usize;
     let ember = Ember {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
-        acpi_ptr, stack_base, kernel_base, kernel_size
+        acpi_ptr, dtb_ptr,
+        stack_base, kernel_base, kernel_size
     };
     spark(ember);
 }

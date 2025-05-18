@@ -15,6 +15,7 @@ pub struct Ember {
     layout_ptr: *const RAMDescriptor,
     layout_len: usize,
     pub acpi_ptr: usize,
+    pub dtb_ptr: usize,
     pub stack_base: usize,
     pub kernel_base: usize,
     pub kernel_size: usize
@@ -58,6 +59,7 @@ impl Ember {
             layout_ptr: core::ptr::null(),
             layout_len: 0,
             acpi_ptr: 0,
+            dtb_ptr: 0,
             stack_base: 0,
             kernel_base: 0,
             kernel_size: 0
@@ -68,6 +70,7 @@ impl Ember {
         self.layout_ptr = param.layout_ptr;
         self.layout_len = param.layout_len;
         self.acpi_ptr = param.acpi_ptr;
+        self.dtb_ptr = param.dtb_ptr;
         self.stack_base = param.stack_base;
         self.kernel_base = param.kernel_base;
         self.kernel_size = param.kernel_size;
