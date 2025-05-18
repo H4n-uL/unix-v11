@@ -19,12 +19,6 @@ impl<T> HeaplessSort<T> for &mut [T] {
 
     fn sort_noheap_by_key<F, K>(&mut self, mut key: F)
     where F: FnMut(&T) -> K, K: Ord {
-        let len = self.len();
-        for i in 1..len {
-            let mut j = i;
-            while j > 0 && key(&self[j - 1]) > key(&self[j]) {
-                self.swap(j - 1, j); j -= 1;
-            }
-        }
+        self.sort_noheap_by(|a, b| key(a).cmp(&key(b)));
     }
 }
