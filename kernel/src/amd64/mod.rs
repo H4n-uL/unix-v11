@@ -75,7 +75,7 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
             1 => ((virt >> 30) & 0x1ff) as usize, // PDPT
             2 => ((virt >> 21) & 0x1ff) as usize, // PD
             3 => ((virt >> 12) & 0x1ff) as usize, // PT
-            _ => panic!("Invalid page table level"),
+            _ => unreachable!(),
         }
     }
 
