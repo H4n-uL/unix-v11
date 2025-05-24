@@ -19,6 +19,8 @@ impl RAMBlock {
     pub fn size(&self) -> usize { self.size }
     pub fn ty(&self) -> u32 { self.ty }
     pub fn used(&self) -> bool  { self.used }
+    pub fn set_ty(&mut self, ty: u32) { self.ty = ty; }
+    pub fn set_used(&mut self, used: bool) { self.used = used; }
 }
 
 #[repr(C)]
@@ -39,7 +41,8 @@ pub struct RAMBlockManager {
 }
 
 pub const BASE_RAMBLOCK_SIZE: usize = 128;
-pub static RAM_BLOCKS: Mutex<[Option<RAMBlock>; BASE_RAMBLOCK_SIZE]> = Mutex::new([None; BASE_RAMBLOCK_SIZE]);
+pub static RAM_BLOCKS: [Option<RAMBlock>; BASE_RAMBLOCK_SIZE] = [None; BASE_RAMBLOCK_SIZE];
+pub const RAM_BLOCKS_INIT_PTR: *const u8 = &raw const RAM_BLOCKS as *const u8;
 pub static RAM_BLOCK_MANAGER: Mutex<RAMBlockManager> = Mutex::new(RAMBlockManager {
     blocks: &raw const RAM_BLOCKS as *mut Option<RAMBlock>,
     is_init: false, count: 0,
@@ -109,10 +112,10 @@ impl RAMBlockManager {
         });
     }
 
-    pub fn find_ram(&self, size: usize, ty: u32) -> Option<RBPtr> {
+    pub fn find_free_ram(&self, size: usize, ty: u32) -> Option<RBPtr> {
         return self.blocks().iter().flatten()
-            .find(|block| !block.used && block.size >= size && block.ty == ty)
-            .map(|block| RBPtr::new(block.addr));
+            .find(|&block| !block.used() && block.size() >= size && block.ty() == ty)
+            .map(|block| RBPtr::new(block.ptr()));
     }
 
     fn add(&mut self, addr: *const u8, size: usize, ty: u32, used: bool) {
@@ -123,7 +126,7 @@ impl RAMBlockManager {
 
         for i in (1..=idx).rev() {
             if let (Some(current), Some(prev)) = (blocks[i], blocks[i - 1]) {
-                if current.addr < prev.addr { blocks.swap(i, i - 1); }
+                if current.ptr() < prev.ptr() { blocks.swap(i, i - 1); }
                 else { break; }
             }
             else { break; }
@@ -131,10 +134,10 @@ impl RAMBlockManager {
     }
 
     pub fn reserve_at_as(&mut self, addr: *const u8, size: usize, ty: u32, as_ty: u32, used: bool) -> Option<RBPtr> {
-        let target_idx = self.blocks_mut().iter().position(|block_opt| {
+        let target_idx = self.blocks().iter().position(|block_opt| {
             if let Some(block) = block_opt {
-                !block.used && block.ty == ty &&
-                addr >= block.addr && addr as usize + size <= block.addr() + block.size
+                !block.used() && block.ty() == ty &&
+                addr >= block.ptr() && addr as usize + size <= block.addr() + block.size()
             }
             else { false }
         });
@@ -142,13 +145,13 @@ impl RAMBlockManager {
         if let Some(idx) = target_idx {
             let block_opt = &mut self.blocks_mut()[idx];
             let block = *block_opt.as_ref().unwrap();
-            let block_end = block.addr() + block.size;
+            let block_end = block.addr() + block.size();
             let before_size = addr as usize - block.addr();
             let after_size = block_end - (addr as usize + size);
 
             *block_opt = Some(RAMBlock::new(addr, size, as_ty, used));
-            if before_size > 0 { self.add(block.addr, before_size, block.ty, block.used); }
-            if after_size > 0  { self.add(unsafe { addr.add(size) },  after_size, block.ty, block.used); }
+            if before_size > 0 { self.add(block.ptr(), before_size, block.ty(), block.used()); }
+            if after_size > 0  { self.add(unsafe { addr.add(size) }, after_size, block.ty(), block.used()); }
             return Some(RBPtr::new(addr));
         }
 
@@ -156,7 +159,7 @@ impl RAMBlockManager {
     }
 
     pub fn reserve_as(&mut self, size: usize, ty: u32, as_ty: u32, used: bool) -> Option<RBPtr> {
-        return self.find_ram(size, ty)
+        return self.find_free_ram(size, ty)
             .and_then(|ptr| self.reserve_at_as(ptr.ptr(), size, ty, as_ty, used));
     }
 
@@ -169,19 +172,14 @@ impl RAMBlockManager {
     }
 
     pub fn alloc(&mut self, size: usize, ty: u32) -> Option<RBPtr> {
-        return self.find_ram(size, ty)
+        return self.find_free_ram(size, ty)
             .and_then(|ptr| self.alloc_at(ptr.ptr(), size, ty));
     }
 
     pub fn free(&mut self, ptr: RBPtr) {
         let found = self.blocks_mut().iter_mut().flatten()
-            .find(|block| block.addr <= ptr.ptr() && block.addr() + block.size > ptr.addr());
-        if let Some(block) = found {
-            match block.ty() {
-                ramtype::KERNEL_DATA => { block.used = true; }
-                _ => { block.used = false; }
-            }
-        }
+            .find(|block| block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr());
+        if let Some(block) = found { block.set_used(false); }
     }
 
     pub fn expand(&mut self, new_max: usize) {
@@ -189,10 +187,11 @@ impl RAMBlockManager {
 
         let manager_size = new_max * core::mem::size_of::<Option<RAMBlock>>();
         let old_blocks_ptr = self.blocks;
-        let new_blocks_ptr = self.find_ram(manager_size, ramtype::CONVENTIONAL).unwrap().ptr() as *mut Option<RAMBlock>;
+        let new_blocks_ptr = self.find_free_ram(manager_size, ramtype::CONVENTIONAL).unwrap().ptr();
         unsafe { core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.count); }
         (self.blocks, self.max) = (new_blocks_ptr, new_max);
         self.alloc_at(new_blocks_ptr as *mut u8, manager_size, ramtype::CONVENTIONAL);
+        if old_blocks_ptr as *const u8 == RAM_BLOCKS_INIT_PTR { return; }
         self.free(RBPtr::new(old_blocks_ptr));
     }
 }
