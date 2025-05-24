@@ -9,9 +9,10 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-aarch64 = "0.0.13"
+aarch64-cpu = "10.0.0"
 linked_list_allocator = "0.10.5"
-uefi = "0.34.1"
+tock-registers = "0.9.0"
+uefi = "0.35.0"
 x86_64 = "0.15.2"
 xmas-elf = "0.10.0"
 
