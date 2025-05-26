@@ -1,4 +1,4 @@
-use crate::{ember::ramtype, ram::PAGE_4KIB, EMBER};
+use crate::{ember::ramtype, ram::{align_up, PAGE_4KIB}, EMBER};
 use spin::Mutex;
 
 #[repr(C)]
@@ -119,6 +119,7 @@ impl RAMBlockManager {
     }
 
     fn add(&mut self, addr: *const u8, size: usize, ty: u32, used: bool) {
+        let size = align_up(size, PAGE_4KIB);
         if self.count >= self.max { self.expand(self.max * 2); }
         let idx = self.count; self.count += 1;
         let blocks = self.blocks_mut();
@@ -134,6 +135,7 @@ impl RAMBlockManager {
     }
 
     pub fn reserve_at_as(&mut self, addr: *const u8, size: usize, ty: u32, as_ty: u32, used: bool) -> Option<RBPtr> {
+        let size = align_up(size, PAGE_4KIB);
         let target_idx = self.blocks().iter().position(|block_opt| {
             if let Some(block) = block_opt {
                 !block.used() && block.ty() == ty &&
