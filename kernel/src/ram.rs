@@ -11,9 +11,14 @@ pub const PAGE_4KIB: usize = 0x1000;
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
+pub fn align_up(size: usize, align: usize) -> usize {
+    if align == 0 { return size; }
+    return size + (align - size % align) % align;
+}
+
 pub fn init_ram() {
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
-    unsafe { arch::identity_map(&mut ramblock); }
+    unsafe { arch::disable_mmu(&mut ramblock); }
     let stack_ptr = ramblock.alloc_as(
         STACK_SIZE, ramtype::CONVENTIONAL, ramtype::KERNEL_DATA
     ).unwrap();
