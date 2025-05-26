@@ -110,6 +110,10 @@ fn flags_for(ty: u32) -> u64 {
 
 const ENTRIES_PER_TABLE: usize = 0x200;
 
+pub unsafe fn disable_mmu(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+    identity_map(ramblock);
+}
+
 pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let ember = EMBER.lock();
     let ram_size = ember.layout_total() as u64;
