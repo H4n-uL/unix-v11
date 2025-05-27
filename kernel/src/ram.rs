@@ -17,7 +17,6 @@ pub fn align_up(size: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
-    // let me just depend on UEFI Page Tables for now
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
 
     let stack_ptr = ramblock.alloc_as(
