@@ -47,7 +47,6 @@ fn init_metal() {
     arch::init_exceptions();
     arch::init_serial();
     ram::init_ram();
-    ram::init_heap();
     printlnk!("Uniplexed Information and Computing Service Version 11");
     device::init_device();
 }

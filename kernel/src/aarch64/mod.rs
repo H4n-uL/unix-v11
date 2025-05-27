@@ -122,15 +122,6 @@ fn flags_for(ty: u32) -> u64 {
 
 const ENTRIES_PER_TABLE: usize = 0x200;
 
-pub unsafe fn disable_mmu(_: &mut MutexGuard<'_, RAMBlockManager>) {
-    core::arch::asm!("
-        mrs x0, sctlr_el1
-        bic x0, x0, #1
-        msr sctlr_el1, x0
-        isb
-    ");
-}
-
 // Not working yet, I rly hate AArch64 MMU
 pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let ember = EMBER.lock();

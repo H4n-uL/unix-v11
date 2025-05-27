@@ -17,16 +17,14 @@ pub fn align_up(size: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
+    // let me just depend on UEFI Page Tables for now
     let mut ramblock = RAM_BLOCK_MANAGER.lock();
-    unsafe { arch::disable_mmu(&mut ramblock); }
+
     let stack_ptr = ramblock.alloc_as(
         STACK_SIZE, ramtype::CONVENTIONAL, ramtype::KERNEL_DATA
     ).unwrap();
     unsafe { arch::move_stack(&stack_ptr, STACK_SIZE); }
-}
 
-pub fn init_heap() {
-    let mut ramblock = RAM_BLOCK_MANAGER.lock();
     let available = ramblock.available();
     let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
     let heap_ptr = ramblock.alloc_as(
