@@ -24,7 +24,9 @@ impl RAMBlock {
     pub fn size(&self) -> usize { self.size }
     pub fn ty(&self) -> u32 { self.ty }
     pub fn valid(&self) -> bool { self.valid }
+    pub fn invalid(&self) -> bool { !self.valid }
     pub fn used(&self) -> bool  { self.used }
+    pub fn not_used(&self) -> bool { !self.used }
     pub fn set_ty(&mut self, ty: u32) { self.ty = ty; }
     pub fn set_used(&mut self, used: bool) { self.used = used; }
     pub fn set_valid(&mut self, valid: bool) { self.valid = valid; }
@@ -95,7 +97,7 @@ impl RAMBlockManager {
     }
 
     pub fn available(&self) -> usize {
-        return self.count_filter(|block| !block.used() && block.ty() == ramtype::CONVENTIONAL);
+        return self.count_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
     }
 
     pub fn total(&self) -> usize {
@@ -132,7 +134,7 @@ impl RAMBlockManager {
 
     pub fn find_free_ram(&self, size: usize, ty: u32) -> Option<RBPtr> {
         return self.blocks_iter()
-            .find(|&block| block.used() && block.size() >= size && block.ty() == ty)
+            .find(|&block| block.not_used() && block.size() >= size && block.ty() == ty)
             .map(|block| RBPtr::new(block.ptr()));
     }
 
@@ -154,7 +156,7 @@ impl RAMBlockManager {
     pub fn reserve_at_as(&mut self, addr: *const u8, size: usize, ty: u32, as_ty: u32, used: bool) -> Option<RBPtr> {
         let size = align_up(size, PAGE_4KIB);
         let target_idx = self.blocks_iter().position(|block| {
-            !block.used() && block.ty() == ty &&
+            block.not_used() && block.ty() == ty &&
             addr >= block.ptr() && addr as usize + size <= block.addr() + block.size()
         });
 
@@ -206,7 +208,7 @@ impl RAMBlockManager {
     pub fn expand(&mut self, new_max: usize) {
         if new_max <= self.max { return; }
 
-        let manager_size = new_max * core::mem::size_of::<Option<RAMBlock>>();
+        let manager_size = new_max * core::mem::size_of::<RAMBlock>();
         let old_blocks_ptr = self.blocks;
         let new_blocks_ptr = self.find_free_ram(manager_size, ramtype::CONVENTIONAL).unwrap().ptr();
         unsafe { core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.count); }
