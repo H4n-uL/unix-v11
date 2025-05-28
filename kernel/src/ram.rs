@@ -1,4 +1,5 @@
 use crate::{arch, ember::ramtype, ramblock::RAM_BLOCK_MANAGER};
+use core::ops::{Deref, DerefMut};
 use linked_list_allocator::LockedHeap;
 
 pub const STACK_SIZE: usize = 0x100000;
@@ -7,6 +8,25 @@ pub const HEAP_SIZE: usize = 0x100000;
 pub const PAGE_4KIB: usize = 0x1000;
 // pub const PAGE_2MIB: usize = 0x200000;
 // pub const PAGE_1GIB: usize = 0x40000000;
+
+#[repr(align(4096))]
+pub struct PageAligned<const N: usize>(pub [u8; N]);
+
+impl<const N: usize> PageAligned<N> {
+    pub const fn new() -> Self { Self([0; N]) }
+}
+
+impl<const N: usize> Deref for PageAligned<N> {
+    type Target = [u8; N];
+    fn deref(&self) -> &Self::Target { &self.0
+    }
+}
+
+impl<const N: usize> DerefMut for PageAligned<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
