@@ -23,19 +23,18 @@ impl Allocator for NVMeAlloc {
 
 pub struct NVMeBlockDevice {
     dev_idx: usize,
-    ns_idx: usize,
     namespace: Namespace,
     queue: Option<IoQueuePair<NVMeAlloc>>
 }
 
 impl NVMeBlockDevice {
-    pub fn new(dev_idx: usize, ns_idx: usize, namespace: Namespace) -> Self {
-        NVMeBlockDevice { dev_idx, ns_idx, namespace, queue: None }
+    pub fn new(dev_idx: usize, namespace: Namespace) -> Self {
+        NVMeBlockDevice { dev_idx, namespace, queue: None }
     }
 
     fn get_or_create_queue(&mut self) -> Result<&mut IoQueuePair<NVMeAlloc>, String> {
         if self.queue.is_none() {
-            let device = &mut NVME_PHYSDEV.lock()[self.dev_idx];
+            let device = &mut NVME_DEV.lock()[self.dev_idx];
             let max_queue = device.controller_data().max_queue_entries as usize;
             match device.create_io_queue_pair(self.namespace.clone(), max_queue) {
                 Ok(queue) => self.queue = Some(queue),
@@ -44,6 +43,10 @@ impl NVMeBlockDevice {
         }
         return Ok(self.queue.as_mut().unwrap());
     }
+
+    pub fn namespace(&self) -> &Namespace { &self.namespace }
+    pub fn devid(&self) -> usize { self.dev_idx }
+    pub fn nsid(&self) -> usize { self.namespace.id() as usize }
 }
 
 impl<'a> BlockDevice for NVMeBlockDevice {
@@ -60,26 +63,24 @@ impl<'a> BlockDevice for NVMeBlockDevice {
     }
 }
 
-static NVME_PHYSDEV: Mutex<Vec<Device<NVMeAlloc>>> = Mutex::new(Vec::new());
+static NVME_DEV: Mutex<Vec<Device<NVMeAlloc>>> = Mutex::new(Vec::new());
 static NVME_NS: Mutex<Vec<NVMeBlockDevice>> = Mutex::new(Vec::new());
 
 pub fn init_nvme() {
-    let mut nvme_physdev = NVME_PHYSDEV.lock();
+    let mut nvme_dev = NVME_DEV.lock();
     let mut nvme_ns = NVME_NS.lock();
-    for dev in PCI_DEVICES.lock().iter() {
-        if dev.is_nvme() {
-            let base = dev.bar(0).unwrap() as usize;
-            let mmio_addr = if (base & 0b110) == 0b100 {
-                ((dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)
-            } else { base & !0b11 };
+    for pci_dev in PCI_DEVICES.lock().iter().filter(|&dev| dev.is_nvme()) {
+        let base = pci_dev.bar(0).unwrap() as usize;
+        let mmio_addr = if (base & 0b110) == 0b100 {
+            ((pci_dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)
+        } else { base & !0b11 };
 
-            let mut device = Device::init(mmio_addr, NVMeAlloc).unwrap();
-            let dev_idx = nvme_physdev.len();
-            for (ns_idx, ns) in device.identify_namespaces(0).unwrap().iter().enumerate() {
-                nvme_ns.push(NVMeBlockDevice::new(dev_idx, ns_idx, ns.clone()));
-            }
-            nvme_physdev.push(device);
+        let mut nvme_device = Device::init(mmio_addr, NVMeAlloc).unwrap();
+        let dev_idx = nvme_dev.len();
+        for ns in nvme_device.identify_namespaces(0).unwrap() {
+            nvme_ns.push(NVMeBlockDevice::new(dev_idx, ns.clone()));
         }
+        nvme_dev.push(nvme_device);
     }
 }
 
@@ -92,10 +93,10 @@ pub fn test_nvme() {
     }
 
     let dev = &mut namespaces[0];
-    let mut buffer = PageAligned::<4096>::new();
-
-    match dev.read(0, buffer.as_mut_slice()) {
-        Ok(_) => printlnk!("Read success: {:?}", &buffer[..16]),
+    let mut buffer = PageAligned::new(dev.namespace().block_size() as usize);
+    printlnk!("/dev/nvme{}n{}", dev.devid(), dev.nsid());
+    match dev.read(0, &mut buffer) {
+        Ok(_) => printlnk!("Read success: {} bytes", buffer.len()),
         Err(e) => printlnk!("Read failed: {}", e),
     }
 }

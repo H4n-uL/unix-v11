@@ -1,30 +1,44 @@
 use crate::{arch, ember::ramtype, ramblock::RAM_BLOCK_MANAGER};
-use core::ops::{Deref, DerefMut};
+use core::{alloc::Layout, ops::{Deref, DerefMut}};
+use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;
 
 pub const STACK_SIZE: usize = 0x100000;
 pub const HEAP_SIZE: usize = 0x100000;
 
 pub const PAGE_4KIB: usize = 0x1000;
-// pub const PAGE_2MIB: usize = 0x200000;
-// pub const PAGE_1GIB: usize = 0x40000000;
 
-#[repr(align(4096))]
-pub struct PageAligned<const N: usize>(pub [u8; N]);
-
-impl<const N: usize> PageAligned<N> {
-    pub const fn new() -> Self { Self([0; N]) }
+pub struct PageAligned {
+    ptr: *mut u8,
+    layout: Layout
 }
 
-impl<const N: usize> Deref for PageAligned<N> {
-    type Target = [u8; N];
-    fn deref(&self) -> &Self::Target { &self.0
+impl PageAligned {
+    pub fn new(size: usize) -> Self {
+        let layout = Layout::from_size_align(size, PAGE_4KIB).unwrap();
+        let ptr = unsafe { alloc(layout) };
+        if ptr.is_null() { panic!("Failed to allocate aligned memory"); }
+        Self { ptr, layout }
     }
 }
 
-impl<const N: usize> DerefMut for PageAligned<N> {
+impl Drop for PageAligned {
+    fn drop(&mut self) {
+        unsafe { dealloc(self.ptr, self.layout); }
+    }
+}
+
+impl Deref for PageAligned {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::slice::from_raw_parts(self.ptr, self.layout.size()) }
+    }
+}
+
+impl DerefMut for PageAligned {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.layout.size()) }
     }
 }
 
