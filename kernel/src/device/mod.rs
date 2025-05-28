@@ -1,3 +1,5 @@
+mod block; mod nvme;
+
 use crate::{printk, printlnk, EMBER};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
 use alloc::vec::Vec;
@@ -204,4 +206,7 @@ pub fn init_device() {
         if dev.is_bridge() { printk!(" (PCI Bridge)"); }
         printlnk!();
     }
+
+    nvme::init_nvme();
+    nvme::test_nvme();
 }
