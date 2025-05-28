@@ -1,7 +1,7 @@
 use crate::{ember::ramtype, printlnk, ram::PageAligned, ramblock::RAM_BLOCK_MANAGER};
 use super::{block::BlockDevice, PCI_DEVICES};
 use alloc::{string::{String, ToString}, vec::Vec};
-use nvme::{Allocator, Device, Namespace};
+use nvme::{Allocator, Device, IoQueuePair, Namespace};
 use spin::Mutex;
 
 pub struct NVMeAlloc;
@@ -24,26 +24,39 @@ impl Allocator for NVMeAlloc {
 pub struct NVMeBlockDevice {
     dev_idx: usize,
     ns_idx: usize,
-    namespace: Namespace
+    namespace: Namespace,
+    queue: Option<IoQueuePair<NVMeAlloc>>
+}
+
+impl NVMeBlockDevice {
+    pub fn new(dev_idx: usize, ns_idx: usize, namespace: Namespace) -> Self {
+        NVMeBlockDevice { dev_idx, ns_idx, namespace, queue: None }
+    }
+
+    fn get_or_create_queue(&mut self) -> Result<&mut IoQueuePair<NVMeAlloc>, String> {
+        if self.queue.is_none() {
+            let device = &mut NVME_PHYSDEV.lock()[self.dev_idx];
+            let max_queue = device.controller_data().max_queue_entries as usize;
+            match device.create_io_queue_pair(self.namespace.clone(), max_queue) {
+                Ok(queue) => self.queue = Some(queue),
+                Err(e) => return Err(e.to_string())
+            }
+        }
+        return Ok(self.queue.as_mut().unwrap());
+    }
 }
 
 impl<'a> BlockDevice for NVMeBlockDevice {
     fn read(&mut self, lba: u64, buffer: &mut [u8]) -> Result<(), String> {
-        let device = &mut NVME_PHYSDEV.lock()[self.dev_idx];
-        let max_queue = device.controller_data().max_queue_entries as usize;
-        let queue = device.create_io_queue_pair(self.namespace.clone(), max_queue);
-        if queue.is_err() { return Err(queue.err().unwrap().to_string()); }
-        let res = queue.unwrap().read(buffer.as_mut_ptr(), buffer.len(), lba);
-        return res.map_err(|e| e.to_string());
+        let queue = self.get_or_create_queue()?;
+        return queue.read(buffer.as_mut_ptr(), buffer.len(), lba)
+            .map_err(|e| e.to_string());
     }
 
     fn write(&mut self, lba: u64, buffer: &[u8]) -> Result<(), String> {
-        let device = &mut NVME_PHYSDEV.lock()[self.dev_idx];
-        let max_queue = device.controller_data().max_queue_entries as usize;
-        let queue = device.create_io_queue_pair(self.namespace.clone(), max_queue);
-        if queue.is_err() { return Err(queue.err().unwrap().to_string()); }
-        let res = queue.unwrap().write(buffer.as_ptr(), buffer.len(), lba);
-        return res.map_err(|e| e.to_string());
+        let queue = self.get_or_create_queue()?;
+        return queue.write(buffer.as_ptr(), buffer.len(), lba)
+            .map_err(|e| e.to_string());
     }
 }
 
@@ -63,7 +76,7 @@ pub fn init_nvme() {
             let mut device = Device::init(mmio_addr, NVMeAlloc).unwrap();
             let dev_idx = nvme_physdev.len();
             for (ns_idx, ns) in device.identify_namespaces(0).unwrap().iter().enumerate() {
-                nvme_ns.push(NVMeBlockDevice { dev_idx, ns_idx, namespace: ns.clone() });
+                nvme_ns.push(NVMeBlockDevice::new(dev_idx, ns_idx, ns.clone()));
             }
             nvme_physdev.push(device);
         }
