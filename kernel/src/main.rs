@@ -36,7 +36,7 @@ macro_rules! printk {
 #[macro_export]
 macro_rules! printlnk {
     () => { $crate::printk!("\n"); };
-    ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)); };
+    ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)) };
 }
 
 arch!("x86_64", amd64);
