@@ -70,7 +70,7 @@ fn ignite() -> Status {
     let mut root = filesys_protocol.open_volume().unwrap();
 
     let mut file = root.open(
-        cstr16!("\\bin\\unix-v11"), FileMode::Read, FileAttribute::empty()
+        cstr16!("\\unix-v11"), FileMode::Read, FileAttribute::empty()
     ).unwrap().into_regular_file().unwrap();
 
     let mut info_buf = [0u8; 512];

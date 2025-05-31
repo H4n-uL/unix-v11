@@ -8,7 +8,7 @@ cd kernel; cargo build -r --target x86_64-unknown-none; cd ..
 mkdir -p dist/bin
 mkdir -p dist/efi/boot
 cp target/x86_64-unknown-uefi/release/unix-v11-efi.efi dist/efi/boot/bootx64.efi
-cp target/x86_64-unknown-none/release/unix-v11-kernel dist/bin/unix-v11
+cp target/x86_64-unknown-none/release/unix-v11-kernel dist/unix-v11
 
 dd if=/dev/zero of=unixv11.disk bs=1M count=64
 diskno=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount unixv11.disk | head -n 1 | awk '{print $1}')
