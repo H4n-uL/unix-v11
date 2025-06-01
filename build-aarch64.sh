@@ -5,7 +5,6 @@ set -e
 cd efi;    cargo build -r --target aarch64-unknown-uefi; cd ..
 cd kernel; cargo build -r --target aarch64-unknown-none; cd ..
 
-mkdir -p dist/bin
 mkdir -p dist/efi/boot
 cp target/aarch64-unknown-uefi/release/unix-v11-efi.efi dist/efi/boot/bootaa64.efi
 cp target/aarch64-unknown-none/release/unix-v11-kernel dist/unix-v11
