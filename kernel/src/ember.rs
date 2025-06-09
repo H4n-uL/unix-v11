@@ -67,25 +67,22 @@ impl Ember {
     }
 
     pub fn init(&mut self, param: Self) {
-        self.layout_ptr = param.layout_ptr;
-        self.layout_len = param.layout_len;
-        self.acpi_ptr = param.acpi_ptr;
-        self.dtb_ptr = param.dtb_ptr;
-        self.stack_base = param.stack_base;
-        self.kernel_base = param.kernel_base;
-        self.kernel_size = param.kernel_size;
+        *self = param;
 
         let kernel_start = self.kernel_base as u64;
         let kernel_end = (self.kernel_base + self.kernel_size) as u64;
-
         let layout_start = self.layout_ptr as u64;
         let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
+
+        let id_map_ptr = crate::arch::id_map_ptr() as u64;
 
         self.ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
+            if id_map_ptr >= desc_start && id_map_ptr < desc_end  { desc.ty = ramtype::PAGE_TABLE; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
+            if cfg!(target_arch = "x86_64") && desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
         });
     }
 
@@ -93,13 +90,13 @@ impl Ember {
         return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
     }
 
+    pub fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
+        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
+    }
+
     pub fn layout_total(&self) -> usize {
         let last = self.ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
         return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
-    }
-
-    fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }
 
     pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {
