@@ -19,16 +19,16 @@ impl RAMBlock {
         return RAMBlock { addr: core::ptr::null(), size: 0, ty: 0, valid: false, used: false };
     }
 
-    pub fn addr(&self) -> usize { self.addr as usize }
-    pub fn ptr(&self) -> *mut u8 { self.addr as *mut u8 }
-    pub fn size(&self) -> usize { self.size }
-    pub fn ty(&self) -> u32 { self.ty }
-    pub fn valid(&self) -> bool { self.valid }
-    pub fn invalid(&self) -> bool { !self.valid }
-    pub fn used(&self) -> bool  { self.used }
+    pub fn addr(&self) -> usize    {  self.addr as usize }
+    pub fn ptr(&self) -> *mut u8   {  self.addr as *mut u8 }
+    pub fn size(&self) -> usize    {  self.size }
+    pub fn ty(&self) -> u32        {  self.ty }
+    pub fn valid(&self) -> bool    {  self.valid }
+    pub fn invalid(&self) -> bool  { !self.valid }
+    pub fn used(&self) -> bool     {  self.used }
     pub fn not_used(&self) -> bool { !self.used }
-    pub fn set_ty(&mut self, ty: u32) { self.ty = ty; }
-    pub fn set_used(&mut self, used: bool) { self.used = used; }
+    pub fn set_ty(&mut self, ty: u32)        { self.ty    = ty; }
+    pub fn set_used(&mut self, used: bool)   { self.used  = used; }
     pub fn set_valid(&mut self, valid: bool) { self.valid = valid; }
 }
 
@@ -84,15 +84,30 @@ impl RAMBlockManager {
         }
     }
 
+    fn blocks_raw(&self) -> &[RAMBlock] {
+        unsafe { core::slice::from_raw_parts(self.blocks, self.max) }
+    }
+
+    fn blocks_raw_mut(&mut self) -> &mut [RAMBlock] {
+        unsafe { core::slice::from_raw_parts_mut(self.blocks, self.max) }
+    }
+
+    pub fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
+        self.blocks_raw().iter().filter(|&block| block.valid())
+    }
+
+    pub fn blocks_iter_mut(&mut self) -> impl Iterator<Item = &mut RAMBlock> {
+        self.blocks_raw_mut().iter_mut().filter(|block| block.valid())
+    }
+
     pub fn identity_map_size(&self) -> usize {
-        return self.blocks().iter()
-            .filter(|&block| block.valid())
+        return self.blocks_iter()
             .map(|&block| block.addr() + block.size())
             .max().unwrap_or(0);
     }
 
     pub fn count_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
-        return self.blocks().iter().filter(|&block| block.valid() && filter(block))
+        return self.blocks_iter().filter(|&block| filter(block))
             .map(|block| block.size()).sum();
     }
 
@@ -104,25 +119,9 @@ impl RAMBlockManager {
         return self.count_filter(|_| true);
     }
 
-    pub fn blocks(&self) -> &[RAMBlock] {
-        unsafe { core::slice::from_raw_parts(self.blocks, self.count) }
-    }
-
-    fn blocks_mut(&mut self) -> &mut [RAMBlock] {
-        unsafe { core::slice::from_raw_parts_mut(self.blocks, self.count) }
-    }
-
-    pub fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
-        self.blocks().iter().filter(|&block| block.valid())
-    }
-
-    pub fn blocks_iter_mut(&mut self) -> impl Iterator<Item = &mut RAMBlock> {
-        self.blocks_mut().iter_mut().filter(|block| block.valid())
-    }
-
     pub fn sort(&mut self) {
         use crate::sort::HeaplessSort;
-        self.blocks_mut().sort_noheap_by(|a, b|
+        self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
                 (true, true)   => a.addr.cmp(&b.addr),
                 (true, false)  => core::cmp::Ordering::Less,
@@ -142,7 +141,7 @@ impl RAMBlockManager {
         let size = align_up(size, PAGE_4KIB);
         if self.count >= self.max { self.expand(self.max * 2); }
         let idx = self.count; self.count += 1;
-        let blocks = self.blocks_mut();
+        let blocks = self.blocks_raw_mut();
         blocks[idx] = RAMBlock::new(addr, size, ty, used);
 
         for i in (1..=idx).rev() {
@@ -155,20 +154,25 @@ impl RAMBlockManager {
 
     pub fn reserve_at_as(&mut self, addr: *const u8, size: usize, ty: u32, as_ty: u32, used: bool) -> Option<RBPtr> {
         let size = align_up(size, PAGE_4KIB);
-        let target_idx = self.blocks_iter().position(|block| {
-            block.not_used() && block.ty() == ty &&
-            addr >= block.ptr() && addr as usize + size <= block.addr() + block.size()
-        });
+        let filter = |block: &RAMBlock| {
+            block.not_used() && block.ty() == ty && addr >= block.ptr() &&
+            addr as usize + size <= block.addr() + block.size()
+        };
 
-        if let Some(idx) = target_idx {
-            let block = self.blocks()[idx];
-            let block_end = block.addr() + block.size();
-            let before_size = addr as usize - block.addr();
-            let after_size = block_end - (addr as usize + size);
+        let mut split_info: Option<RAMBlock> = None;
+        for block in self.blocks_iter_mut() {
+            if filter(block) {
+                split_info = Some(*block);
+                *block = RAMBlock::new(addr, size, as_ty, used);
+                break;
+            }
+        }
 
-            self.blocks_mut()[idx] = RAMBlock::new(addr, size, as_ty, used);
-            if before_size > 0 { self.add(block.ptr(), before_size, block.ty(), block.used()); }
-            if after_size > 0  { self.add(unsafe { addr.add(size) }, after_size, block.ty(), block.used()); }
+        if let Some(block) = split_info {
+            let before = addr as usize - block.addr();
+            let after = block.addr() + block.size() - (addr as usize + size);
+            if before > 0 { self.add(block.ptr(), before, block.ty(), false); }
+            if after > 0 { self.add(unsafe { addr.add(size) }, after, block.ty(), false); }
             return Some(RBPtr::new(addr));
         }
 
@@ -208,7 +212,7 @@ impl RAMBlockManager {
     pub fn expand(&mut self, new_max: usize) {
         if new_max <= self.max { return; }
 
-        let manager_size = new_max * core::mem::size_of::<RAMBlock>();
+        let manager_size = new_max * size_of::<RAMBlock>();
         let old_blocks_ptr = self.blocks;
         let new_blocks_ptr = self.find_free_ram(manager_size, ramtype::CONVENTIONAL).unwrap().ptr();
         unsafe { core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.count); }
