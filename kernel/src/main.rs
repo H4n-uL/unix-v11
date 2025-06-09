@@ -55,7 +55,7 @@ fn schedule() -> ! { loop { arch::halt(); } }
 
 pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "efiapi" fn flame(ember: Ember) -> ! {
     EMBER.lock().init(ember);
     RAM_BLOCK_MANAGER.lock().init();

@@ -1,8 +1,8 @@
 #[repr(C, align(2048))]
 pub struct ExceptionVector { pub data: [u32; 512] }
 
-#[no_mangle]
-#[link_section = ".text.exceptions"]
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".text.exceptions")]
 pub static mut EXCEPTION_VECTOR: ExceptionVector = ExceptionVector { data: [0; 512] };
 
 pub fn init_exceptions() {
@@ -45,8 +45,8 @@ pub fn init_exceptions() {
 
 macro_rules! handler {
     ($name:ident, $msg:expr) => {
-        #[no_mangle]
-        #[link_section = ".text.exceptions"]
+        #[unsafe(no_mangle)]
+        #[unsafe(link_section = ".text.exceptions")]
         extern "C" fn $name() {
             super::serial_puts($msg);
             loop { super::halt(); }
