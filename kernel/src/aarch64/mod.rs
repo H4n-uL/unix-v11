@@ -208,6 +208,12 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     );
 }
 
+pub fn id_map_ptr() -> *const u8 {
+    let id_map_ptr: usize;
+    unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) id_map_ptr); }
+    return (id_map_ptr & !0xfff) as *const u8;
+}
+
 #[inline(always)]
 pub fn stack_ptr() -> *const u8 {
     let sp: usize;
@@ -219,10 +225,10 @@ pub unsafe fn move_stack(ptr: &RBPtr, size: usize) {
     let mut ember = EMBER.lock();
     let stack_ptr = stack_ptr();
     let old_stack_base = ember.stack_base;
-    let stack_size = old_stack_base - stack_ptr as usize;
+    let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
 
     let new_stack_base = ptr.addr() + size;
-    let new_stack_bottom = (new_stack_base - stack_size) as *mut u8;
+    let new_stack_bottom = new_stack_base.saturating_sub(stack_size) as *mut u8;
 
     core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
     core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
