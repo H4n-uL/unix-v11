@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{RAMBlockManager, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RAMBlockManager, RBPtr}, EMBER};
 pub use exceptions::init_exceptions;
 use spin::MutexGuard;
 use x86_64::{
@@ -86,7 +86,7 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
         if level == 3 { *entry = phys | flags; }
         else {
             table = if *entry & 0x1 == 0 {
-                let next_phys = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE)
+                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | KERNEL_FLAG;
@@ -126,15 +126,11 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
 
     let total_tables = 1 + num_pdpt + num_pd + num_pt;
     let table_size = (total_tables * 3) * PAGE_4KIB;
-    let rbptr = ramblock.reserve_as(
-        table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false
-    );
-    let pml4_addr = match rbptr {
-        Some(rbptr) => rbptr.addr() as u64,
-        None => panic!("[ERROR] Failed to reserve RAM for page tables!")
-    };
-    core::ptr::write_bytes(pml4_addr as *mut u8, 0, table_size);
-    ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE).unwrap();
+    let pml4_addr = ramblock.alloc(
+        AllocParams::new(table_size).as_type(ramtype::PAGE_TABLE).reserve()
+    ).unwrap();
+    core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, table_size);
+    ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE));
 
     // Map Page Tables
     for desc in ember.ram_layout() {
@@ -143,13 +139,13 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
 
         for phys in (block_start..block_end).step_by(PAGE_4KIB) {
-            map_page(pml4_addr as *mut u64, phys, phys, flags_for(block_ty), ramblock);
+            map_page(pml4_addr.ptr(), phys, phys, flags_for(block_ty), ramblock);
         }
     }
 
     // Register PML4 in CR3
     Cr3::write(
-        PhysFrame::containing_address(PhysAddr::new(pml4_addr)),
+        PhysFrame::containing_address(PhysAddr::new(pml4_addr.addr() as u64)),
         Cr3Flags::empty()
     );
 

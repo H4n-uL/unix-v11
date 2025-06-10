@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{RAMBlockManager, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RAMBlockManager, RBPtr}, EMBER};
 use aarch64_cpu::{asm::wfi, registers::DAIF};
 pub use exceptions::init_exceptions;
 use spin::MutexGuard;
@@ -96,7 +96,7 @@ pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64, ramblock:
         if level == 3 { *entry = phys | VALID | PAGE_DESC | flags; }
         else {
             table = if *entry & VALID == 0 {
-                let next_phys = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE)
+                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!\n");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | VALID;
@@ -135,11 +135,11 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let total_tables = 1 + num_l1 + num_l2 + num_l3;
     let table_size = (total_tables * 3) * PAGE_4KIB;
 
-    let l0 = ramblock.reserve_as(
-        table_size, ramtype::CONVENTIONAL, ramtype::PAGE_TABLE, false
+    let l0 = ramblock.alloc(
+        AllocParams::new(table_size).as_type(ramtype::PAGE_TABLE).reserve()
     ).unwrap();
     core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, table_size);
-    let _ = ramblock.alloc(PAGE_4KIB, ramtype::PAGE_TABLE);
+    let _ = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE));
 
     for desc in ember.ram_layout() {
         let block_ty = desc.ty;

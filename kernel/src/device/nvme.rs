@@ -1,4 +1,4 @@
-use crate::{ember::ramtype, printlnk, ram::PageAligned, ramblock::RAM_BLOCK_MANAGER};
+use crate::{printlnk, ram::PageAligned, ramblock::{AllocParams, RAM_BLOCK_MANAGER}};
 use super::PCI_DEVICES;
 use alloc::vec::Vec;
 use nvme::{Allocator, Device};
@@ -9,13 +9,13 @@ pub struct NVMeAlloc;
 impl Allocator for NVMeAlloc {
     unsafe fn allocate(&self, size: usize) -> usize {
         let mut ramblock = RAM_BLOCK_MANAGER.lock();
-        let ptr = ramblock.alloc(size, ramtype::CONVENTIONAL).unwrap();
+        let ptr = ramblock.alloc(AllocParams::new(size)).unwrap();
         return ptr.addr();
     }
 
     unsafe fn deallocate(&self, addr: usize) {
         let mut ramblock = RAM_BLOCK_MANAGER.lock();
-        ramblock.free_raw(addr as *mut u8);
+        unsafe { ramblock.free_raw(addr as *mut u8); }
     }
 
     fn translate(&self, addr: usize) -> usize { addr }
