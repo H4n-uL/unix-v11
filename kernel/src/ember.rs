@@ -51,6 +51,13 @@ pub mod ramtype {
     pub const KERNEL               : u32 = 0xffffffff;
 }
 
+const RECLAMABLE: &[u32] = &[
+    ramtype::LOADER_CODE,
+    ramtype::LOADER_DATA,
+    ramtype::BOOT_SERVICES_CODE,
+    ramtype::BOOT_SERVICES_DATA
+];
+
 unsafe impl Sync for Ember {}
 unsafe impl Send for Ember {}
 impl Ember {
@@ -83,6 +90,7 @@ impl Ember {
             if id_map_ptr >= desc_start && id_map_ptr < desc_end  { desc.ty = ramtype::PAGE_TABLE; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
             if cfg!(target_arch = "x86_64") && desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
+            if RECLAMABLE.contains(&desc.ty) { desc.ty = ramtype::CONVENTIONAL; }
         });
     }
 
