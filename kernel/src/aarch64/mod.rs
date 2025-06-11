@@ -96,8 +96,8 @@ pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64, ramblock:
         if level == 3 { *entry = phys | VALID | PAGE_DESC | flags; }
         else {
             table = if *entry & VALID == 0 {
-                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE))
-                    .expect("[ERROR] alloc for page table failed!\n");
+                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
+                    .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | VALID;
                 next_phys.ptr()
@@ -125,21 +125,8 @@ const ENTRIES_PER_TABLE: usize = 0x200;
 // Not working yet, I rly hate AArch64 MMU
 pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let ember = EMBER.lock();
-    let ram_size = ember.layout_total() as u64;
-
-    let num_4kib_pages = (ram_size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
-    let num_l3 = (num_4kib_pages + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-    let num_l2 = (num_l3 + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-    let num_l1 = (num_l2 + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-
-    let total_tables = 1 + num_l1 + num_l2 + num_l3;
-    let table_size = (total_tables * 3) * PAGE_4KIB;
-
-    let l0 = ramblock.alloc(
-        AllocParams::new(table_size).as_type(ramtype::PAGE_TABLE).reserve()
-    ).unwrap();
-    core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, table_size);
-    let _ = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE));
+    let l0 = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
+    unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     for desc in ember.ram_layout() {
         let block_ty = desc.ty;

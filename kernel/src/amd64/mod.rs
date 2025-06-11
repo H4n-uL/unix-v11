@@ -86,7 +86,7 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64, rambloc
         if level == 3 { *entry = phys | flags; }
         else {
             table = if *entry & 0x1 == 0 {
-                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE))
+                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | KERNEL_FLAG;
@@ -112,25 +112,13 @@ const ENTRIES_PER_TABLE: usize = 0x200;
 
 pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
     let ember = EMBER.lock();
-    let ram_size = ember.layout_total() as u64;
 
     // Enable PAE, PSE, and Long mode
     Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
     Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
 
-    // Calculate page table counts, sizes, and base addresses
-    let num_4kib_pages = (ram_size as usize + PAGE_4KIB - 1) / PAGE_4KIB;
-    let num_pt = (num_4kib_pages + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-    let num_pd = (num_pt + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-    let num_pdpt = (num_pd + ENTRIES_PER_TABLE - 1) / ENTRIES_PER_TABLE;
-
-    let total_tables = 1 + num_pdpt + num_pd + num_pt;
-    let table_size = (total_tables * 3) * PAGE_4KIB;
-    let pml4_addr = ramblock.alloc(
-        AllocParams::new(table_size).as_type(ramtype::PAGE_TABLE).reserve()
-    ).unwrap();
-    core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, table_size);
-    ramblock.alloc(AllocParams::new(PAGE_4KIB).from_type(ramtype::PAGE_TABLE));
+    let pml4_addr = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
+    unsafe { core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     // Map Page Tables
     for desc in ember.ram_layout() {
