@@ -16,7 +16,7 @@ impl RAMBlock {
         return RAMBlock { addr, size, ty, valid: true, used };
     }
     pub const fn new_invalid() -> Self {
-        return RAMBlock { addr: core::ptr::null(), size: 0, ty: 0, valid: false, used: false };
+        return RAMBlock { addr: 0 as *const u8, size: 0, ty: 0, valid: false, used: false };
     }
 
     pub fn addr(&self) -> usize    {  self.addr as usize }
@@ -84,7 +84,7 @@ impl AllocParams {
 #[repr(C)]
 #[derive(Debug)]
 pub struct RAMBlockManager {
-    blocks: *mut RAMBlock,
+    blocks: *const RAMBlock,
     is_init: bool,
     count: usize,
     max: usize
@@ -92,12 +92,8 @@ pub struct RAMBlockManager {
 
 pub const BASE_RAMBLOCK_SIZE: usize = 128;
 pub static RAM_BLOCKS: [RAMBlock; BASE_RAMBLOCK_SIZE] = [RAMBlock::new_invalid(); BASE_RAMBLOCK_SIZE];
-pub const RAM_BLOCKS_INIT_PTR: *const u8 = &raw const RAM_BLOCKS as *const u8;
-pub static RAM_BLOCK_MANAGER: Mutex<RAMBlockManager> = Mutex::new(RAMBlockManager {
-    blocks: &raw const RAM_BLOCKS as *mut RAMBlock,
-    is_init: false, count: 0,
-    max: BASE_RAMBLOCK_SIZE,
-});
+pub const RAM_BLOCKS_INIT_PTR: *const RAMBlock = RAM_BLOCKS.as_ptr();
+pub static RAM_BLOCK_MANAGER: Mutex<RAMBlockManager> = RAMBlockManager::empty(&RAM_BLOCKS, BASE_RAMBLOCK_SIZE);
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
@@ -105,10 +101,17 @@ unsafe impl Send for RAMBlockManager {}
 unsafe impl Sync for RAMBlockManager {}
 
 impl RAMBlockManager {
+    const fn empty(rb: &[RAMBlock], max: usize) -> Mutex<Self> {
+        Mutex::new(RAMBlockManager {
+            blocks: rb.as_ptr(),
+            is_init: false, count: 0, max
+        })
+    }
+
     pub fn init(&mut self) {
         let mut ember = EMBER.lock();
-        ember.sort_ram_layout_by(|desc| desc.page_count);
         if self.is_init { return; } self.count = 0;
+        ember.sort_ram_layout_by(|desc| desc.page_count);
         for desc in ember.ram_layout().iter().rev() {
             if desc.ty == ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
@@ -131,7 +134,7 @@ impl RAMBlockManager {
     }
 
     fn blocks_raw_mut(&mut self) -> &mut [RAMBlock] {
-        unsafe { core::slice::from_raw_parts_mut(self.blocks, self.max) }
+        unsafe { core::slice::from_raw_parts_mut(self.blocks as *mut RAMBlock, self.max) }
     }
 
     pub fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
@@ -200,7 +203,7 @@ impl RAMBlockManager {
         let old_blocks_ptr = self.blocks;
         let new_blocks_ptr = self.find_free_ram(manager_size, ramtype::CONVENTIONAL).unwrap().ptr();
         unsafe { core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.count); }
-        if old_blocks_ptr as *const u8 != RAM_BLOCKS_INIT_PTR {
+        if old_blocks_ptr != RAM_BLOCKS_INIT_PTR {
             self.free(RBPtr::new(old_blocks_ptr, self.max));
         }
         (self.blocks, self.max) = (new_blocks_ptr, new_max);
@@ -217,8 +220,8 @@ impl RAMBlockManager {
         };
 
         let filter = |block: &RAMBlock| {
-            block.not_used() && ptr >= block.ptr() && args.from_type == block.ty() &&
-            ptr as usize + args.size <= block.addr() + block.size()
+            block.not_used() && args.from_type == block.ty() &&
+            ptr >= block.ptr() && ptr as usize + args.size <= block.addr() + block.size()
         };
 
         let mut split_info = None;
