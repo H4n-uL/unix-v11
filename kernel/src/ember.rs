@@ -89,7 +89,7 @@ impl Ember {
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
             if id_map_ptr >= desc_start && id_map_ptr < desc_end  { desc.ty = ramtype::PAGE_TABLE; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
-            if cfg!(target_arch = "x86_64") && desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
+            #[cfg(target_arch = "x86_64")] if desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
             if RECLAMABLE.contains(&desc.ty) { desc.ty = ramtype::CONVENTIONAL; }
         });
     }
