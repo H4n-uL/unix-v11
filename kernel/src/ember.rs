@@ -102,11 +102,6 @@ impl Ember {
         return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
     }
 
-    pub fn layout_total(&self) -> usize {
-        let last = self.ram_layout().iter().max_by_key(|&desc| desc.phys_start).unwrap();
-        return last.phys_start as usize + last.page_count as usize * PAGE_4KIB;
-    }
-
     pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {
         use crate::sort::HeaplessSort;
         self.ram_layout_mut().sort_noheap_by_key(key);
