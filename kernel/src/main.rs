@@ -6,19 +6,21 @@
 
 #![no_std]
 #![no_main]
-#![feature(abi_x86_interrupt, abi_riscv_interrupt)]
+#![feature(abi_x86_interrupt)]
+#![feature(abi_riscv_interrupt)]
+
 extern crate alloc;
 
 mod device; mod ember;
 mod ram; mod ramblock;
 mod sort;
 
+use crate::ramblock::RAMBLOCK;
 use core::panic::PanicInfo;
 use ember::Ember;
-use ramblock::RAM_BLOCK_MANAGER;
 use spin::Mutex;
 
-macro_rules! arch {
+macro_rules! use_arch {
     ($arch:literal, $modname:ident) => {
         #[cfg(target_arch = $arch)] mod $modname;
         #[cfg(target_arch = $arch)] use $modname as arch;
@@ -35,13 +37,13 @@ macro_rules! printk {
 
 #[macro_export]
 macro_rules! printlnk {
-    () => { $crate::printk!("\n"); };
-    ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)) };
+    () => { $crate::printk!("\r\n"); };
+    ($($arg:tt)*) => { $crate::printk!("{}\r\n", format_args!($($arg)*)) };
 }
 
-arch!("x86_64", amd64);
-arch!("aarch64", aarch64);
-arch!("riscv64", riscv64);
+use_arch!("x86_64", amd64);
+use_arch!("aarch64", aarch64);
+use_arch!("riscv64", riscv64);
 
 fn init_metal() {
     arch::init_exceptions();
@@ -58,7 +60,7 @@ pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn flame(ember: Ember) -> ! {
     EMBER.lock().init(ember);
-    RAM_BLOCK_MANAGER.lock().init();
+    RAMBLOCK.lock().init();
     init_metal();
     exec_aleph();
     schedule();

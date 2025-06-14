@@ -1,9 +1,8 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RAMBlockManager, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RBPtr, RAMBLOCK}, EMBER};
 use aarch64_cpu::{asm::wfi, registers::DAIF};
 pub use exceptions::init_exceptions;
-use spin::MutexGuard;
 use tock_registers::interfaces::{Readable, Writeable};
 
 fn set_interrupts(enabled: bool) {
@@ -31,7 +30,7 @@ pub fn init_serial() {
 
 pub fn serial_putchar(c: u8) {
     unsafe {
-        while core::ptr::read_volatile((UART0_BASE + 0x18) as *const u32) & (1 << 5) != 0 {}
+        while core::ptr::read_volatile((UART0_BASE + 0x18) as *const u32) & (1 << 5) != 0 { core::hint::spin_loop(); }
         core::ptr::write_volatile((UART0_BASE + 0x00) as *mut u32, c as u32);
     }
 }
@@ -85,24 +84,24 @@ fn get_page_idx(level: usize, virt: u64) -> usize {
     }
 }
 
-pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64, ramblock: &mut RAMBlockManager) {
+pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64) {
     let virt = virt & 0x0000_ffff_ffff_f000;
     let phys = phys & 0x0000_ffff_ffff_f000;
 
     let mut table = l0;
     for level in 0..4 {
         let index = get_page_idx(level, virt);
-        let entry = table.add(index);
-        if level == 3 { *entry = phys | VALID | PAGE_DESC | flags; }
+        let entry = unsafe { table.add(index) };
+        if level == 3 { unsafe { *entry = phys | VALID | PAGE_DESC | flags; } }
         else {
-            table = if *entry & VALID == 0 {
-                let next_phys = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
+            table = unsafe { if *entry & VALID == 0 {
+                let next_phys = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | VALID;
                 next_phys.ptr()
             }
-            else { (*entry & 0x0000_ffff_ffff_f000) as *mut u64 };
+            else { (*entry & 0x0000_ffff_ffff_f000) as *mut u64 } };
         }
     }
 }
@@ -123,9 +122,9 @@ fn flags_for(ty: u32) -> u64 {
 const ENTRIES_PER_TABLE: usize = 0x200;
 
 // Not working yet, I rly hate AArch64 MMU
-pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
+pub unsafe fn identity_map() {
     let ember = EMBER.lock();
-    let l0 = ramblock.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
+    let l0 = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     for desc in ember.ram_layout() {
@@ -134,12 +133,12 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
 
         for phys in (block_start..block_end).step_by(PAGE_4KIB) {
-            map_page(l0.ptr(), phys, phys, flags_for(block_ty), ramblock);
+            unsafe { map_page(l0.ptr(), phys, phys, flags_for(block_ty)); }
         }
     }
 
     let mut mmfr0: u64;
-    core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0);
+    unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
     let parange = mmfr0 & 0xf;
     // 0 = 32 bits, 1 = 36 bits, 2 = 40 bits
     // 3 = 42 bits, 4 = 44 bits, 5 = 48 bits
@@ -158,7 +157,7 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
         | (parange << 32) // IPS = PARange
     ;
 
-    core::arch::asm!("
+    unsafe { core::arch::asm!("
         // Set up registers for MMU
         mov x1, {0} // MAIR_EL1
         mov x2, {1} // TCR_EL1
@@ -192,7 +191,7 @@ pub unsafe fn identity_map(ramblock: &mut MutexGuard<'_, RAMBlockManager>) {
         in(reg) mair_el1,
         in(reg) tcr_el1,
         in(reg) l0.addr()
-    );
+    ); }
 }
 
 pub fn id_map_ptr() -> *const u8 {
@@ -217,8 +216,10 @@ pub unsafe fn move_stack(ptr: &RBPtr, size: usize) {
     let new_stack_base = ptr.addr() + size;
     let new_stack_bottom = new_stack_base.saturating_sub(stack_size) as *mut u8;
 
-    core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
-    core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
+    unsafe {
+        core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
+        core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
+    }
 
     ember.stack_base = new_stack_base;
 }

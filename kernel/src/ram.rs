@@ -1,4 +1,4 @@
-use crate::{arch, ember::ramtype, ramblock::{AllocParams, RAM_BLOCK_MANAGER}};
+use crate::{arch, ember::ramtype, ramblock::{AllocParams, RAMBLOCK}};
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;
@@ -18,7 +18,7 @@ impl PageAligned {
         let layout = Layout::from_size_align(size, PAGE_4KIB).unwrap();
         let ptr = unsafe { alloc(layout) };
         if ptr.is_null() { panic!("Failed to allocate aligned memory"); }
-        Self { ptr, layout }
+        return Self { ptr, layout };
     }
 }
 
@@ -30,7 +30,6 @@ impl Drop for PageAligned {
 
 impl Deref for PageAligned {
     type Target = [u8];
-
     fn deref(&self) -> &Self::Target {
         unsafe { core::slice::from_raw_parts(self.ptr, self.layout.size()) }
     }
@@ -45,22 +44,20 @@ impl DerefMut for PageAligned {
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub fn align_up(size: usize, align: usize) -> usize {
-    if align == 0 { return size; }
-    return size + (align - size % align) % align;
+pub fn align_up(val: usize, align: usize) -> usize {
+    if align == 0 { return val; }
+    return val + (align - val % align) % align;
 }
 
 pub fn init_ram() {
-    let mut ramblock = RAM_BLOCK_MANAGER.lock();
-
-    let stack_ptr = ramblock.alloc(
+    let stack_ptr = RAMBLOCK.lock().alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { arch::move_stack(&stack_ptr, STACK_SIZE); }
 
-    let available = ramblock.available();
+    let available = RAMBLOCK.lock().available();
     let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
-    let heap_ptr = ramblock.alloc(
+    let heap_ptr = RAMBLOCK.lock().alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_size); }
