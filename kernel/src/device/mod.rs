@@ -2,7 +2,7 @@ mod block; mod nvme;
 
 use crate::{printk, printlnk, EMBER};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 use fdt::Fdt;
 use spin::Mutex;
 
@@ -11,15 +11,13 @@ pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
-        &self,
-        physical_address: usize,
-        size: usize,
+        &self, physical_address: usize, size: usize,
     ) -> PhysicalMapping<Self, T> {
-        PhysicalMapping::new(
+        unsafe { PhysicalMapping::new(
             physical_address,
             core::ptr::NonNull::new(physical_address as *mut T).unwrap(),
             size, size, Self
-        )
+        ) }
     }
 
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
@@ -36,6 +34,7 @@ pub struct PciDevice {
 unsafe impl Send for PciDevice {}
 unsafe impl Sync for PciDevice {}
 
+#[allow(dead_code)]
 impl PciDevice {
     pub fn read(mcfg_base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
         let ptr = (mcfg_base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12)) as *mut u32;
@@ -52,6 +51,8 @@ impl PciDevice {
     pub fn enable_pci_device(&mut self) { self.set_command(self.command() | 0x0006); }
 
     pub fn is_nvme(&self) -> bool { self.class() == 0x01 && self.subclass() == 0x08 }
+    pub fn is_usb(&self) -> bool { self.class() == 0x0c && self.subclass() == 0x03 }
+    pub fn is_display(&self) -> bool { self.class() == 0x03 }
     pub fn is_vga(&self) -> bool { self.class() == 0x03 && self.subclass() == 0x00 }
     pub fn is_bridge(&self) -> bool { self.is_type1() }
 
@@ -110,17 +111,17 @@ impl PciDevice {
     // Type 1 specific methods
     pub fn is_type1(&self) -> bool { self.header_type() & 0x7f == 1 }
 
-    pub fn secondary_latency(&self) -> u8 { (self.blob()[6] >> 24) as u8 }
-    pub fn subordinate_bus(&self) -> u8 { (self.blob()[6] >> 16) as u8 }
-    pub fn secondary_bus(&self) -> u8 { (self.blob()[6] >> 8) as u8 }
-    pub fn primary_bus(&self) -> u8 { self.blob()[6] as u8 }
+    pub fn secondary_latency(&self) -> u8      { (self.blob()[6] >> 24) as u8 }
+    pub fn subordinate_bus(&self) -> u8        { (self.blob()[6] >> 16) as u8 }
+    pub fn secondary_bus(&self) -> u8          { (self.blob()[6] >> 8) as u8 }
+    pub fn primary_bus(&self) -> u8            { self.blob()[6] as u8 }
 
-    pub fn secondary_status(&self) -> u16 { (self.blob()[7] >> 16) as u16 }
-    pub fn io_limit(&self) -> u8 { (self.blob()[7] >> 8) as u8 }
-    pub fn io_base(&self) -> u8 { self.blob()[7] as u8 }
+    pub fn secondary_status(&self) -> u16      { (self.blob()[7] >> 16) as u16 }
+    pub fn io_limit(&self) -> u8               { (self.blob()[7] >> 8) as u8 }
+    pub fn io_base(&self) -> u8                { self.blob()[7] as u8 }
 
-    pub fn memory_limit(&self) -> u16 { (self.blob()[8] >> 16) as u16 }
-    pub fn memory_base(&self) -> u16 { self.blob()[8] as u16 }
+    pub fn memory_limit(&self) -> u16          { (self.blob()[8] >> 16) as u16 }
+    pub fn memory_base(&self) -> u16           { self.blob()[8] as u16 }
 
     pub fn prefetch_memory_limit(&self) -> u16 { (self.blob()[9] >> 16) as u16 }
     pub fn prefetch_memory_base(&self) -> u16  { self.blob()[9] as u16 }
@@ -128,17 +129,17 @@ impl PciDevice {
     pub fn prefetch_base_upper(&self) -> u32   { self.blob()[10] }
     pub fn prefetch_limit_upper(&self) -> u32  { self.blob()[11] }
 
-    pub fn io_limit_upper(&self) -> u16 { (self.blob()[12] >> 16) as u16 }
-    pub fn io_base_upper(&self) -> u16  {  self.blob()[12] as u16 }
+    pub fn io_limit_upper(&self) -> u16        { (self.blob()[12] >> 16) as u16 }
+    pub fn io_base_upper(&self) -> u16         {  self.blob()[12] as u16 }
 
-    pub fn bridge_control(&self) -> u16 { (self.blob()[15] >> 16) as u16 }
+    pub fn bridge_control(&self) -> u16        { (self.blob()[15] >> 16) as u16 }
 }
 
-fn scan_pcie_devices(mcfg_base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
+fn scan_pcie_devices(base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
     let mut devices = Vec::new();
 
     for bus in start_bus..=end_bus { for device in 0..32 { for function in 0..8 {
-        if let Some(mut dev) = PciDevice::read(mcfg_base, bus, device, function) {
+        if let Some(mut dev) = PciDevice::read(base, bus, device, function) {
             dev.enable_pci_device();
             devices.push(dev);
         }
@@ -156,7 +157,7 @@ pub fn scan_pci() {
         match acpi.find_table::<Mcfg>() {
             Ok(mcfg) => {
                 *PCI_DEVICES.lock() = mcfg.get().entries().iter().flat_map(|entry| {
-                    let mcfg_base = entry.base_address as u64;
+                    let mcfg_base = entry.base_address;
                     let start_bus = entry.bus_number_start;
                     let end_bus = entry.bus_number_end;
                     scan_pcie_devices(mcfg_base, start_bus, end_bus)
@@ -165,11 +166,31 @@ pub fn scan_pci() {
             Err(_) => panic!("No PCIe devices found")
         }
     }
-    else if let Some(dtb) = DEVICETREE.lock().as_ref() {
-        // dummy
-        *PCI_DEVICES.lock() = dtb.all_nodes().filter_map(|node| {
-            printlnk!("{:?}", node);
-            None
+    if let Some(dtb) = DEVICETREE.lock().as_ref() {
+        *PCI_DEVICES.lock() = dtb.all_nodes().flat_map(|node| {
+            if let Some(compatible) = node.properties().find(|p| p.name == "compatible") {
+                let compat_str = String::from_utf8_lossy(compatible.value);
+
+                if compat_str.contains("pcie") || compat_str.contains("pci") {
+                    if let Some(reg_prop) = node.properties().find(|p| p.name == "reg") {
+                        let reg_data = reg_prop.value;
+                        if reg_data.len() < 8 { return Vec::new(); }
+                        let ecam_base = u64::from_be_bytes([
+                            reg_data[0], reg_data[1], reg_data[2], reg_data[3],
+                            reg_data[4], reg_data[5], reg_data[6], reg_data[7]
+                        ]);
+
+                        let (start_bus, end_bus) =
+                        match node.properties().find(|p| p.name == "bus-range") {
+                            Some(bus_range) => (bus_range.value[3], bus_range.value[7]),
+                            None => (0, 255)
+                        };
+
+                        return scan_pcie_devices(ecam_base, start_bus, end_bus);
+                    }
+                }
+            }
+            return Vec::new();
         }).collect();
     }
 }
@@ -201,9 +222,10 @@ pub fn init_device() {
             dev.class(), dev.subclass(), dev.prog_if()
         );
 
-        if dev.is_nvme()   { printk!(" --> NVMe Controller"); }
-        if dev.is_vga()    { printk!(" --> VGA Compatible Controller"); }
-        if dev.is_bridge() { printk!(" (PCI Bridge)"); }
+        if dev.is_nvme()    { printk!(" --> NVMe Controller"); }
+        if dev.is_usb()     { printk!(" --> USB Controller"); }
+        if dev.is_display() { printk!(" --> Display Controller"); }
+        if dev.is_bridge()  { printk!(" (PCI Bridge)"); }
         printlnk!();
     }
 
