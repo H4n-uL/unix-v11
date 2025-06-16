@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RBPtr, RAMBLOCK}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{self, AllocParams, RBPtr}, EMBER};
 use aarch64_cpu::{asm::wfi, registers::DAIF};
 pub use exceptions::init_exceptions;
 use tock_registers::interfaces::{Readable, Writeable};
@@ -95,7 +95,7 @@ pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64) {
         if level == 3 { unsafe { *entry = phys | VALID | PAGE_DESC | flags; } }
         else {
             table = unsafe { if *entry & VALID == 0 {
-                let next_phys = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
+                let next_phys = ramblock::alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | VALID;
@@ -124,7 +124,7 @@ const ENTRIES_PER_TABLE: usize = 0x200;
 // Not working yet, I rly hate AArch64 MMU
 pub unsafe fn identity_map() {
     let ember = EMBER.lock();
-    let l0 = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
+    let l0 = ramblock::alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     for desc in ember.ram_layout() {

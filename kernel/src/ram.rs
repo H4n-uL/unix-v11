@@ -1,4 +1,4 @@
-use crate::{arch, ember::ramtype, ramblock::{AllocParams, RAMBLOCK}};
+use crate::{arch, ember::ramtype, ramblock::{self, AllocParams}};
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;
@@ -50,14 +50,14 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
-    let stack_ptr = RAMBLOCK.lock().alloc(
+    let stack_ptr = ramblock::alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { arch::move_stack(&stack_ptr, STACK_SIZE); }
 
-    let available = RAMBLOCK.lock().available();
+    let available = ramblock::available();
     let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
-    let heap_ptr = RAMBLOCK.lock().alloc(
+    let heap_ptr = ramblock::alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_size); }

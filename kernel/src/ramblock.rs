@@ -14,10 +14,10 @@ pub struct RAMBlock {
 
 impl RAMBlock {
     pub fn new(addr: *const u8, size: usize, ty: u32, used: bool) -> Self {
-        return RAMBlock { addr, size, ty, valid: true, used };
+        return Self { addr, size, ty, valid: true, used };
     }
     pub const fn new_invalid() -> Self {
-        return RAMBlock { addr: 0 as *const u8, size: 0, ty: 0, valid: false, used: false };
+        return Self { addr: 0 as *const u8, size: 0, ty: 0, valid: false, used: false };
     }
 
     pub fn addr(&self) -> usize    {  self.addr as usize }
@@ -28,9 +28,9 @@ impl RAMBlock {
     pub fn invalid(&self) -> bool  { !self.valid }
     pub fn used(&self) -> bool     {  self.used }
     pub fn not_used(&self) -> bool { !self.used }
-    pub fn set_ty(&mut self, ty: u32)        { self.ty    = ty; }
-    pub fn set_used(&mut self, used: bool)   { self.used  = used; }
-    pub fn set_valid(&mut self, valid: bool) { self.valid = valid; }
+    fn set_ty(&mut self, ty: u32)        { self.ty    = ty; }
+    fn set_used(&mut self, used: bool)   { self.used  = used; }
+    fn set_valid(&mut self, valid: bool) { self.valid = valid; }
 }
 
 #[repr(C)]
@@ -92,10 +92,9 @@ pub struct RAMBlockManager {
     max: usize
 }
 
-pub const BASE_RAMBLOCK_SIZE: usize = 128;
-pub static RAMBLOCKS_EMBEDDED: [RAMBlock; BASE_RAMBLOCK_SIZE] = [RAMBlock::new_invalid(); BASE_RAMBLOCK_SIZE];
-pub const RAMBLOCKS_INIT_PTR: *const RAMBlock = RAMBLOCKS_EMBEDDED.as_ptr();
-pub static RAMBLOCK: Mutex<RAMBlockManager> = RAMBlockManager::empty(RAMBLOCKS_INIT_PTR, BASE_RAMBLOCK_SIZE);
+const BASE_RAMBLOCK_SIZE: usize = 128;
+static RAMBLOCKS_EMBEDDED: [RAMBlock; BASE_RAMBLOCK_SIZE] = [RAMBlock::new_invalid(); BASE_RAMBLOCK_SIZE];
+static RAMBLOCK_MANAGER: Mutex<RAMBlockManager> = Mutex::new(RAMBlockManager::empty(&RAMBLOCKS_EMBEDDED));
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
@@ -103,13 +102,11 @@ unsafe impl Send for RAMBlockManager {}
 unsafe impl Sync for RAMBlockManager {}
 
 impl RAMBlockManager {
-    const fn empty(rb: *const RAMBlock, max: usize) -> Mutex<Self> {
-        Mutex::new(
-            RAMBlockManager { blocks: rb, is_init: false, count: 0, max }
-        )
+    const fn empty(rb: &[RAMBlock]) -> Self {
+        RAMBlockManager { blocks: rb.as_ptr(), is_init: false, count: 0, max: rb.len() }
     }
 
-    pub fn init(&mut self) {
+    fn init(&mut self) {
         let mut ember = EMBER.lock();
         if self.is_init { return; } self.count = 0;
         ember.sort_ram_layout_by(|desc| desc.page_count);
@@ -138,28 +135,28 @@ impl RAMBlockManager {
         return unsafe { core::slice::from_raw_parts_mut(self.blocks as *mut RAMBlock, self.max) };
     }
 
-    pub fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
+    fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
         return self.blocks_raw().iter().filter(|&block| block.valid());
     }
 
-    pub fn blocks_iter_mut(&mut self) -> impl Iterator<Item = &mut RAMBlock> {
+    fn blocks_iter_mut(&mut self) -> impl Iterator<Item = &mut RAMBlock> {
         return self.blocks_raw_mut().iter_mut().filter(|block| block.valid());
     }
 
-    pub fn count_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+    fn count_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
         return self.blocks_iter().filter(|&block| filter(block))
             .map(|block| block.size()).sum();
     }
 
-    pub fn available(&self) -> usize {
+    fn available(&self) -> usize {
         return self.count_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
     }
 
-    pub fn total(&self) -> usize {
+    fn total(&self) -> usize {
         return self.count_filter(|block| block.ty() == ramtype::CONVENTIONAL);
     }
 
-    pub fn sort(&mut self) {
+    fn sort(&mut self) {
         use crate::sort::HeaplessSort;
         self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
@@ -171,7 +168,8 @@ impl RAMBlockManager {
         );
     }
 
-    pub fn find_free_ram(&self, args: AllocParams) -> Option<RBPtr> {
+    fn find_free_ram(&self, args: AllocParams) -> Option<RBPtr> {
+        let args = args.aligned();
         return self.blocks_iter()
             .find(|&block|
                 block.not_used() &&
@@ -179,7 +177,7 @@ impl RAMBlockManager {
             ).map(|block| RBPtr::new(block.ptr(), args.size));
     }
 
-    pub fn alloc(&mut self, args: AllocParams) -> Option<RBPtr> {
+    fn alloc(&mut self, args: AllocParams) -> Option<RBPtr> {
         let args = args.aligned();
         let ptr = match args.addr {
             Some(addr) => addr,
@@ -194,9 +192,7 @@ impl RAMBlockManager {
         let mut split_info = None;
         for block in self.blocks_iter_mut() {
             if filter(block) {
-                if block.ty() == args.as_type && block.used() == args.used {
-                    break;
-                }
+                if block.ty() == args.as_type && !args.used { break; }
                 split_info = Some(*block);
                 *block = RAMBlock::new(ptr, args.size, args.as_type, args.used);
                 break;
@@ -214,13 +210,13 @@ impl RAMBlockManager {
         return None;
     }
 
-    pub fn free(&mut self, ptr: RBPtr) {
+    fn free(&mut self, ptr: RBPtr) {
         let found = self.blocks_iter_mut()
             .find(|block| block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr());
         if let Some(block) = found { block.set_used(false); }
     }
 
-    pub unsafe fn free_raw(&mut self, ptr: *const u8) {
+    unsafe fn free_raw(&mut self, ptr: *const u8) {
         let found = self.blocks_iter_mut()
             .find(|block| block.ptr() as *const u8 <= ptr && block.addr() + block.size() > ptr as usize);
         if let Some(block) = found { block.set_used(false); }
@@ -240,17 +236,28 @@ impl RAMBlockManager {
         }
     }
 
-    pub fn expand(&mut self, new_max: usize) {
+    fn expand(&mut self, new_max: usize) {
         if new_max <= self.max { return; }
 
-        let manager_size = new_max * size_of::<RAMBlock>();
+        let alloc_param =  AllocParams::new(new_max * size_of::<RAMBlock>());
         let old_blocks_ptr = self.blocks;
-        let new_blocks_ptr = self.find_free_ram(AllocParams::new(manager_size)).unwrap().ptr();
+        let new_blocks_ptr = self.find_free_ram(alloc_param).unwrap().ptr();
         unsafe { core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.count); }
-        if old_blocks_ptr != RAMBLOCKS_INIT_PTR {
+        (self.blocks, self.max) = (new_blocks_ptr, new_max);
+        if old_blocks_ptr != RAMBLOCKS_EMBEDDED.as_ptr() {
             self.free(RBPtr::new(old_blocks_ptr, self.max));
         }
-        (self.blocks, self.max) = (new_blocks_ptr, new_max);
-        self.alloc(AllocParams::new(manager_size).at(new_blocks_ptr));
+        self.alloc(alloc_param.at(new_blocks_ptr));
     }
 }
+
+// Atomic API to RAMBlock Manager
+pub fn init() { RAMBLOCK_MANAGER.lock().init() }
+pub fn available() -> usize { RAMBLOCK_MANAGER.lock().available() }
+pub fn total() -> usize { RAMBLOCK_MANAGER.lock().total() }
+pub fn sort() { RAMBLOCK_MANAGER.lock().sort(); }
+pub fn find_free_ram(args: AllocParams) -> Option<RBPtr> { RAMBLOCK_MANAGER.lock().find_free_ram(args) }
+pub fn alloc(args: AllocParams) -> Option<RBPtr> { RAMBLOCK_MANAGER.lock().alloc(args) }
+pub fn free(ptr: RBPtr) { RAMBLOCK_MANAGER.lock().free(ptr) }
+pub unsafe fn free_raw(ptr: *const u8) { unsafe { RAMBLOCK_MANAGER.lock().free_raw(ptr) } }
+pub fn expand(new_max: usize) { RAMBLOCK_MANAGER.lock().expand(new_max); }

@@ -15,7 +15,6 @@ mod device; mod ember;
 mod ram; mod ramblock;
 mod sort;
 
-use crate::ramblock::RAMBLOCK;
 use core::panic::PanicInfo;
 use ember::Ember;
 use spin::Mutex;
@@ -60,7 +59,7 @@ pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn flame(ember: Ember) -> ! {
     EMBER.lock().init(ember);
-    RAMBLOCK.lock().init();
+    ramblock::init();
     init_metal();
     exec_aleph();
     schedule();

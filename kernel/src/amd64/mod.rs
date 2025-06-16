@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{AllocParams, RAMBLOCK, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{self, AllocParams, RBPtr}, EMBER};
 pub use exceptions::init_exceptions;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -85,7 +85,7 @@ pub unsafe fn map_page(pml4: *mut u64, virt: u64, phys: u64, flags: u64) {
         if level == 3 { unsafe { *entry = phys | flags; } }
         else {
             table = unsafe { if *entry & 0x1 == 0 {
-                let next_phys = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
+                let next_phys = ramblock::alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
                     .expect("[ERROR] alloc for page table failed!");
                 core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
                 *entry = next_phys.addr() as u64 | KERNEL_FLAG;
@@ -116,7 +116,7 @@ pub unsafe fn identity_map() {
         Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
     }
 
-    let pml4_addr = RAMBLOCK.lock().alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
+    let pml4_addr = ramblock::alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     // Map Page Tables
