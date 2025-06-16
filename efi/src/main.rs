@@ -43,9 +43,9 @@ pub struct RelaEntry {
 #[cfg(target_arch = "aarch64")] const R_RELATIVE: u64 = 1027;
 #[cfg(target_arch = "riscv64")] const R_RELATIVE: u64 = 3;
 
-pub fn align_up(ptr: usize, align: usize) -> usize {
-    let mask = align - 1;
-    return (ptr + mask) & !mask;
+pub fn align_up(val: usize, align: usize) -> usize {
+    if align == 0 { return val; }
+    return val + (align - val % align) % align;
 }
 
 #[entry]
@@ -82,7 +82,7 @@ fn ignite() -> Status {
     let file_binary = unsafe { core::slice::from_raw_parts_mut(file_ptr.as_ptr(), file_size) };
     file.read(file_binary).unwrap();
 
-    let elf = ElfFile::new(&file_binary).unwrap();
+    let elf = ElfFile::new(file_binary).unwrap();
 
     let kernel_size = elf.program_iter()
         .filter(|ph| ph.get_type() == Ok(Type::Load))
@@ -106,10 +106,9 @@ fn ignite() -> Status {
         }
     }
 
-    let rela_addr = elf.find_section_by_name(".rela.dyn").unwrap().address();
-    let rela_size = elf.find_section_by_name(".rela.dyn").unwrap().size();
-    let rela_ptr = (kernel_base + rela_addr as usize) as *mut RelaEntry;
-    let entry_count = rela_size as usize / core::mem::size_of::<RelaEntry>();
+    let rela = elf.find_section_by_name(".rela.dyn").unwrap();
+    let rela_ptr = (kernel_base + rela.address() as usize) as *mut RelaEntry;
+    let entry_count = rela.size() as usize / size_of::<RelaEntry>();
     for i in 0..entry_count {
         let entry = unsafe { &*rela_ptr.add(i) };
         let ty = entry.info & 0xffffffff;
@@ -119,10 +118,10 @@ fn ignite() -> Status {
         }
     }
 
-    let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base as usize;
+    let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base;
     let spark: extern "efiapi" fn(Ember) -> ! = unsafe { core::mem::transmute(entrypoint) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
-    let stack_base = arch::stack_ptr() as usize;
+    let stack_base = arch::stack_ptr();
     let ember = Ember {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
