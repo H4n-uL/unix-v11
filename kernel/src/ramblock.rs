@@ -201,9 +201,10 @@ impl RAMBlockManager {
 
         if let Some(block) = split_info {
             let before = ptr as usize - block.addr();
-            let after = block.addr() + block.size() - (ptr as usize + args.size);
+            let after_ptr = (ptr as usize + args.size) as *const u8;
+            let after = block.addr() + block.size() - after_ptr as usize;
             if before > 0 { self.add(block.ptr(), before, block.ty(), false); }
-            if after > 0 { self.add(unsafe { ptr.add(args.size) }, after, block.ty(), false); }
+            if after > 0 { self.add(after_ptr, after, block.ty(), false); }
             return Some(RBPtr::new(ptr, args.size));
         }
 
