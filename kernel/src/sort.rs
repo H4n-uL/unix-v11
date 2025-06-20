@@ -120,11 +120,10 @@ where F: FnMut(&T, &T) -> Ordering {
 }
 
 fn isqrt(n: usize) -> usize {
-    if n == 0 { return 0; }
-    let (mut x, mut y) = (n, (n + 1) / 2);
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
+    if n < 2 { return n; }
+    let mut x = 1 << ((n.ilog2() + 1) / 2);
+    loop {
+        let y = (x + n / x) / 2;
+        if y >= x { return x; } x = y;
     }
-    return x;
 }
