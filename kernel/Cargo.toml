@@ -9,7 +9,7 @@ acpi = "5.2.0"
 aml = "0.16.4"
 fdt = "0.1.5"
 linked_list_allocator = "0.10.5"
-nvme = { git = "https://github.com/H4n-uL/NVMe-Rust", version = "0.3.0" }
+nvme = { git = "https://github.com/H4n-uL/NVMe-Rust", version = "0.4.0" }
 spin = "0.10.0"
 tock-registers = "0.9.0"
 x86_64 = "0.15.2"

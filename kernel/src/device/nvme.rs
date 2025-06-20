@@ -11,8 +11,8 @@ impl Allocator for NVMeAlloc {
         return ramblock::alloc(AllocParams::new(size)).unwrap().addr();
     }
 
-    unsafe fn deallocate(&self, addr: usize) {
-        unsafe { ramblock::free_raw(addr as *mut u8); }
+    unsafe fn deallocate(&self, addr: usize, size: usize) {
+        unsafe { ramblock::free_raw(addr as *mut u8, size); }
     }
 
     fn translate(&self, addr: usize) -> usize { addr }
