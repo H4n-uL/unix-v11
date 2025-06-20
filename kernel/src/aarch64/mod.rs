@@ -127,7 +127,7 @@ pub unsafe fn identity_map() {
     let l0 = ramblock::alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
-    for desc in ember.ram_layout() {
+    for desc in ember.efi_ram_layout() {
         let block_ty = desc.ty;
         let block_start = desc.phys_start;
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;

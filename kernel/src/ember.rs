@@ -46,7 +46,7 @@ pub mod ramtype {
     // ...
 
     pub const KERNEL_DATA          : u32 = 0x44415441;
-    pub const RAM_LAYOUT           : u32 = 0x524c594f;
+    pub const EFI_RAM_LAYOUT       : u32 = 0x524c594f;
     pub const PAGE_TABLE           : u32 = 0x766d6170;
     pub const KERNEL               : u32 = 0xffffffff;
 }
@@ -83,28 +83,23 @@ impl Ember {
 
         let id_map_ptr = crate::arch::id_map_ptr() as u64;
 
-        self.ram_layout_mut().iter_mut().for_each(|desc| {
+        self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
             if id_map_ptr >= desc_start && id_map_ptr < desc_end  { desc.ty = ramtype::PAGE_TABLE; }
-            if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::RAM_LAYOUT; }
+            if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::EFI_RAM_LAYOUT; }
             #[cfg(target_arch = "x86_64")] if desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
             if RECLAMABLE.contains(&desc.ty) { desc.ty = ramtype::CONVENTIONAL; }
         });
     }
 
-    pub fn ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
     }
 
-    pub fn ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
+    pub fn efi_ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
         return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
-    }
-
-    pub fn sort_ram_layout_by(&mut self, key: impl FnMut(&RAMDescriptor) -> u64) {
-        use crate::sort::HeaplessSort;
-        self.ram_layout_mut().sort_noheap_by_key(key);
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {
