@@ -56,12 +56,13 @@ pub struct RBPtr {
 }
 
 impl RBPtr {
-    fn new<T>(addr: *const T, count: usize) -> Self {
-        RBPtr { ptr: addr as *const u8, size: count * size_of::<T>() }
+    fn new<T>(ptr: *const T, count: usize) -> Self {
+        Self { ptr: ptr as *const u8, size: count * size_of::<T>() }
     }
     pub fn addr(&self) -> usize { self.ptr as usize }
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
+    pub unsafe fn clone(&self) -> Self { Self::new(self.ptr, self.size) }
 }
 
 #[derive(Clone, Copy)]
@@ -231,12 +232,27 @@ impl RAMBlockManager {
     }
 
     fn free(&mut self, ptr: RBPtr) {
-        let found = self.find(|block|
+        let found_block = self.find(|block|
             block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr()
         );
-        if let Some(block) = found {
-            block.set_used(false);
-            block.set_ty(ramtype::CONVENTIONAL);
+
+        if let Some(block) = found_block {
+            let block_cp = *block;
+            let free_start = ptr.addr();
+            let free_end = (ptr.addr() + ptr.size()).min(block_cp.addr() + block_cp.size());
+            let free_size = free_end - free_start;
+
+            block.set_valid(false);
+            if block_cp.addr() < free_start {
+                let before_size = free_start - block_cp.addr();
+                self.add(block_cp.ptr(), before_size, block_cp.ty(), true);
+            }
+            self.add(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
+            if free_end < block_cp.addr() + block_cp.size() {
+                let after_start = free_end as *const u8;
+                let after_size = block_cp.addr() + block_cp.size() - free_end;
+                self.add(after_start, after_size, block_cp.ty(), true);
+            }
         }
     }
 
@@ -246,9 +262,9 @@ impl RAMBlockManager {
         let (mut before, mut after) = (None, None);
 
         for block in self.blocks_iter_mut() {
-            match block.is_coalescable(&new_block) {
-                -1 => { before = Some(block); },
-                1 => { after = Some(block); },
+            match new_block.is_coalescable(&block) {
+                -1 => { after = Some(block); },
+                1 => { before = Some(block); },
                 _ => continue
             }
         }
@@ -271,7 +287,7 @@ impl RAMBlockManager {
                 let mut idx = 0;
                 for block in &mut *blocks {
                     if block.valid() { idx += 1; continue; }
-                    *block = RAMBlock::new(addr, size, ty, used);
+                    *block = new_block;
                     break;
                 }
 
