@@ -46,7 +46,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
-    return val + (align - val % align) % align;
+    return val.div_ceil(align) * align;
 }
 
 pub fn init_ram() {
@@ -60,5 +60,5 @@ pub fn init_ram() {
     let heap_ptr = ramblock::alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
-    unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_size); }
+    unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_ptr.size()); }
 }
