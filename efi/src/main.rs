@@ -45,7 +45,7 @@ pub struct RelaEntry {
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
-    return val + (align - val % align) % align;
+    return val.div_ceil(align) * align;
 }
 
 #[entry]
