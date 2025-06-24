@@ -1,4 +1,4 @@
-mod block; mod nvme;
+mod block; mod nvme; mod vga;
 
 use crate::{printk, printlnk, EMBER};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
@@ -36,8 +36,8 @@ unsafe impl Sync for PciDevice {}
 
 #[allow(dead_code)]
 impl PciDevice {
-    pub fn read(mcfg_base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
-        let ptr = (mcfg_base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12)) as *mut u32;
+    pub fn read(base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
+        let ptr = (base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12)) as *mut u32;
         let dev = PciDevice { bus, device, function, ptr };
         if dev.vendor_id() == 0xFFFF { return None; }
         return Some(dev);
@@ -231,4 +231,5 @@ pub fn init_device() {
 
     nvme::init_nvme();
     nvme::test_nvme();
+    vga::init_vga();
 }
