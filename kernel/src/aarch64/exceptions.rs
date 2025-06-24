@@ -24,7 +24,7 @@ pub fn init_exceptions() {
         let slot_addr = &raw const xvec.data[slot_index] as usize;
         let pc = slot_addr + 8;
 
-        let offset = ((handler_addr as isize - pc as isize) / 4) as i32;
+        let offset = ((handler_addr as isize - pc as isize) >> 2) as i32;
         assert!(offset >= -(1 << 18) && offset < (1 << 18), "offset out of LDR range");
 
         let ldr = LDR_X16_PC_REL | (((offset as u32) & 0x7ffff) << 5);
