@@ -12,11 +12,11 @@
 extern crate alloc;
 
 mod device; mod ember;
-mod ram; mod ramblock;
+mod glacier; mod ram;
 mod sort;
 
+use crate::{ember::Ember, glacier::GLACIER};
 use core::panic::PanicInfo;
-use ember::Ember;
 use spin::Mutex;
 
 macro_rules! use_arch {
@@ -59,7 +59,7 @@ pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn flame(ember: Ember) -> ! {
     EMBER.lock().init(ember);
-    ramblock::init();
+    GLACIER.init();
     init_metal();
     exec_aleph();
     schedule();
