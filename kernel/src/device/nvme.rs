@@ -1,4 +1,4 @@
-use crate::{printlnk, ram::PageAligned, ramblock::{self, AllocParams}};
+use crate::{printlnk, ram::PageAligned, glacier::{GLACIER, AllocParams}};
 use super::PCI_DEVICES;
 use alloc::vec::Vec;
 use nvme::{Allocator, Device};
@@ -8,11 +8,11 @@ pub struct NVMeAlloc;
 
 impl Allocator for NVMeAlloc {
     unsafe fn allocate(&self, size: usize) -> usize {
-        return ramblock::alloc(AllocParams::new(size)).unwrap().addr();
+        return GLACIER.alloc(AllocParams::new(size)).unwrap().addr();
     }
 
     unsafe fn deallocate(&self, addr: usize, size: usize) {
-        unsafe { ramblock::free_raw(addr as *mut u8, size); }
+        unsafe { GLACIER.free_raw(addr as *mut u8, size); }
     }
 
     fn translate(&self, addr: usize) -> usize { addr }

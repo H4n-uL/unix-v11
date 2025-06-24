@@ -8,36 +8,35 @@ pub struct RAMBlock {
     addr: *const u8,
     size: usize,
     ty: u32,
-    valid: bool,
     used: bool
 }
 
 impl RAMBlock {
     pub fn new(addr: *const u8, size: usize, ty: u32, used: bool) -> Self {
-        return Self { addr, size, ty, valid: true, used };
+        return Self { addr, size, ty, used };
     }
     pub const fn new_invalid() -> Self {
-        return Self { addr: 0 as *const u8, size: 0, ty: 0, valid: false, used: false };
+        return Self { addr: 0 as *const u8, size: 0, ty: 0, used: false };
     }
 
-    pub fn addr(&self) -> usize    {  self.addr as usize }
-    pub fn ptr(&self) -> *mut u8   {  self.addr as *mut u8 }
-    pub fn size(&self) -> usize    {  self.size }
-    pub fn ty(&self) -> u32        {  self.ty }
-    pub fn valid(&self) -> bool    {  self.valid }
-    pub fn invalid(&self) -> bool  { !self.valid }
-    pub fn used(&self) -> bool     {  self.used }
+    pub fn addr(&self) -> usize    { self.addr as usize }
+    pub fn ptr(&self) -> *mut u8   { self.addr as *mut u8 }
+    pub fn size(&self) -> usize    { self.size }
+    pub fn ty(&self) -> u32        { self.ty }
+    pub fn valid(&self) -> bool    { self.size > 0 }
+    pub fn invalid(&self) -> bool  { self.size == 0 }
+    pub fn used(&self) -> bool     { self.used }
     pub fn not_used(&self) -> bool { !self.used }
 
     fn set_addr(&mut self, addr: *const u8) { self.addr = addr; }
     fn set_size(&mut self, size: usize)     { self.size = size; }
-    fn set_ty(&mut self, ty: u32)           { self.ty    = ty; }
-    fn set_used(&mut self, used: bool)      { self.used  = used; }
-    fn set_valid(&mut self, valid: bool)    { self.valid = valid; }
+    fn set_ty(&mut self, ty: u32)           { self.ty   = ty; }
+    fn set_used(&mut self, used: bool)      { self.used = used; }
+    fn invalidate(&mut self)                { self.size = 0; }
 
     fn is_coalescable(&self, other: &RAMBlock) -> i8 {
         let info_eq = {
-            self.valid && other.valid &&
+            self.valid() && other.valid() &&
             self.ty == other.ty &&
             self.used == other.used
         };
@@ -102,24 +101,26 @@ impl AllocParams {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct RAMBlockManager {
+pub struct GlacierData {
     blocks: *const RAMBlock,
     is_init: bool,
     max: usize
 }
 
-const BASE_RAMBLOCK_SIZE: usize = 128;
-static RAMBLOCKS_EMBEDDED: [RAMBlock; BASE_RAMBLOCK_SIZE] = [RAMBlock::new_invalid(); BASE_RAMBLOCK_SIZE];
-static RAMBLOCK_MANAGER: Mutex<RAMBlockManager> = Mutex::new(RAMBlockManager::empty(&RAMBLOCKS_EMBEDDED));
+pub struct Glacier(Mutex<GlacierData>);
+
+const BASE_RB_SIZE: usize = 128;
+static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
+pub static GLACIER: Glacier = Glacier::empty(&RB_EMBEDDED);
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
-unsafe impl Send for RAMBlockManager {}
-unsafe impl Sync for RAMBlockManager {}
+unsafe impl Send for GlacierData {}
+unsafe impl Sync for GlacierData {}
 
-impl RAMBlockManager {
+impl GlacierData {
     const fn empty(rb: &[RAMBlock]) -> Self {
-        RAMBlockManager { blocks: rb.as_ptr(), is_init: false, max: rb.len() }
+        GlacierData { blocks: rb.as_ptr(), is_init: false, max: rb.len() }
     }
 
     fn init(&mut self) {
@@ -162,17 +163,9 @@ impl RAMBlockManager {
 
     fn count(&self) -> usize { return self.blocks_iter().count(); }
 
-    fn count_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+    fn size_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
         return self.blocks_iter().filter(|&block| filter(block))
             .map(|block| block.size()).sum();
-    }
-
-    fn available(&self) -> usize {
-        return self.count_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
-    }
-
-    fn total(&self) -> usize {
-        return self.count_filter(|block| block.ty() == ramtype::CONVENTIONAL);
     }
 
     fn sort(&mut self) {
@@ -242,16 +235,16 @@ impl RAMBlockManager {
             let free_end = (ptr.addr() + ptr.size()).min(block_cp.addr() + block_cp.size());
             let free_size = free_end - free_start;
 
-            block.set_valid(false);
+            block.invalidate();
             if block_cp.addr() < free_start {
                 let before_size = free_start - block_cp.addr();
-                self.add(block_cp.ptr(), before_size, block_cp.ty(), true);
+                self.add(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
             }
             self.add(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
             if free_end < block_cp.addr() + block_cp.size() {
                 let after_start = free_end as *const u8;
                 let after_size = block_cp.addr() + block_cp.size() - free_end;
-                self.add(after_start, after_size, block_cp.ty(), true);
+                self.add(after_start, after_size, block_cp.ty(), block_cp.used());
             }
         }
     }
@@ -272,7 +265,7 @@ impl RAMBlockManager {
         match (before, after) {
             (Some(before_block), Some(after_block)) => {
                 before_block.set_size(before_block.size() + new_block.size() + after_block.size());
-                after_block.set_valid(false);
+                after_block.invalidate();
             },
             (Some(before_block), None) => {
                 before_block.set_size(before_block.size() + new_block.size());
@@ -311,23 +304,47 @@ impl RAMBlockManager {
             core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.max);
         }
         (self.blocks, self.max) = (new_blocks_ptr, new_max);
-        if old_blocks_ptr != RAMBLOCKS_EMBEDDED.as_ptr() {
+        if old_blocks_ptr != RB_EMBEDDED.as_ptr() {
             self.free(RBPtr::new(old_blocks_ptr, self.max));
         }
         self.alloc(alloc_param.at(new_blocks_ptr));
     }
 }
 
-// Atomic API to RAMBlock Manager
-pub fn init() { RAMBLOCK_MANAGER.lock().init() }
-pub fn available() -> usize { RAMBLOCK_MANAGER.lock().available() }
-pub fn total() -> usize { RAMBLOCK_MANAGER.lock().total() }
-pub fn sort() { RAMBLOCK_MANAGER.lock().sort(); }
-pub fn find_free_ram(args: AllocParams) -> Option<RBPtr> { RAMBLOCK_MANAGER.lock().find_free_ram(args) }
-pub fn alloc(args: AllocParams) -> Option<RBPtr> { RAMBLOCK_MANAGER.lock().alloc(args) }
-pub fn free(ptr: RBPtr) { RAMBLOCK_MANAGER.lock().free(ptr) }
-pub unsafe fn free_raw(ptr: *const u8, size: usize) {
-    let ptr = RBPtr::new(ptr, size);
-    RAMBLOCK_MANAGER.lock().free(ptr)
+impl Glacier {
+    const fn empty(rb: &[RAMBlock]) -> Self {
+        return Self(Mutex::new(GlacierData::empty(rb)));
+    }
+
+    pub fn init(&self) { self.0.lock().init(); }
+
+    pub fn available(&self) -> usize {
+        return self.0.lock().size_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
+    }
+
+    pub fn total(&self) -> usize {
+        return self.0.lock().size_filter(|block| block.ty() == ramtype::CONVENTIONAL);
+    }
+
+    pub fn sort(&self) { self.0.lock().sort(); }
+
+    pub fn find_free_ram(&self, args: AllocParams) -> Option<RBPtr> {
+        return self.0.lock().find_free_ram(args);
+    }
+
+    pub fn alloc(&self, args: AllocParams) -> Option<RBPtr> {
+        return self.0.lock().alloc(args);
+    }
+
+    pub fn free(&self, ptr: RBPtr) {
+        self.0.lock().free(ptr);
+    }
+
+    pub unsafe fn free_raw(&self, ptr: *mut u8, size: usize) {
+        self.free(RBPtr::new(ptr, size));
+    }
+
+    pub fn expand(&self, new_max: usize) {
+        self.0.lock().expand(new_max);
+    }
 }
-pub fn expand(new_max: usize) { RAMBLOCK_MANAGER.lock().expand(new_max); }
