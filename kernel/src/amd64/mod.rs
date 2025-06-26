@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, glacier::{GLACIER, AllocParams, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, glacier::{GLACIER, AllocParams, OwnedPtr}, EMBER};
 pub use exceptions::init_exceptions;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -158,7 +158,7 @@ pub fn stack_ptr() -> *const u8 {
     return rsp as *const u8;
 }
 
-pub unsafe fn move_stack(ptr: &RBPtr) {
+pub unsafe fn move_stack(ptr: &OwnedPtr) {
     let mut ember = EMBER.lock();
     let stack_ptr = stack_ptr();
     let old_stack_base = ember.stack_base;
