@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{GLACIER, AllocParams, RBPtr}, EMBER};
+use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{GLACIER, AllocParams, OwnedPtr}, EMBER};
 use aarch64_cpu::{asm::wfi, registers::DAIF};
 pub use exceptions::init_exceptions;
 use tock_registers::interfaces::{Readable, Writeable};
@@ -207,7 +207,7 @@ pub fn stack_ptr() -> *const u8 {
     return sp as *const u8;
 }
 
-pub unsafe fn move_stack(ptr: &RBPtr, size: usize) {
+pub unsafe fn move_stack(ptr: &OwnedPtr, size: usize) {
     let mut ember = EMBER.lock();
     let stack_ptr = stack_ptr();
     let old_stack_base = ember.stack_base;
