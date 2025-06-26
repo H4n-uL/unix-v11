@@ -5,22 +5,22 @@ use spin::Mutex;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMBlock {
-    addr: *const u8,
+    ptr: *const u8,
     size: usize,
     ty: u32,
     used: bool
 }
 
 impl RAMBlock {
-    pub fn new(addr: *const u8, size: usize, ty: u32, used: bool) -> Self {
-        return Self { addr, size, ty, used };
+    pub fn new(ptr: *const u8, size: usize, ty: u32, used: bool) -> Self {
+        return Self { ptr, size, ty, used };
     }
     pub const fn new_invalid() -> Self {
-        return Self { addr: 0 as *const u8, size: 0, ty: 0, used: false };
+        return Self { ptr: 0 as *const u8, size: 0, ty: 0, used: false };
     }
 
-    pub fn addr(&self) -> usize    { self.addr as usize }
-    pub fn ptr(&self) -> *mut u8   { self.addr as *mut u8 }
+    pub fn addr(&self) -> usize    { self.ptr as usize }
+    pub fn ptr(&self) -> *mut u8   { self.ptr as *mut u8 }
     pub fn size(&self) -> usize    { self.size }
     pub fn ty(&self) -> u32        { self.ty }
     pub fn valid(&self) -> bool    { self.size > 0 }
@@ -28,11 +28,11 @@ impl RAMBlock {
     pub fn used(&self) -> bool     { self.used }
     pub fn not_used(&self) -> bool { !self.used }
 
-    fn set_addr(&mut self, addr: *const u8) { self.addr = addr; }
-    fn set_size(&mut self, size: usize)     { self.size = size; }
-    fn set_ty(&mut self, ty: u32)           { self.ty   = ty; }
-    fn set_used(&mut self, used: bool)      { self.used = used; }
-    fn invalidate(&mut self)                { self.size = 0; }
+    fn set_ptr(&mut self, ptr: *const u8) { self.ptr  = ptr; }
+    fn set_size(&mut self, size: usize)   { self.size = size; }
+    fn set_ty(&mut self, ty: u32)         { self.ty   = ty; }
+    fn set_used(&mut self, used: bool)    { self.used = used; }
+    fn invalidate(&mut self)              { self.size = 0; }
 
     fn is_coalescable(&self, other: &RAMBlock) -> i8 {
         let info_eq = {
@@ -49,19 +49,29 @@ impl RAMBlock {
 }
 
 #[repr(C)]
-pub struct RBPtr {
+#[derive(Debug)]
+pub struct OwnedPtr {
     ptr: *const u8,
     size: usize
 }
 
-impl RBPtr {
-    fn new<T>(ptr: *const T, count: usize) -> Self {
-        Self { ptr: ptr as *const u8, size: count * size_of::<T>() }
+impl OwnedPtr {
+    const fn new_bytes<T>(ptr: *const T, size: usize) -> Self {
+        Self { ptr: ptr as *const u8, size }
     }
+
+    const fn new_typed<T>(ptr: *const T, count: usize) -> Self {
+        Self::new_bytes(ptr, count * size_of::<T>())
+    }
+
+    const fn from_slice<T>(slice: &[T]) -> Self {
+        Self::new_typed(slice.as_ptr(), slice.len())
+    }
+
     pub fn addr(&self) -> usize { self.ptr as usize }
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
-    pub unsafe fn clone(&self) -> Self { Self::new(self.ptr, self.size) }
+    pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.ptr, self.size) }
 }
 
 #[derive(Clone, Copy)]
@@ -102,9 +112,9 @@ impl AllocParams {
 #[repr(C)]
 #[derive(Debug)]
 pub struct GlacierData {
-    blocks: *const RAMBlock,
-    is_init: bool,
-    max: usize
+    ptr: OwnedPtr,
+    max: usize,
+    is_init: bool
 }
 
 pub struct Glacier(Mutex<GlacierData>);
@@ -120,7 +130,11 @@ unsafe impl Sync for GlacierData {}
 
 impl GlacierData {
     const fn empty(rb: &[RAMBlock]) -> Self {
-        GlacierData { blocks: rb.as_ptr(), is_init: false, max: rb.len() }
+        GlacierData {
+            ptr: OwnedPtr::from_slice(rb),
+            is_init: false,
+            max: rb.len()
+        }
     }
 
     fn init(&mut self) {
@@ -130,27 +144,27 @@ impl GlacierData {
         for desc in efi_ram_layout.iter().rev() {
             if desc.ty == ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
-                let addr = desc.phys_start as *const u8;
-                self.add(addr, size, desc.ty, false);
+                let ptr = desc.phys_start as *const u8;
+                self.add(ptr, size, desc.ty, false);
             }
         }
         efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
         for desc in efi_ram_layout {
             if desc.ty != ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
-                let addr = desc.phys_start as *const u8;
-                self.add(addr, size, desc.ty, true);
+                let ptr = desc.phys_start as *const u8;
+                self.add(ptr, size, desc.ty, true);
             }
         }
         self.is_init = true;
     }
 
     fn blocks_raw(&self) -> &[RAMBlock] {
-        return unsafe { core::slice::from_raw_parts(self.blocks, self.max) };
+        return unsafe { core::slice::from_raw_parts(self.ptr.ptr(), self.max) };
     }
 
     fn blocks_raw_mut(&mut self) -> &mut [RAMBlock] {
-        return unsafe { core::slice::from_raw_parts_mut(self.blocks as *mut RAMBlock, self.max) };
+        return unsafe { core::slice::from_raw_parts_mut(self.ptr.ptr() as *mut RAMBlock, self.max) };
     }
 
     fn blocks_iter(&self) -> impl Iterator<Item = &RAMBlock> {
@@ -171,7 +185,7 @@ impl GlacierData {
     fn sort(&mut self) {
         self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
-                (true, true)   => a.addr.cmp(&b.addr),
+                (true, true)   => a.addr().cmp(&b.addr()),
                 (true, false)  => core::cmp::Ordering::Less,
                 (false, true)  => core::cmp::Ordering::Greater,
                 (false, false) => core::cmp::Ordering::Equal,
@@ -183,14 +197,14 @@ impl GlacierData {
         return self.blocks_iter_mut().find(|block| f(block));
     }
 
-    fn find_free_ram(&mut self, args: AllocParams) -> Option<RBPtr> {
+    fn find_free_ram(&mut self, args: AllocParams) -> Option<OwnedPtr> {
         let args = args.aligned();
         return self.find(|block|
             block.not_used() && block.size() >= args.size && block.ty() == args.from_type
-        ).map(|block| RBPtr::new(block.ptr(), args.size));
+        ).map(|block| OwnedPtr::new_bytes(block.ptr(), args.size));
     }
 
-    fn alloc(&mut self, args: AllocParams) -> Option<RBPtr> {
+    fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
         let args = args.aligned();
         let ptr = match args.addr {
             Some(addr) => addr,
@@ -218,13 +232,13 @@ impl GlacierData {
             let after = block.addr() + block.size() - after_ptr as usize;
             if before > 0 { self.add(block.ptr(), before, block.ty(), false); }
             if after > 0 { self.add(after_ptr, after, block.ty(), false); }
-            return Some(RBPtr::new(ptr, args.size));
+            return Some(OwnedPtr::new_bytes(ptr, args.size));
         }
 
         return None;
     }
 
-    fn free(&mut self, ptr: RBPtr) {
+    fn free(&mut self, ptr: OwnedPtr) {
         let found_block = self.find(|block|
             block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr()
         );
@@ -249,8 +263,8 @@ impl GlacierData {
         }
     }
 
-    fn add(&mut self, addr: *const u8, size: usize, ty: u32, used: bool) {
-        let new_block = RAMBlock::new(addr, size, ty, used);
+    fn add(&mut self, ptr: *const u8, size: usize, ty: u32, used: bool) {
+        let new_block = RAMBlock::new(ptr, size, ty, used);
 
         let (mut before, mut after) = (None, None);
 
@@ -271,7 +285,7 @@ impl GlacierData {
                 before_block.set_size(before_block.size() + new_block.size());
             },
             (None, Some(after_block)) => {
-                after_block.set_addr(addr);
+                after_block.set_ptr(new_block.ptr());
                 after_block.set_size(after_block.size() + new_block.size());
             },
             (None, None) => {
@@ -297,17 +311,20 @@ impl GlacierData {
         if new_max <= self.max { return; }
 
         let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
-        let old_blocks_ptr = self.blocks;
-        let new_blocks_ptr = self.find_free_ram(alloc_param).unwrap().ptr();
+
+        let old_blocks = unsafe { self.ptr.clone() };
+        let new_blocks = self.find_free_ram(alloc_param).unwrap();
+        let old_ptr = old_blocks.ptr::<RAMBlock>();
+        let new_ptr = new_blocks.ptr::<RAMBlock>();
         unsafe {
-            core::ptr::write_bytes(new_blocks_ptr, 0, new_max);
-            core::ptr::copy(old_blocks_ptr, new_blocks_ptr, self.max);
+            core::ptr::write_bytes(new_ptr, 0, new_max);
+            core::ptr::copy(old_ptr, new_ptr, self.max);
         }
-        (self.blocks, self.max) = (new_blocks_ptr, new_max);
-        if old_blocks_ptr != RB_EMBEDDED.as_ptr() {
-            self.free(RBPtr::new(old_blocks_ptr, self.max));
+        (self.ptr, self.max) = (new_blocks, new_max);
+        if old_blocks.ptr() as *const RAMBlock != RB_EMBEDDED.as_ptr() {
+            self.free(old_blocks);
         }
-        self.alloc(alloc_param.at(new_blocks_ptr));
+        self.alloc(alloc_param.at(new_ptr));
     }
 }
 
@@ -328,20 +345,20 @@ impl Glacier {
 
     pub fn sort(&self) { self.0.lock().sort(); }
 
-    pub fn find_free_ram(&self, args: AllocParams) -> Option<RBPtr> {
+    pub fn find_free_ram(&self, args: AllocParams) -> Option<OwnedPtr> {
         return self.0.lock().find_free_ram(args);
     }
 
-    pub fn alloc(&self, args: AllocParams) -> Option<RBPtr> {
+    pub fn alloc(&self, args: AllocParams) -> Option<OwnedPtr> {
         return self.0.lock().alloc(args);
     }
 
-    pub fn free(&self, ptr: RBPtr) {
+    pub fn free(&self, ptr: OwnedPtr) {
         self.0.lock().free(ptr);
     }
 
     pub unsafe fn free_raw(&self, ptr: *mut u8, size: usize) {
-        self.free(RBPtr::new(ptr, size));
+        self.free(OwnedPtr::new_bytes(ptr, size));
     }
 
     pub fn expand(&self, new_max: usize) {
