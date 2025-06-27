@@ -102,9 +102,7 @@ impl AllocParams {
 
     fn aligned(mut self) -> Self {
         self.size = align_up(self.size, self.align);
-        if let Some(addr) = self.addr {
-            self.addr = Some(align_up(addr as usize, self.align) as *const u8);
-        }
+        self.addr = self.addr.map(|a| align_up(a as _, self.align) as _);
         self
     }
 }
@@ -130,7 +128,7 @@ unsafe impl Sync for GlacierData {}
 
 impl GlacierData {
     const fn empty(rb: &[RAMBlock]) -> Self {
-        GlacierData {
+        Self {
             ptr: OwnedPtr::from_slice(rb),
             is_init: false,
             max: rb.len()
@@ -185,9 +183,9 @@ impl GlacierData {
     fn sort(&mut self) {
         self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
-                (true, true)   => a.addr().cmp(&b.addr()),
-                (true, false)  => core::cmp::Ordering::Less,
-                (false, true)  => core::cmp::Ordering::Greater,
+                ( true,  true) => a.addr().cmp(&b.addr()),
+                ( true, false) => core::cmp::Ordering::Less,
+                (false,  true) => core::cmp::Ordering::Greater,
                 (false, false) => core::cmp::Ordering::Equal,
             }
         );
@@ -265,9 +263,7 @@ impl GlacierData {
 
     fn add(&mut self, ptr: *const u8, size: usize, ty: u32, used: bool) {
         let new_block = RAMBlock::new(ptr, size, ty, used);
-
         let (mut before, mut after) = (None, None);
-
         for block in self.blocks_iter_mut() {
             match new_block.is_coalescable(&block) {
                 -1 => { after = Some(block); },
