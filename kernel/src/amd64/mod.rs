@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, glacier::{GLACIER, AllocParams, OwnedPtr}, EMBER};
+use crate::{glacier::{AllocParams, OwnedPtr, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
 pub use exceptions::init_exceptions;
 use x86_64::{
     instructions::{hlt, interrupts, port::Port, tlb},
@@ -108,8 +108,6 @@ fn flags_for(ty: u32) -> u64 {
 }
 
 pub unsafe fn identity_map() {
-    let ember = EMBER.lock();
-
     // Enable PAE, PSE, and Long mode
     unsafe {
         Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
@@ -120,7 +118,7 @@ pub unsafe fn identity_map() {
     unsafe { core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
     // Map Page Tables
-    for desc in ember.efi_ram_layout() {
+    for desc in SYS_INFO.lock().efi_ram_layout() {
         let block_ty = desc.ty;
         let block_start = desc.phys_start;
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
@@ -159,9 +157,9 @@ pub fn stack_ptr() -> *const u8 {
 }
 
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
-    let mut ember = EMBER.lock();
+    let mut sysinfo = SYS_INFO.lock();
     let stack_ptr = stack_ptr();
-    let old_stack_base = ember.stack_base;
+    let old_stack_base = sysinfo.stack_base;
     let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
 
     let new_stack_base = ptr.addr() + ptr.size();
@@ -172,5 +170,5 @@ pub unsafe fn move_stack(ptr: &OwnedPtr) {
         core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
     }
 
-    ember.stack_base = new_stack_base;
+    sysinfo.stack_base = new_stack_base;
 }

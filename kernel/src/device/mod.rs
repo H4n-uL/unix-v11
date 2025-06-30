@@ -1,6 +1,6 @@
 mod block; mod nvme; mod vga;
 
-use crate::{printk, printlnk, EMBER};
+use crate::{printk, printlnk, SYS_INFO};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
 use alloc::{string::String, vec::Vec};
 use fdt::Fdt;
@@ -196,14 +196,14 @@ pub fn scan_pci() {
 }
 
 pub fn init_acpi() {
-    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, EMBER.lock().acpi_ptr) } {
+    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, SYS_INFO.lock().acpi_ptr) } {
         Ok(tables) => Some(tables),
         Err(_) => None
     };
 }
 
 pub fn init_device_tree() {
-    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(EMBER.lock().dtb_ptr as *const u8) } {
+    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(SYS_INFO.lock().dtb_ptr as *const u8) } {
         Ok(devtree) => Some(devtree),
         Err(_) => None
     }

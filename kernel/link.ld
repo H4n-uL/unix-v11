@@ -1,4 +1,4 @@
-ENTRY(flame)
+ENTRY(ignite)
 
 SECTIONS {
     KERNEL_BASE = 0x0;

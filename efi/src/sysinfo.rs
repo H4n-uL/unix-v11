@@ -12,7 +12,7 @@ pub struct RAMDescriptor {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Ember {
+pub struct SysInfo {
     pub layout_ptr: *const RAMDescriptor,
     pub layout_len: usize,
     pub acpi_ptr: usize,

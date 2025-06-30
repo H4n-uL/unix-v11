@@ -8,14 +8,15 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(abi_riscv_interrupt)]
+#![allow(unsafe_op_in_unsafe_fn)]
 
 extern crate alloc;
 
-mod device; mod ember;
+mod device; mod sysinfo;
 mod glacier; mod ram;
 mod sort;
 
-use crate::{ember::Ember, glacier::GLACIER};
+use crate::{glacier::GLACIER, sysinfo::SysInfo};
 use core::panic::PanicInfo;
 use spin::Mutex;
 
@@ -54,12 +55,12 @@ fn init_metal() {
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
 
-pub static EMBER: Mutex<Ember> = Mutex::new(Ember::empty());
+pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
 
 #[unsafe(no_mangle)]
-pub extern "efiapi" fn flame(ember: Ember) -> ! {
-    EMBER.lock().init(ember);
-    GLACIER.init();
+pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
+    SYS_INFO.lock().init(sysinfo);
+    GLACIER.init(SYS_INFO.lock().efi_ram_layout_mut());
     init_metal();
     exec_aleph();
     schedule();

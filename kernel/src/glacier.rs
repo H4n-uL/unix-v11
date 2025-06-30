@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::{ember::ramtype, ram::{align_up, PAGE_4KIB}, sort::HeaplessSort, EMBER};
+use crate::{ram::{align_up, PAGE_4KIB}, sort::HeaplessSort, sysinfo::{ramtype, RAMDescriptor}};
 use spin::Mutex;
 
 #[repr(C)]
@@ -135,9 +135,8 @@ impl GlacierData {
         }
     }
 
-    fn init(&mut self) {
+    fn init(&mut self, efi_ram_layout: &mut [RAMDescriptor]) {
         if self.is_init { return; }
-        let mut efi_ram_layout = EMBER.lock().efi_ram_layout_mut();
         efi_ram_layout.sort_noheap_by_key(|desc| desc.page_count);
         for desc in efi_ram_layout.iter().rev() {
             if desc.ty == ramtype::CONVENTIONAL {
@@ -329,7 +328,7 @@ impl Glacier {
         return Self(Mutex::new(GlacierData::empty(rb)));
     }
 
-    pub fn init(&self) { self.0.lock().init(); }
+    pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
 
     pub fn available(&self) -> usize {
         return self.0.lock().size_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
