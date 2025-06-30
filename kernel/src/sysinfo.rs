@@ -11,7 +11,7 @@ pub struct RAMDescriptor {
 }
 
 #[repr(C)]
-pub struct Ember {
+pub struct SysInfo {
     layout_ptr: *const RAMDescriptor,
     layout_len: usize,
     pub acpi_ptr: usize,
@@ -58,11 +58,11 @@ const RECLAMABLE: &[u32] = &[
     ramtype::BOOT_SERVICES_DATA
 ];
 
-unsafe impl Sync for Ember {}
-unsafe impl Send for Ember {}
-impl Ember {
+unsafe impl Sync for SysInfo {}
+unsafe impl Send for SysInfo {}
+impl SysInfo {
     pub const fn empty() -> Self {
-        Ember {
+        Self {
             layout_ptr: core::ptr::null(),
             layout_len: 0,
             acpi_ptr: 0,

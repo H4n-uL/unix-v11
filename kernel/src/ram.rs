@@ -1,4 +1,4 @@
-use crate::{arch, ember::ramtype, glacier::{GLACIER, AllocParams}};
+use crate::{arch, glacier::{AllocParams, GLACIER}, sysinfo::ramtype};
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;

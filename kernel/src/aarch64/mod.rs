@@ -1,6 +1,6 @@
 mod exceptions;
 
-use crate::{ember::ramtype, ram::PAGE_4KIB, ramblock::{GLACIER, AllocParams, OwnedPtr}, EMBER};
+use crate::{glacier::{AllocParams, OwnedPtr, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
 use aarch64_cpu::{asm::wfi, registers::DAIF};
 pub use exceptions::init_exceptions;
 use tock_registers::interfaces::{Readable, Writeable};
@@ -123,11 +123,10 @@ const ENTRIES_PER_TABLE: usize = 0x200;
 
 // Not working yet, I rly hate AArch64 MMU
 pub unsafe fn identity_map() {
-    let ember = EMBER.lock();
     let l0 = GLACIER.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
-    for desc in ember.efi_ram_layout() {
+    for desc in SYS_INFO.lock().efi_ram_layout() {
         let block_ty = desc.ty;
         let block_start = desc.phys_start;
         let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
@@ -207,13 +206,13 @@ pub fn stack_ptr() -> *const u8 {
     return sp as *const u8;
 }
 
-pub unsafe fn move_stack(ptr: &OwnedPtr, size: usize) {
-    let mut ember = EMBER.lock();
+pub unsafe fn move_stack(ptr: &OwnedPtr) {
+    let mut sysinfo = SYS_INFO.lock();
     let stack_ptr = stack_ptr();
-    let old_stack_base = ember.stack_base;
+    let old_stack_base = sysinfo.stack_base;
     let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
 
-    let new_stack_base = ptr.addr() + size;
+    let new_stack_base = ptr.addr() + ptr.size();
     let new_stack_bottom = new_stack_base.saturating_sub(stack_size) as *mut u8;
 
     unsafe {
@@ -221,5 +220,5 @@ pub unsafe fn move_stack(ptr: &OwnedPtr, size: usize) {
         core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
     }
 
-    ember.stack_base = new_stack_base;
+    sysinfo.stack_base = new_stack_base;
 }

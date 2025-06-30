@@ -6,7 +6,7 @@ pub trait HeaplessSort<T> {
     fn sort_noheap_by_key<F, K>(&mut self, key: F) where F: FnMut(&T) -> K, K: Ord;
 }
 
-impl<T> HeaplessSort<T> for &mut [T] {
+impl<T> HeaplessSort<T> for [T] {
     fn sort_noheap(&mut self) where T: Ord {
         if self.len() <= 1 { return; }
         self.sort_noheap_by(&mut |a: &T, b: &T| a.cmp(b));

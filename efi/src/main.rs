@@ -7,10 +7,10 @@
 #![no_std]
 #![no_main]
 
-mod ember;
+mod sysinfo;
 
 use core::panic::PanicInfo;
-use ember::{Ember, RAMDescriptor};
+use sysinfo::{RAMDescriptor, SysInfo};
 use uefi::{
     boot::{allocate_pages, exit_boot_services, get_image_file_system, image_handle, AllocateType, MemoryType},
     cstr16, entry, mem::memory_map::MemoryMap, println,
@@ -49,7 +49,7 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 #[entry]
-fn ignite() -> Status {
+fn spark() -> Status {
     let systemtable = system_table_raw().unwrap();
     let (mut acpi_ptr, mut dtb_ptr) = (0, 0);
     unsafe {
@@ -119,16 +119,16 @@ fn ignite() -> Status {
     }
 
     let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base;
-    let spark: extern "efiapi" fn(Ember) -> ! = unsafe { core::mem::transmute(entrypoint) };
+    let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(entrypoint) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr();
-    let ember = Ember {
+    let sysinfo = SysInfo {
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
         acpi_ptr, dtb_ptr,
         stack_base, kernel_base, kernel_size
     };
-    spark(ember);
+    ignite(sysinfo);
 }
 
 #[panic_handler]
