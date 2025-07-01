@@ -1,4 +1,4 @@
-use crate::{glacier::{AllocParams, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
+use crate::{ram::physalloc::{AllocParams, PHYS_ALLOC}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
 
 #[derive(Clone, Copy, Debug)]
 pub struct MMUConfig {
@@ -222,7 +222,7 @@ pub struct PageTableMapper {
 impl PageTableMapper {
     pub fn new(config: MMUConfig) -> Self {
         let table_size = config.page_size.table_size();
-        let root_table = GLACIER.alloc(
+        let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
                 .as_type(ramtype::PAGE_TABLE)
@@ -251,7 +251,7 @@ impl PageTableMapper {
 
             if unsafe { *entry & flags::VALID == 0 } {
                 let table_size = self.config.page_size.table_size();
-                let next_table = GLACIER.alloc(
+                let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
                         .as_type(ramtype::PAGE_TABLE)
