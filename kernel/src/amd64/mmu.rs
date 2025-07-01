@@ -1,3 +1,5 @@
+use crate::{glacier::{AllocParams, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
+
 // const UNAVAILABLE_FLAG: u64 = 0x01; // PRESENT
 const KERNEL_FLAG: u64 = 0x03;      // PRESENT | WRITABLE
 const NORMAL_FLAG: u64 = 0x07;      // PRESENT | WRITABLE | USER
@@ -47,12 +49,6 @@ fn flags_for(ty: u32) -> u64 {
 }
 
 pub unsafe fn identity_map() {
-    // Enable PAE, PSE, and Long mode
-    unsafe {
-        Cr4::write(Cr4::read() | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION | Cr4Flags::PAGE_SIZE_EXTENSION);
-        Efer::write(Efer::read() | EferFlags::LONG_MODE_ENABLE | EferFlags::NO_EXECUTE_ENABLE);
-    }
-
     let pml4_addr = GLACIER.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
     unsafe { core::ptr::write_bytes(pml4_addr.ptr::<*mut u8>(), 0, PAGE_4KIB); }
 
@@ -68,18 +64,32 @@ pub unsafe fn identity_map() {
     }
 
     unsafe {
-        // Register PML4 in CR3
-        Cr3::write(
-            PhysFrame::containing_address(PhysAddr::new(pml4_addr.addr() as u64)),
-            Cr3Flags::empty()
+        core::arch::asm!(
+            // Register PML4 in CR3
+            "mov rax, {pml4_addr}",
+            "mov cr3, rax",
+
+            // Set Paging bit
+            "mov rax, cr0",
+            "or eax, 0x80000000",
+            "mov cr0, rax",
+
+            // Set PAE and PSE in CR4
+            "mov rax, cr4",
+            "or rax, 0x00000020", // Set PAE
+            "or rax, 0x00000010", // Set PSE
+            "mov cr4, rax",
+
+            // Enable Long Mode in EFER
+            "mov ecx, 0xC0000080", // EFER MSR number
+            "rdmsr",
+            "or eax, 0x00000100", // Set Long Mode Enable
+            "or eax, 0x00000800", // Set No-Execute Enable
+            "wrmsr",
+            pml4_addr = in(reg) pml4_addr.addr(),
+            options(nostack)
         );
-
-        // Warrant that paging is enabled
-        Cr0::write(Cr0::read() | Cr0Flags::PAGING);
     }
-
-    // Flush TLB
-    tlb::flush_all();
 }
 
 pub fn id_map_ptr() -> *const u8 {
