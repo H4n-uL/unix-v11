@@ -4,8 +4,8 @@ use crate::{glacier::OwnedPtr, SYS_INFO};
 
 fn set_interrupts(enabled: bool) {
     unsafe {
-        if enabled { core::arch::asm!("msr daifclr, 0b1111") }
-        else { core::arch::asm!("msr daifset, 0b1111") }
+        if enabled { core::arch::asm!("msr daifclr, 0b1111"); }
+        else { core::arch::asm!("msr daifset, 0b1111"); }
     }
 }
 
