@@ -100,6 +100,6 @@ pub fn test_nvme() {
     let mut buffer = PageAligned::new(4096);
     match nvme_dev.read(0, &mut buffer) {
         Ok(_) => printlnk!("Read success from NVMe device {}: {} bytes", nvme_dev.devid, buffer.len()),
-        Err(e) => printlnk!("Read failed from NVMe device {}: {}", nvme_dev.devid, e),
+        Err(e) => printlnk!("Read failed from NVMe device {}: {}", nvme_dev.devid, e)
     }
 }
