@@ -5,7 +5,7 @@ pub struct ExceptionVector { pub data: [u32; 512] }
 #[unsafe(link_section = ".text.exceptions")]
 pub static mut EXCEPTION_VECTOR: ExceptionVector = ExceptionVector { data: [0; 512] };
 
-pub fn init_exceptions() {
+pub fn init() {
     let xvec = unsafe { (&raw mut EXCEPTION_VECTOR).as_mut().unwrap() };
     const LDR_X16_PC_REL: u32 = 0x58000010; // ldr x16, #offset
     const BR_X16: u32         = 0xd61f0200; // br x16
@@ -48,7 +48,7 @@ macro_rules! handler {
         #[unsafe(no_mangle)]
         #[unsafe(link_section = ".text.exceptions")]
         extern "C" fn $name() {
-            super::serial_puts($msg);
+            printlnk!($msg);
             loop { super::halt(); }
         }
     };

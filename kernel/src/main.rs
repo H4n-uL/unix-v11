@@ -12,9 +12,8 @@
 
 extern crate alloc;
 
-mod device; mod sysinfo;
-mod glacier; mod ram;
-mod sort;
+mod device;  mod glacier;
+mod ram; mod sort; mod sysinfo;
 
 use crate::{glacier::GLACIER, sysinfo::SysInfo};
 use core::panic::PanicInfo;
@@ -46,10 +45,10 @@ use_arch!("aarch64", aarch64);
 use_arch!("riscv64", riscv64);
 
 fn init_metal() {
-    arch::init_exceptions();
+    arch::exceptions::init();
     arch::init_serial();
-    ram::init_ram();
     printlnk!("Uniplexed Information and Computing Service Version 11");
+    ram::init_ram();
     device::init_device();
 }
 fn exec_aleph() {}

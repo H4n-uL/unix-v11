@@ -50,13 +50,14 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
+    unsafe { arch::mmu::identity_map(); }
     let stack_ptr = GLACIER.alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { arch::move_stack(&stack_ptr); }
 
     let available = GLACIER.available();
-    let heap_size = ((available as f64 * 0.02) as usize).max(HEAP_SIZE);
+    let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
     let heap_ptr = GLACIER.alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
