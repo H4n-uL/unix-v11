@@ -187,22 +187,22 @@ pub mod flags {
     pub const TABLE_DESC: u64 = 0b11;      // Table descriptor (levels 0-2)
     pub const BLOCK_DESC: u64 = 0b01;      // Block descriptor (levels 0-2)
     pub const PAGE_DESC: u64  = 0b11;      // Page descriptor (level 3)
-    
+
     // Memory attributes
     pub const ATTR_IDX_NORMAL: u64 = 0 << 2;
     pub const ATTR_IDX_DEVICE: u64 = 1 << 2;
-    
+
     // Access permissions
     pub const AP_RW_EL1: u64       = 0b00 << 6;
     pub const AP_RW_ALL: u64       = 0b01 << 6;
     pub const AP_RO_EL1: u64       = 0b10 << 6;
     pub const AP_RO_ALL: u64       = 0b11 << 6;
-    
+
     // Shareability
     pub const SH_NONE: u64         = 0b00 << 8;
     pub const SH_OUTER: u64        = 0b10 << 8;
     pub const SH_INNER: u64        = 0b11 << 8;
-    
+
     // Other flags
     pub const AF: u64              = 1 << 10;  // Access Flag
     pub const NG: u64              = 1 << 11;  // Not global

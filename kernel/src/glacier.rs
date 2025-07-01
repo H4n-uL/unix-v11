@@ -239,7 +239,7 @@ impl GlacierData {
         let found_block = self.find(|block|
             block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr()
         );
-        
+
         if let Some(block) = found_block {
             let block_cp = *block;
             let free_start = ptr.addr();

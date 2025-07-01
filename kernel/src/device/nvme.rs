@@ -1,7 +1,7 @@
 use crate::{device::block::BlockDevice, glacier::{AllocParams, GLACIER}, printlnk, ram::PageAligned};
 use super::PCI_DEVICES;
 use alloc::{format, string::String, vec::Vec};
-use nvme::{Allocator, Device};
+use nvme::{Allocator, Device, Namespace};
 use spin::Mutex;
 
 pub struct NVMeAlloc;
@@ -54,7 +54,7 @@ impl BlockDevice for NVMeBlockDevice {
             format!("NVMe read error: {}", e)
         );
     }
-    
+
     fn write(&self, lba: u64, buffer: &[u8]) -> Result<(), String> {
         if self.devid >= NVME_DEV_LOW.lock().len() { return Err("Invalid device index".into()); }
         let device = &NVME_DEV_LOW.lock()[self.devid];
