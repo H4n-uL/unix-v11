@@ -36,7 +36,7 @@ arch!("riscv64", riscv64);
 pub struct RelaEntry {
     offset: u64,
     info: u64,
-    addend: u64,
+    addend: u64
 }
 
 #[cfg(target_arch = "x86_64")]  const R_RELATIVE: u64 = 8;

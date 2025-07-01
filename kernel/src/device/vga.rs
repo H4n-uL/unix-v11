@@ -7,7 +7,7 @@ pub struct Colour {
     pub alpha: u8,
     pub red: u8,
     pub green: u8,
-    pub blue: u8,
+    pub blue: u8
 }
 
 impl Colour {
@@ -29,7 +29,7 @@ impl From<u32> for Colour {
             alpha: ((value >> 24) & 0xff) as u8,
             red: ((value >> 16) & 0xff) as u8,
             green: ((value >> 8) & 0xff) as u8,
-            blue: (value & 0xff) as u8,
+            blue: (value & 0xff) as u8
         }
     }
 }
@@ -45,7 +45,7 @@ pub struct Vga {
     edid: *mut u8,
     width: u32,
     height: u32,
-    pitch: u32,
+    pitch: u32
 }
 
 impl Vga {
