@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-aarch64-cpu = "10.0.0"
 acpi = "5.2.0"
 aml = "0.16.4"
 fdt = "0.1.5"
