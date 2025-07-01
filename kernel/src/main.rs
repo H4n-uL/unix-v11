@@ -8,7 +8,6 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(abi_riscv_interrupt)]
-#![allow(unsafe_op_in_unsafe_fn)]
 
 extern crate alloc;
 
