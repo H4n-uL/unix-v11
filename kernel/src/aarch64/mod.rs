@@ -1,6 +1,6 @@
 pub mod exceptions; pub mod mmu;
 
-use crate::{glacier::OwnedPtr, SYS_INFO};
+use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
 
 fn set_interrupts(enabled: bool) {
     unsafe {

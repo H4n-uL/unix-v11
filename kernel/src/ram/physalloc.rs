@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::{ram::{align_up, PAGE_4KIB}, sort::HeaplessSort, sysinfo::{ramtype, RAMDescriptor}};
 use spin::Mutex;
 
@@ -46,6 +45,10 @@ impl RAMBlock {
         else if other.addr() + other.size == self.addr() { 1 } // self is after other
         else { 0 };
     }
+
+    pub fn into_owned_ptr(&self) -> OwnedPtr {
+        return OwnedPtr::new_bytes(self.ptr, self.size);
+    }
 }
 
 #[repr(C)]
@@ -72,6 +75,18 @@ impl OwnedPtr {
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
     pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.ptr, self.size) }
+
+    pub fn merge(&self, other: &Self) -> Option<Self> {
+        if self.addr() + self.size != other.addr() { return None; } // Not adjacent
+        return Some(Self::new_bytes(self.ptr, self.size + other.size));
+    }
+
+    pub fn split(&self, offset: usize) -> Option<(Self, Self)> {
+        if offset >= self.size { return None; } // Offset out of bounds
+        let first = Self::new_bytes(self.ptr, offset);
+        let second = Self::new_bytes((self.addr() + offset) as *const u8, self.size - offset);
+        return Some((first, second));
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -109,24 +124,24 @@ impl AllocParams {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct GlacierData {
+pub struct PhysAllocData {
     ptr: OwnedPtr,
     max: usize,
     is_init: bool
 }
 
-pub struct Glacier(Mutex<GlacierData>);
+pub struct PhysAlloc(Mutex<PhysAllocData>);
 
 const BASE_RB_SIZE: usize = 128;
 static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
-pub static GLACIER: Glacier = Glacier::empty(&RB_EMBEDDED);
+pub static PHYS_ALLOC: PhysAlloc = PhysAlloc::empty(&RB_EMBEDDED);
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
-unsafe impl Send for GlacierData {}
-unsafe impl Sync for GlacierData {}
+unsafe impl Send for PhysAllocData {}
+unsafe impl Sync for PhysAllocData {}
 
-impl GlacierData {
+impl PhysAllocData {
     const fn empty(rb: &[RAMBlock]) -> Self {
         Self {
             ptr: OwnedPtr::from_slice(rb),
@@ -185,7 +200,7 @@ impl GlacierData {
                 ( true,  true) => a.addr().cmp(&b.addr()),
                 ( true, false) => core::cmp::Ordering::Less,
                 (false,  true) => core::cmp::Ordering::Greater,
-                (false, false) => core::cmp::Ordering::Equal,
+                (false, false) => core::cmp::Ordering::Equal
             }
         );
     }
@@ -205,7 +220,7 @@ impl GlacierData {
         let args = args.aligned();
         let ptr = match args.addr {
             Some(addr) => addr,
-            None => self.find_free_ram(args)?.ptr(),
+            None => self.find_free_ram(args)?.ptr()
         };
 
         let filter = |block: &RAMBlock| {
@@ -323,9 +338,9 @@ impl GlacierData {
     }
 }
 
-impl Glacier {
+impl PhysAlloc {
     const fn empty(rb: &[RAMBlock]) -> Self {
-        return Self(Mutex::new(GlacierData::empty(rb)));
+        return Self(Mutex::new(PhysAllocData::empty(rb)));
     }
 
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
@@ -339,6 +354,11 @@ impl Glacier {
     }
 
     pub fn sort(&self) { self.0.lock().sort(); }
+
+    pub fn with_blocks<F, R>(&self, f: F) -> R
+    where F: FnOnce(&dyn Iterator<Item = &RAMBlock>) -> R {
+        f(&self.0.lock().blocks_iter())
+    }
 
     pub fn find_free_ram(&self, args: AllocParams) -> Option<OwnedPtr> {
         return self.0.lock().find_free_ram(args);

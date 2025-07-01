@@ -1,4 +1,6 @@
-use crate::{arch, glacier::{AllocParams, GLACIER}, sysinfo::ramtype};
+pub mod physalloc;
+
+use crate::{arch, ram::physalloc::{AllocParams, PHYS_ALLOC}, sysinfo::ramtype};
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;
@@ -51,14 +53,14 @@ pub fn align_up(val: usize, align: usize) -> usize {
 
 pub fn init_ram() {
     unsafe { arch::mmu::identity_map(); }
-    let stack_ptr = GLACIER.alloc(
+    let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { arch::move_stack(&stack_ptr); }
 
-    let available = GLACIER.available();
+    let available = PHYS_ALLOC.available();
     let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
-    let heap_ptr = GLACIER.alloc(
+    let heap_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_ptr.size()); }

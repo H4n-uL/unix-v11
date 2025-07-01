@@ -1,6 +1,6 @@
 pub mod exceptions; pub mod mmu;
 
-use crate::{glacier::OwnedPtr, SYS_INFO};
+use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
 
 pub fn set_interrupts(enabled: bool) {
     unsafe {
@@ -88,12 +88,6 @@ impl core::fmt::Write for SerialWriter {
         for byte in s.bytes() { serial_putchar(byte); }
         Ok(())
     }
-}
-
-pub fn id_map_ptr() -> *const u8 {
-    let id_map_ptr: usize;
-    unsafe { core::arch::asm!("mov {}, cr3", out(reg) id_map_ptr); }
-    return (id_map_ptr & !0xfff) as *const u8;
 }
 
 #[inline(always)]
