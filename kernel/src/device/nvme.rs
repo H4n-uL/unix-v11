@@ -1,7 +1,7 @@
 use crate::{device::block::BlockDevice, glacier::{AllocParams, GLACIER}, printlnk, ram::PageAligned};
 use super::PCI_DEVICES;
 use alloc::{format, string::String, vec::Vec};
-use nvme::{Allocator, Device, Namespace};
+use nvme::{Allocator, Device};
 use spin::Mutex;
 
 pub struct NVMeAlloc;
