@@ -1,18 +1,17 @@
-mod exceptions;
+pub mod exceptions; pub mod mmu;
 
-use crate::{glacier::{AllocParams, OwnedPtr, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
-use aarch64_cpu::{asm::wfi, registers::DAIF};
-pub use exceptions::init_exceptions;
-use tock_registers::interfaces::{Readable, Writeable};
+use crate::{glacier::OwnedPtr, SYS_INFO};
 
 fn set_interrupts(enabled: bool) {
-    if enabled { DAIF.set(DAIF.get() & !0b1111); }
-    else { DAIF.set(DAIF.get() | 0b1111); }
+    unsafe {
+        if enabled { core::arch::asm!("msr daifclr, 0b1111") }
+        else { core::arch::asm!("msr daifset, 0b1111") }
+    }
 }
 
 pub fn halt() {
     set_interrupts(false);
-    wfi();
+    unsafe { core::arch::asm!("wfi"); }
 }
 
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
@@ -35,168 +34,13 @@ pub fn serial_putchar(c: u8) {
     }
 }
 
-pub fn serial_puts(s: &str) {
-    for byte in s.bytes() { serial_putchar(byte); }
-}
-
-pub fn serial_puthex(n: usize) {
-    serial_puts("0x");
-    if n == 0 { serial_putchar(b'0'); return; }
-    let mut leading = true;
-    for i in (0..16).rev() {
-        let nibble = (n >> (i << 2)) & 0xf;
-        if nibble != 0 { leading = false; }
-        if !leading { serial_putchar(b"0123456789abcdef"[nibble]); }
-    }
-}
-
 pub struct SerialWriter;
 
 impl core::fmt::Write for SerialWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        serial_puts(s);
+        for byte in s.bytes() { serial_putchar(byte); }
         Ok(())
     }
-}
-
-const VALID: u64           = 1 << 0;
-const PAGE_DESC: u64       = 1 << 1;
-const ATTR_IDX_NORMAL: u64 = 0 << 2;
-const ATTR_IDX_DEVICE: u64 = 1 << 2;
-const AP_RW_EL1: u64       = 0b00 << 6;
-const SH_NONE: u64         = 0b00 << 8;
-const SH_INNER: u64        = 0b11 << 8;
-const AF: u64              = 1 << 10;
-const UXN: u64 = 1 << 54;
-const PXN: u64 = 1 << 53;
-
-const PAGE_DEFAULT: u64 = AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1;
-const PAGE_NOEXEC: u64  = PAGE_DEFAULT | UXN | PXN;
-const PAGE_DEVICE: u64 =  AF | ATTR_IDX_DEVICE | SH_NONE  | AP_RW_EL1 | UXN | PXN;
-
-fn get_page_idx(level: usize, virt: u64) -> usize {
-    match level {
-        0 => ((virt >> 39) & 0x1ff) as usize,
-        1 => ((virt >> 30) & 0x1ff) as usize,
-        2 => ((virt >> 21) & 0x1ff) as usize,
-        3 => ((virt >> 12) & 0x1ff) as usize,
-        _ => unreachable!(),
-    }
-}
-
-pub unsafe fn map_page(l0: *mut u64, virt: u64, phys: u64, flags: u64) {
-    let virt = virt & 0x0000_ffff_ffff_f000;
-    let phys = phys & 0x0000_ffff_ffff_f000;
-
-    let mut table = l0;
-    for level in 0..4 {
-        let index = get_page_idx(level, virt);
-        let entry = unsafe { table.add(index) };
-        if level == 3 { unsafe { *entry = phys | VALID | PAGE_DESC | flags; } }
-        else {
-            table = unsafe { if *entry & VALID == 0 {
-                let next_phys = GLACIER.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE))
-                    .expect("[ERROR] alloc for page table failed!");
-                core::ptr::write_bytes(next_phys.ptr::<*mut u8>(), 0, PAGE_4KIB);
-                *entry = next_phys.addr() as u64 | VALID;
-                next_phys.ptr()
-            }
-            else { (*entry & 0x0000_ffff_ffff_f000) as *mut u64 } };
-        }
-    }
-}
-
-fn flags_for(ty: u32) -> u64 {
-    match ty {
-        ramtype::CONVENTIONAL => PAGE_DEFAULT,
-        ramtype::BOOT_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::RUNTIME_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::KERNEL       => PAGE_DEFAULT,
-        ramtype::KERNEL_DATA  => PAGE_NOEXEC,
-        ramtype::PAGE_TABLE   => PAGE_NOEXEC,
-        ramtype::MMIO         => PAGE_DEVICE,
-        _                     => PAGE_NOEXEC
-    }
-}
-
-const ENTRIES_PER_TABLE: usize = 0x200;
-
-// Not working yet, I rly hate AArch64 MMU
-pub unsafe fn identity_map() {
-    let l0 = GLACIER.alloc(AllocParams::new(PAGE_4KIB).as_type(ramtype::PAGE_TABLE)).unwrap();
-    unsafe { core::ptr::write_bytes(l0.ptr::<*mut u8>(), 0, PAGE_4KIB); }
-
-    for desc in SYS_INFO.lock().efi_ram_layout() {
-        let block_ty = desc.ty;
-        let block_start = desc.phys_start;
-        let block_end = block_start + desc.page_count * PAGE_4KIB as u64;
-
-        for phys in (block_start..block_end).step_by(PAGE_4KIB) {
-            unsafe { map_page(l0.ptr(), phys, phys, flags_for(block_ty)); }
-        }
-    }
-
-    let mut mmfr0: u64;
-    unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
-    let parange = mmfr0 & 0xf;
-    // 0 = 32 bits, 1 = 36 bits, 2 = 40 bits
-    // 3 = 42 bits, 4 = 44 bits, 5 = 48 bits
-
-    // MAIR_EL1 = Attr0 (normal WB/WA), Attr1 (device nGnRE)
-    let mair_el1: u64 = (0b1111_1111 << 0) | (0b0000_0100 << 8);
-
-    // TCR_EL1
-    let tcr_el1: u64 =
-          (16 << 0)     // T0SZ: 48-bit VA
-        | (0b01 << 8)   // ORGN0 = WB/WA
-        | (0b01 << 10)  // IRGN0 = WB/WA
-        | (0b11 << 12)  // SH0 = Inner Shareable
-        | (0b00 << 14)  // TG0 = 4 KiB granule
-        | (0b10 << 30)  // TG1 = 4 KiB granule
-        | (parange << 32) // IPS = PARange
-    ;
-
-    unsafe { core::arch::asm!("
-        // Set up registers for MMU
-        mov x1, {0} // MAIR_EL1
-        mov x2, {1} // TCR_EL1
-        mov x3, {2} // TTBR0_EL1
-
-        // Disable MMU
-        mrs x0, sctlr_el1
-        bic x0, x0, #1
-        msr sctlr_el1, x0
-        isb
-
-        // Invalidate TLB
-        tlbi vmalle1
-        dsb sy
-        isb
-
-        // Set up MMU
-        msr mair_el1, x1
-        msr tcr_el1, x2
-        msr ttbr0_el1, x3
-        isb
-
-        // Enable MMU
-        mrs x0, sctlr_el1
-        orr x0, x0, #1         // M = 1: MMU enable
-        orr x0, x0, #(1 << 2)  // C = 1: Data cache
-        orr x0, x0, #(1 << 12) // I = 1: Instruction cache
-        msr sctlr_el1, x0
-        isb
-    ",
-        in(reg) mair_el1,
-        in(reg) tcr_el1,
-        in(reg) l0.addr()
-    ); }
-}
-
-pub fn id_map_ptr() -> *const u8 {
-    let id_map_ptr: usize;
-    unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) id_map_ptr); }
-    return (id_map_ptr & !0xfff) as *const u8;
 }
 
 #[inline(always)]

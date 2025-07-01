@@ -81,7 +81,7 @@ impl SysInfo {
         let layout_start = self.layout_ptr as u64;
         let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
 
-        let id_map_ptr = crate::arch::id_map_ptr() as u64;
+        let id_map_ptr = crate::arch::mmu::id_map_ptr() as u64;
 
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;

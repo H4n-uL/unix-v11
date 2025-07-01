@@ -3,7 +3,7 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
 static IDT: Mutex<InterruptDescriptorTable> = Mutex::new(InterruptDescriptorTable::new());
 
-pub fn init_exceptions() {
+pub fn init() {
     let mut idt = IDT.lock();
     idt.breakpoint.set_handler_fn(breakpoint);
     idt.double_fault.set_handler_fn(double_fault);

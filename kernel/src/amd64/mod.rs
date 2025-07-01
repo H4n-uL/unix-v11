@@ -1,4 +1,4 @@
-mod exceptions;
+pub mod exceptions; pub mod mmu;
 
 use crate::{glacier::{AllocParams, OwnedPtr, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
 pub use exceptions::init_exceptions;
@@ -39,22 +39,11 @@ pub fn serial_puts(s: &str) {
     for byte in s.bytes() { serial_putchar(byte); }
 }
 
-pub fn serial_puthex(n: usize) {
-    serial_puts("0x");
-    if n == 0 { serial_putchar(b'0'); return; }
-    let mut leading = true;
-    for i in (0..16).rev() {
-        let nibble = (n >> (i << 2)) & 0xf;
-        if nibble != 0 { leading = false; }
-        if !leading { serial_putchar(b"0123456789abcdef"[nibble]); }
-    }
-}
-
 pub struct SerialWriter;
 
 impl core::fmt::Write for SerialWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        serial_puts(s);
+        for byte in s.bytes() { serial_putchar(byte); }
         Ok(())
     }
 }
