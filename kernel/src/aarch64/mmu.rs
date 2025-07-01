@@ -318,34 +318,33 @@ pub unsafe fn identity_map() {
     let tcr_el1 = config.tcr_el1();
 
     unsafe {
-        core::arch::asm!("
-            dsb sy
-            mrs x0, sctlr_el1
-            bic x0, x0, #1
-            msr sctlr_el1, x0
-            isb
+        core::arch::asm!(
+            "dsb sy",
+            "mrs x0, sctlr_el1",
+            "bic x0, x0, #1",
+            "msr sctlr_el1, x0",
+            "isb",
 
-            tlbi vmalle1
-            dsb sy
-            isb
+            "tlbi vmalle1",
+            "dsb sy",
+            "isb",
 
-            msr mair_el1, {mair}
-            msr tcr_el1, {tcr}
-            msr ttbr0_el1, {ttbr0}
-            msr ttbr1_el1, xzr
-            isb
+            "msr mair_el1, {mair}",
+            "msr tcr_el1, {tcr}",
+            "msr ttbr0_el1, {ttbr0}",
+            "msr ttbr1_el1, xzr",
+            "isb",
 
-            mrs x0, sctlr_el1
-            orr x0, x0, #(1 << 0)   // M bit: MMU enable
-            orr x0, x0, #(1 << 2)   // C bit: Data cache enable
-            orr x0, x0, #(1 << 12)  // I bit: Instruction cache enable
-            msr sctlr_el1, x0
-            isb
+            "mrs x0, sctlr_el1",
+            "orr x0, x0, #(1 << 0)",  // M bit: MMU enable
+            "orr x0, x0, #(1 << 2)",  // C bit: Data cache enable
+            "orr x0, x0, #(1 << 12)", // I bit: Instruction cache enable
+            "msr sctlr_el1, x0",
+            "isb",
 
-            ic iallu
-            dsb sy
-            isb
-        ",
+            "ic iallu",
+            "dsb sy",
+            "isb",
             mair = in(reg) mair_el1,
             tcr = in(reg) tcr_el1,
             ttbr0 = in(reg) mapper.root_table() as u64
