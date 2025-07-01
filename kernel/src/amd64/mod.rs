@@ -50,7 +50,7 @@ pub fn init_serial() {
 
             com1_base = const COM1,
             out("dx") _,
-            out("al") _,
+            out("al") _
         );
     }
 }
@@ -72,7 +72,7 @@ pub fn serial_putchar(byte: u8) {
             com1_base = const COM1,
             byte = in(reg_byte) byte,
             out("dx") _,
-            out("al") _,
+            out("al") _
         );
     }
 }

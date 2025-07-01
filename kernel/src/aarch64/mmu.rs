@@ -1,7 +1,7 @@
 use crate::{glacier::{AllocParams, GLACIER}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
 
 #[derive(Clone, Copy, Debug)]
-pub struct MmuConfig {
+pub struct MMUConfig {
     pub page_size: PageSize,
     pub va_bits: u8,
     pub pa_bits: u8,
@@ -26,7 +26,7 @@ impl PageSize {
         match self {
             Self::Size4KB => 4096,
             Self::Size16KB => 16384,
-            Self::Size64KB => 65536,
+            Self::Size64KB => 65536
         }
     }
 
@@ -34,7 +34,7 @@ impl PageSize {
         match self {
             Self::Size4KB => 12,
             Self::Size16KB => 14,
-            Self::Size64KB => 16,
+            Self::Size64KB => 16
         }
     }
 
@@ -42,7 +42,7 @@ impl PageSize {
         match self {
             Self::Size4KB => 0b00,
             Self::Size16KB => 0b10,
-            Self::Size64KB => 0b01,
+            Self::Size64KB => 0b01
         }
     }
 
@@ -50,7 +50,7 @@ impl PageSize {
         match self {
             Self::Size4KB => 0b10,
             Self::Size16KB => 0b01,
-            Self::Size64KB => 0b11,
+            Self::Size64KB => 0b11
         }
     }
 
@@ -77,12 +77,12 @@ impl PageSize {
         match self {
             Self::Size4KB => (mmfr0 >> 28) & 0xf != 0xf,
             Self::Size16KB => (mmfr0 >> 20) & 0xf != 0x0,
-            Self::Size64KB => (mmfr0 >> 24) & 0xf != 0xf,
+            Self::Size64KB => (mmfr0 >> 24) & 0xf != 0xf
         }
     }
 }
 
-impl MmuConfig {
+impl MMUConfig {
     pub fn detect() -> Self {
         let mut mmfr0: u64;
         unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
@@ -96,7 +96,7 @@ impl MmuConfig {
             4 => 44,
             5 => 48,
             6 => 52,
-            _ => 48, // default
+            _ => 48
         };
 
         let page_size = if PageSize::Size4KB.is_supported() {
@@ -169,7 +169,7 @@ impl MmuConfig {
             44 => 0b100,
             48 => 0b101,
             52 => 0b110,
-            _ => 0b101,
+            _ => 0b101
         };
         tcr |= ips << 32;
         return tcr;
@@ -215,12 +215,12 @@ pub mod flags {
 }
 
 pub struct PageTableMapper {
-    config: MmuConfig,
+    config: MMUConfig,
     root_table: *mut u64
 }
 
 impl PageTableMapper {
-    pub fn new(config: MmuConfig) -> Self {
+    pub fn new(config: MMUConfig) -> Self {
         let table_size = config.page_size.table_size();
         let root_table = GLACIER.alloc(
             AllocParams::new(table_size)
@@ -272,7 +272,7 @@ impl PageTableMapper {
         self.root_table
     }
 
-    pub fn config(&self) -> &MmuConfig {
+    pub fn config(&self) -> &MMUConfig {
         &self.config
     }
 }
@@ -292,7 +292,7 @@ pub fn flags_for_type(ty: u32) -> u64 {
 }
 
 pub unsafe fn identity_map() {
-    let config = MmuConfig::detect();
+    let config = MMUConfig::detect();
     let mut mapper = PageTableMapper::new(config);
 
     for desc in SYS_INFO.lock().efi_ram_layout() {
