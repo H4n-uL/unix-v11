@@ -1,4 +1,4 @@
-use crate::{ram::physalloc::{AllocParams, PHYS_ALLOC}, ram::PAGE_4KIB, sysinfo::ramtype, SYS_INFO};
+use crate::{ram::{physalloc::{AllocParams, PHYS_ALLOC}, PAGE_4KIB}, sysinfo::ramtype, SYS_INFO};
 
 #[derive(Clone, Copy, Debug)]
 pub struct MMUConfig {
@@ -10,9 +10,9 @@ pub struct MMUConfig {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PageSize {
-    Size4KB,
-    Size16KB,
-    Size64KB
+    Size4kiB,
+    Size16kiB,
+    Size64kiB
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -24,41 +24,41 @@ pub enum TranslationRegime {
 impl PageSize {
     pub const fn size(&self) -> usize {
         match self {
-            Self::Size4KB => 4096,
-            Self::Size16KB => 16384,
-            Self::Size64KB => 65536
+            Self::Size4kiB => 4096,
+            Self::Size16kiB => 16384,
+            Self::Size64kiB => 65536
         }
     }
 
     pub const fn shift(&self) -> u8 {
         match self {
-            Self::Size4KB => 12,
-            Self::Size16KB => 14,
-            Self::Size64KB => 16
+            Self::Size4kiB => 12,
+            Self::Size16kiB => 14,
+            Self::Size64kiB => 16
         }
     }
 
     pub const fn tcr_tg0(&self) -> u64 {
         match self {
-            Self::Size4KB => 0b00,
-            Self::Size16KB => 0b10,
-            Self::Size64KB => 0b01
+            Self::Size4kiB => 0b00,
+            Self::Size16kiB => 0b10,
+            Self::Size64kiB => 0b01
         }
     }
 
     pub const fn tcr_tg1(&self) -> u64 {
         match self {
-            Self::Size4KB => 0b10,
-            Self::Size16KB => 0b01,
-            Self::Size64KB => 0b11
+            Self::Size4kiB => 0b10,
+            Self::Size16kiB => 0b01,
+            Self::Size64kiB => 0b11
         }
     }
 
     pub const fn index_bits(&self) -> u8 {
         match self {
-            Self::Size4KB => 9,   // 512 entries
-            Self::Size16KB => 11, // 2048 entries
-            Self::Size64KB => 13, // 8192 entries
+            Self::Size4kiB => 9,   // 512 entries
+            Self::Size16kiB => 11, // 2048 entries
+            Self::Size64kiB => 13, // 8192 entries
         }
     }
 
@@ -75,9 +75,9 @@ impl PageSize {
         unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
 
         match self {
-            Self::Size4KB => (mmfr0 >> 28) & 0xf != 0xf,
-            Self::Size16KB => (mmfr0 >> 20) & 0xf != 0x0,
-            Self::Size64KB => (mmfr0 >> 24) & 0xf != 0xf
+            Self::Size4kiB => (mmfr0 >> 28) & 0xf != 0xf,
+            Self::Size16kiB => (mmfr0 >> 20) & 0xf != 0x0,
+            Self::Size64kiB => (mmfr0 >> 24) & 0xf != 0xf
         }
     }
 }
@@ -99,12 +99,12 @@ impl MMUConfig {
             _ => 48
         };
 
-        let page_size = if PageSize::Size4KB.is_supported() {
-            PageSize::Size4KB
-        } else if PageSize::Size16KB.is_supported() {
-            PageSize::Size16KB
-        } else if PageSize::Size64KB.is_supported() {
-            PageSize::Size64KB
+        let page_size = if PageSize::Size4kiB.is_supported() {
+            PageSize::Size4kiB
+        } else if PageSize::Size16kiB.is_supported() {
+            PageSize::Size16kiB
+        } else if PageSize::Size64kiB.is_supported() {
+            PageSize::Size64kiB
         } else {
             panic!("No valid page size supported");
         };
