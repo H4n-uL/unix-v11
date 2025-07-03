@@ -4,61 +4,38 @@ use crate::{ram::{physalloc::{AllocParams, PHYS_ALLOC}, PAGE_4KIB}, sysinfo::ram
 pub struct MMUConfig {
     pub page_size: PageSize,
     pub va_bits: u8,
-    pub pa_bits: u8,
-    pub regime: TranslationRegime
+    pub pa_bits: u8
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PageSize {
-    Size4kiB,
-    Size16kiB,
-    Size64kiB
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum TranslationRegime {
-    EL1, // EL1&0
-    EL2  // EL2 (hypervisor)
+    Size4kiB  = 4096,
+    Size16kiB = 16384,
+    Size64kiB = 65536
 }
 
 impl PageSize {
     pub const fn size(&self) -> usize {
-        match self {
-            Self::Size4kiB => 4096,
-            Self::Size16kiB => 16384,
-            Self::Size64kiB => 65536
-        }
+        *self as usize
+    }
+
+    pub const fn addr_mask(&self) -> u64 {
+        !(self.size() - 1) as u64
     }
 
     pub const fn shift(&self) -> u8 {
         match self {
-            Self::Size4kiB => 12,
+            Self::Size4kiB  => 12,
             Self::Size16kiB => 14,
             Self::Size64kiB => 16
         }
     }
 
-    pub const fn tcr_tg0(&self) -> u64 {
-        match self {
-            Self::Size4kiB => 0b00,
-            Self::Size16kiB => 0b10,
-            Self::Size64kiB => 0b01
-        }
-    }
-
-    pub const fn tcr_tg1(&self) -> u64 {
-        match self {
-            Self::Size4kiB => 0b10,
-            Self::Size16kiB => 0b01,
-            Self::Size64kiB => 0b11
-        }
-    }
-
     pub const fn index_bits(&self) -> u8 {
         match self {
-            Self::Size4kiB => 9,   // 512 entries
+            Self::Size4kiB  => 9,  //  512 entries
             Self::Size16kiB => 11, // 2048 entries
-            Self::Size64kiB => 13, // 8192 entries
+            Self::Size64kiB => 13  // 8192 entries
         }
     }
 
@@ -70,20 +47,28 @@ impl PageSize {
         self.entries_per_table() * 8
     }
 
-    pub fn is_supported(&self) -> bool {
-        let mut mmfr0: u64;
-        unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
-
-        match self {
-            Self::Size4kiB => (mmfr0 >> 28) & 0xf != 0xf,
-            Self::Size16kiB => (mmfr0 >> 20) & 0xf != 0x0,
-            Self::Size64kiB => (mmfr0 >> 24) & 0xf != 0xf
+    pub fn from_tcr_tg(tg_bits: usize) -> Option<Self> {
+        match tg_bits {
+            0b00 => Some(Self::Size4kiB),
+            0b01 => Some(Self::Size64kiB),
+            0b10 => Some(Self::Size16kiB),
+            _ => None
         }
     }
 }
 
 impl MMUConfig {
     pub fn detect() -> Self {
+        let mut tcr_el1: usize;
+        unsafe { core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr_el1); }
+
+        let t0sz = tcr_el1 & 0x3f;
+        let va_bits = 64 - t0sz as u8;
+
+        let tg0 = (tcr_el1 >> 14) & 0x3;
+        let page_size = PageSize::from_tcr_tg(tg0)
+            .expect("Invalid TG0 value in TCR_EL1");
+
         let mut mmfr0: u64;
         unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
 
@@ -99,22 +84,7 @@ impl MMUConfig {
             _ => 48
         };
 
-        let page_size = if PageSize::Size4kiB.is_supported() {
-            PageSize::Size4kiB
-        } else if PageSize::Size16kiB.is_supported() {
-            PageSize::Size16kiB
-        } else if PageSize::Size64kiB.is_supported() {
-            PageSize::Size64kiB
-        } else {
-            panic!("No valid page size supported");
-        };
-
-        let va_bits = 48;
-
-        Self {
-            page_size, va_bits, pa_bits,
-            regime: TranslationRegime::EL1
-        }
+        return Self { page_size, va_bits, pa_bits };
     }
 
     pub fn levels(&self) -> u8 {
@@ -137,29 +107,23 @@ impl MMUConfig {
         let page_shift = self.page_size.shift();
         let index_bits = self.page_size.index_bits();
         let levels = self.levels();
-        if level >= levels { return 0; }
+        if level >= levels { unreachable!(); }
 
         let shift = page_shift + (levels - level - 1) * index_bits;
         return ((va >> shift) & ((1 << index_bits) - 1)) as usize;
     }
 
-    pub fn tcr_el1(&self) -> u64 {
-        let t0sz = 64 - self.va_bits;
-        let t1sz = t0sz;
-        let mut tcr = 0u64;
+    pub fn tcr_el1(&self) -> usize {
+        let mut tcr: usize;
+        unsafe { core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr); }
+        tcr &= 0xc03fc03f; // T0SZ, T1SZ, TG0, TG1
 
-        tcr |= (t0sz as u64) << 0;
-        tcr |= (t1sz as u64) << 16;
-
-        tcr |= self.page_size.tcr_tg0() << 14;
-        tcr |= self.page_size.tcr_tg1() << 30;
-
-        tcr |= 0b01 << 8;   // IRGN0 = Normal WB/WA
-        tcr |= 0b01 << 10;  // ORGN0 = Normal WB/WA
-        tcr |= 0b11 << 12;  // SH0 = Inner Shareable
-        tcr |= 0b01 << 24;  // IRGN1 = Normal WB/WA
-        tcr |= 0b01 << 26;  // ORGN1 = Normal WB/WA
-        tcr |= 0b11 << 28;  // SH1 = Inner Shareable
+        tcr |= 0b01 << 8;  // IRGN0 = Normal WB/WA
+        tcr |= 0b01 << 10; // ORGN0 = Normal WB/WA
+        tcr |= 0b11 << 12; // SH0 = Inner Shareable
+        tcr |= 0b01 << 24; // IRGN1 = Normal WB/WA
+        tcr |= 0b01 << 26; // ORGN1 = Normal WB/WA
+        tcr |= 0b11 << 28; // SH1 = Inner Shareable
 
         let ips = match self.pa_bits {
             32 => 0b000,
@@ -176,7 +140,7 @@ impl MMUConfig {
     }
 
     pub fn page_size(&self) -> usize {
-        self.page_size.size()
+        return self.page_size.size();
     }
 }
 
@@ -259,21 +223,21 @@ impl PageTableMapper {
 
                 unsafe {
                     core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
-                    *entry = next_table.addr() as u64 | 0b11;
+                    *entry = next_table.addr() as u64 | flags::TABLE_DESC;
                 }
                 table = next_table.ptr();
             } else {
-                table = unsafe { (*entry & !0xfff) as *mut u64 };
+                table = unsafe { (*entry & self.config.page_size.addr_mask()) as *mut u64 };
             }
         }
     }
 
     pub fn root_table(&self) -> *mut u64 {
-        self.root_table
+        return self.root_table;
     }
 
     pub fn config(&self) -> &MMUConfig {
-        &self.config
+        return &self.config;
     }
 }
 
@@ -287,7 +251,7 @@ pub fn flags_for_type(ty: u32) -> u64 {
         ramtype::KERNEL_DATA => PAGE_NOEXEC,
         ramtype::PAGE_TABLE => PAGE_NOEXEC,
         ramtype::MMIO => PAGE_DEVICE,
-        _ => PAGE_NOEXEC
+        _ => PAGE_NOEXEC,
     }
 }
 
@@ -315,20 +279,9 @@ pub unsafe fn identity_map() {
     // Attr0 = Normal memory, Inner/Outer Write-Back Non-transient
     // Attr1 = Device memory nGnRnE
     let mair_el1: u64 = 0xff | (0x00 << 8);
-    let tcr_el1 = config.tcr_el1();
 
     unsafe {
         core::arch::asm!(
-            "dsb sy",
-            "mrs x0, sctlr_el1",
-            "bic x0, x0, #1",
-            "msr sctlr_el1, x0",
-            "isb",
-
-            "tlbi vmalle1",
-            "dsb sy",
-            "isb",
-
             "msr mair_el1, {mair}",
             "msr tcr_el1, {tcr}",
             "msr ttbr0_el1, {ttbr0}",
@@ -346,7 +299,7 @@ pub unsafe fn identity_map() {
             "dsb sy",
             "isb",
             mair = in(reg) mair_el1,
-            tcr = in(reg) tcr_el1,
+            tcr = in(reg) config.tcr_el1(),
             ttbr0 = in(reg) mapper.root_table() as u64
         );
     }
