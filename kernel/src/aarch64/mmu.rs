@@ -71,7 +71,7 @@ impl MMUConfig {
 
         let mut mmfr0: u64;
         unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
-        
+
         let parange = mmfr0 & 0xf;
         let pa_bits = match parange {
             0 => 32,
