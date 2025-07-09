@@ -1,4 +1,8 @@
-use crate::{ram::{align_up, PAGE_4KIB}, sort::HeaplessSort, sysinfo::{ramtype, RAMDescriptor}};
+use crate::{
+    ram::{align_up, PAGE_4KIB},
+    sort::HeaplessSort,
+    sysinfo::{ramtype, RAMDescriptor}
+};
 use spin::Mutex;
 
 #[repr(C)]

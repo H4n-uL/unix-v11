@@ -1,4 +1,8 @@
-use crate::{device::block::BlockDevice, ram::physalloc::{AllocParams, PHYS_ALLOC}, printlnk, ram::PageAligned};
+use crate::{
+    device::block::BlockDevice,
+    printlnk,
+    ram::{physalloc::{AllocParams, PHYS_ALLOC}, PageAligned}
+};
 use super::PCI_DEVICES;
 use alloc::{format, string::String, vec::Vec};
 use nvme::{Allocator, Device};
