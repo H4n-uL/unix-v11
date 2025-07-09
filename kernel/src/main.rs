@@ -61,8 +61,8 @@ pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
     SYS_INFO.lock().init(sysinfo);
-    GLACIER.init();
     PHYS_ALLOC.init(SYS_INFO.lock().efi_ram_layout_mut());
+    GLACIER.init();
     init_metal();
     exec_aleph();
     schedule();
