@@ -14,7 +14,10 @@ extern crate alloc;
 mod device;
 mod ram; mod sort; mod sysinfo;
 
-use crate::{ram::physalloc::PHYS_ALLOC, sysinfo::SysInfo};
+use crate::{
+    ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
+    sysinfo::SysInfo
+};
 use core::panic::PanicInfo;
 use spin::Mutex;
 
@@ -58,6 +61,7 @@ pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
     SYS_INFO.lock().init(sysinfo);
+    GLACIER.init();
     PHYS_ALLOC.init(SYS_INFO.lock().efi_ram_layout_mut());
     init_metal();
     exec_aleph();
