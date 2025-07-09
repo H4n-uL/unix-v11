@@ -4,6 +4,54 @@ use crate::{
     SYS_INFO
 };
 
+#[allow(dead_code)]
+pub mod flags {
+    // Descriptor type bits [1:0]
+    pub const VALID: usize      = 1 << 0;
+    pub const TABLE_DESC: usize = 0b11; // Table descriptor (levels 0-2)
+    pub const BLOCK_DESC: usize = 0b01; // Block descriptor (levels 0-2)
+    pub const PAGE_DESC: usize  = 0b11; // Page descriptor (level 3)
+
+    // Memory attributes
+    pub const ATTR_IDX_NORMAL: usize = 0 << 2;
+    pub const ATTR_IDX_DEVICE: usize = 1 << 2;
+
+    // Access permissions
+    pub const AP_RW_EL1: usize       = 0b00 << 6;
+    pub const AP_RW_ALL: usize       = 0b01 << 6;
+    pub const AP_RO_EL1: usize       = 0b10 << 6;
+    pub const AP_RO_ALL: usize       = 0b11 << 6;
+
+    // Shareability
+    pub const SH_NONE: usize         = 0b00 << 8;
+    pub const SH_OUTER: usize        = 0b10 << 8;
+    pub const SH_INNER: usize        = 0b11 << 8;
+
+    // Other flags
+    pub const AF: usize              = 1 << 10; // Access Flag
+    pub const NG: usize              = 1 << 11; // Not global
+    pub const UXN: usize             = 1 << 54; // Unprivileged execute never
+    pub const PXN: usize             = 1 << 53; // Privileged execute never
+
+    pub const PAGE_DEFAULT: usize = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1;
+    pub const PAGE_NOEXEC: usize  = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1 | UXN | PXN;
+    pub const PAGE_DEVICE: usize  = PAGE_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_RW_EL1 | UXN | PXN;
+}
+
+pub fn flags_for_type(ty: u32) -> usize {
+    use flags::*;
+    match ty {
+        ramtype::CONVENTIONAL => PAGE_DEFAULT,
+        ramtype::BOOT_SERVICES_CODE => PAGE_DEFAULT,
+        ramtype::RUNTIME_SERVICES_CODE => PAGE_DEFAULT,
+        ramtype::KERNEL => PAGE_DEFAULT,
+        ramtype::KERNEL_DATA => PAGE_NOEXEC,
+        ramtype::PAGE_TABLE => PAGE_NOEXEC,
+        ramtype::MMIO => PAGE_DEVICE,
+        _ => PAGE_NOEXEC,
+    }
+}
+
 impl MMUCfg {
     pub fn detect() -> Self {
         let mut tcr_el1: usize;
@@ -65,60 +113,12 @@ impl MMUCfg {
     }
 }
 
-#[allow(dead_code)]
-pub mod flags {
-    // Descriptor type bits [1:0]
-    pub const VALID: u64      = 1 << 0;
-    pub const TABLE_DESC: u64 = 0b11; // Table descriptor (levels 0-2)
-    pub const BLOCK_DESC: u64 = 0b01; // Block descriptor (levels 0-2)
-    pub const PAGE_DESC: u64  = 0b11; // Page descriptor (level 3)
-
-    // Memory attributes
-    pub const ATTR_IDX_NORMAL: u64 = 0 << 2;
-    pub const ATTR_IDX_DEVICE: u64 = 1 << 2;
-
-    // Access permissions
-    pub const AP_RW_EL1: u64       = 0b00 << 6;
-    pub const AP_RW_ALL: u64       = 0b01 << 6;
-    pub const AP_RO_EL1: u64       = 0b10 << 6;
-    pub const AP_RO_ALL: u64       = 0b11 << 6;
-
-    // Shareability
-    pub const SH_NONE: u64         = 0b00 << 8;
-    pub const SH_OUTER: u64        = 0b10 << 8;
-    pub const SH_INNER: u64        = 0b11 << 8;
-
-    // Other flags
-    pub const AF: u64              = 1 << 10; // Access Flag
-    pub const NG: u64              = 1 << 11; // Not global
-    pub const UXN: u64             = 1 << 54; // Unprivileged execute never
-    pub const PXN: u64             = 1 << 53; // Privileged execute never
-
-    pub const PAGE_DEFAULT: u64 = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1;
-    pub const PAGE_NOEXEC: u64  = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1 | UXN | PXN;
-    pub const PAGE_DEVICE: u64  = PAGE_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_RW_EL1 | UXN | PXN;
-}
-
-pub fn flags_for_type(ty: u32) -> u64 {
-    use flags::*;
-    match ty {
-        ramtype::CONVENTIONAL => PAGE_DEFAULT,
-        ramtype::BOOT_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::RUNTIME_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::KERNEL => PAGE_DEFAULT,
-        ramtype::KERNEL_DATA => PAGE_NOEXEC,
-        ramtype::PAGE_TABLE => PAGE_NOEXEC,
-        ramtype::MMIO => PAGE_DEVICE,
-        _ => PAGE_NOEXEC,
-    }
-}
-
 pub unsafe fn identity_map() {
     let cfg = GLACIER.cfg();
 
     for desc in SYS_INFO.lock().efi_ram_layout() {
         let block_ty = desc.ty;
-        let addr = desc.phys_start;
+        let addr = desc.phys_start as usize;
         let size = desc.page_count as usize * PAGE_4KIB;
 
         GLACIER.map_range(addr, addr, size, flags_for_type(block_ty));
@@ -152,13 +152,7 @@ pub unsafe fn identity_map() {
             "isb",
             mair = in(reg) mair_el1,
             tcr = in(reg) cfg.tcr_el1(),
-            ttbr0 = in(reg) GLACIER.root_table() as u64
+            ttbr0 = in(reg) GLACIER.root_table()
         );
     }
-}
-
-pub fn id_map_ptr() -> *const u8 {
-    let id_map_ptr: usize;
-    unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) id_map_ptr); }
-    return (id_map_ptr & !0xfff) as *const u8;
 }

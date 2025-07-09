@@ -81,13 +81,10 @@ impl SysInfo {
         let layout_start = self.layout_ptr as u64;
         let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
 
-        let id_map_ptr = crate::arch::mmu::id_map_ptr() as u64;
-
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
             if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
-            if id_map_ptr >= desc_start && id_map_ptr < desc_end  { desc.ty = ramtype::PAGE_TABLE; }
             if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::EFI_RAM_LAYOUT; }
             #[cfg(target_arch = "x86_64")] if desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
             if RECLAMABLE.contains(&desc.ty) { desc.ty = ramtype::CONVENTIONAL; }
