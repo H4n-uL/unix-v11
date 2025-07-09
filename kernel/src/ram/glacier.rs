@@ -26,8 +26,8 @@ impl PageSize {
         *self as usize
     }
 
-    pub const fn addr_mask(&self) -> u64 {
-        !(self.size() - 1) as u64
+    pub const fn addr_mask(&self) -> usize {
+        !(self.size() - 1)
     }
 
     pub const fn shift(&self) -> u8 {
@@ -39,11 +39,7 @@ impl PageSize {
     }
 
     pub const fn index_bits(&self) -> u8 {
-        match self {
-            Self::Size4kiB  => 9,  //  512 entries
-            Self::Size16kiB => 11, // 2048 entries
-            Self::Size64kiB => 13  // 8192 entries
-        }
+        self.shift() - (usize::BITS / u8::BITS).ilog2() as u8
     }
 
     pub const fn entries_per_table(&self) -> usize {
@@ -72,7 +68,7 @@ impl MMUCfg {
         return levels;
     }
 
-    pub fn get_index(&self, level: u8, va: u64) -> usize {
+    pub fn get_index(&self, level: u8, va: usize) -> usize {
         let ps = self.page_size;
         let page_shift = ps.shift();
         let index_bits = ps.index_bits();
@@ -80,7 +76,7 @@ impl MMUCfg {
         if level >= levels { unreachable!(); }
 
         let shift = page_shift + (levels - level - 1) * index_bits;
-        return ((va >> shift) & ((1 << index_bits) - 1)) as usize;
+        return (va >> shift) & ((1 << index_bits) - 1);
     }
 
     pub fn page_size(&self) -> usize {
@@ -90,7 +86,7 @@ impl MMUCfg {
 
 struct GlacierData {
     cfg: MMUCfg,
-    root_table: *mut u64,
+    root_table: *mut usize,
     is_init: bool
 }
 
@@ -125,9 +121,9 @@ impl GlacierData {
         self.is_init = true;
     }
 
-    fn map_page(&mut self, va: u64, pa: u64, flags: u64) {
+    fn map_page(&mut self, va: usize, pa: usize, flags: usize) {
         if !self.is_init { self.init(); }
-        let page_mask = !(self.cfg.page_size() as u64 - 1);
+        let page_mask = !(self.cfg.page_size() - 1);
         let va = va & page_mask;
         let pa = pa & page_mask;
 
@@ -153,23 +149,23 @@ impl GlacierData {
 
                 unsafe {
                     core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
-                    *entry = next_table.addr() as u64 | flags::TABLE_DESC;
+                    *entry = next_table.addr() | flags::TABLE_DESC;
                 }
                 table = next_table.ptr();
             } else {
-                table = unsafe { (*entry & self.cfg.page_size.addr_mask()) as *mut u64 };
+                table = unsafe { (*entry & self.cfg.page_size.addr_mask()) as *mut usize };
             }
         }
     }
 
-    fn map_range(&mut self, va: u64, pa: u64, size: usize, flags: u64) {
+    fn map_range(&mut self, va: usize, pa: usize, size: usize, flags: usize) {
         if !self.is_init { self.init(); }
         let page_size = self.cfg.page_size();
-        let page_mask = !(page_size as u64 - 1);
+        let page_mask = !(page_size - 1);
 
-        let pa_start = (pa & page_mask) as u64;
-        let va_start = (va & page_mask) as u64;
-        let va_end = (va + size as u64 + page_size as u64 - 1) & page_mask;
+        let pa_start = pa & page_mask;
+        let va_start = va & page_mask;
+        let va_end = (va + size + page_size - 1) & page_mask;
 
         for va in (va_start..va_end).step_by(page_size) {
             let pa = pa_start + (va - va_start);
@@ -177,7 +173,7 @@ impl GlacierData {
         }
     }
 
-    fn root_table(&self) -> *mut u64 {
+    fn root_table(&self) -> *mut usize {
         return self.root_table;
     }
 
@@ -198,15 +194,15 @@ impl Glacier {
         self.0.lock().init();
     }
 
-    pub fn map_page(&self, va: u64, pa: u64, flags: u64) {
+    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
         self.0.lock().map_page(va, pa, flags);
     }
 
-    pub fn map_range(&self, va: u64, pa: u64, size: usize, flags: u64) {
+    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
         self.0.lock().map_range(va, pa, size, flags);
     }
 
-    pub fn root_table(&self) -> *mut u64 {
+    pub fn root_table(&self) -> *mut usize {
         return self.0.lock().root_table();
     }
 
