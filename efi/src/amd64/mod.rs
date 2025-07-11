@@ -1,8 +1,13 @@
-use x86_64::instructions::{hlt, interrupts};
+pub fn set_interrupts(enabled: bool) {
+    unsafe {
+        if enabled { core::arch::asm!("sti"); }
+        else { core::arch::asm!("cli"); }
+    }
+}
 
 pub fn halt() {
-    interrupts::disable();
-    hlt();
+    set_interrupts(false);
+    unsafe { core::arch::asm!("hlt"); }
 }
 
 #[inline(always)]

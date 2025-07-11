@@ -1,9 +1,13 @@
-use aarch64_cpu::{asm::wfi, registers::DAIF};
-use tock_registers::interfaces::{Readable, Writeable};
+pub fn set_interrupts(enabled: bool) {
+    unsafe {
+        if enabled { core::arch::asm!("msr daifclr, 0b1111"); }
+        else { core::arch::asm!("msr daifset, 0b1111"); }
+    }
+}
 
 pub fn halt() {
-    DAIF.set(DAIF.get() | 0b1111);
-    wfi();
+    set_interrupts(false);
+    unsafe { core::arch::asm!("wfi"); }
 }
 
 #[inline(always)]
