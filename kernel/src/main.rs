@@ -11,7 +11,7 @@
 
 extern crate alloc;
 
-mod device;
+mod arch; mod device;
 mod ram; mod sort; mod sysinfo;
 
 use crate::{
@@ -20,13 +20,6 @@ use crate::{
 };
 use core::panic::PanicInfo;
 use spin::Mutex;
-
-macro_rules! use_arch {
-    ($arch:literal, $modname:ident) => {
-        #[cfg(target_arch = $arch)] mod $modname;
-        #[cfg(target_arch = $arch)] use $modname as arch;
-    };
-}
 
 #[macro_export]
 macro_rules! printk {
@@ -41,10 +34,6 @@ macro_rules! printlnk {
     () => { $crate::printk!("\r\n"); };
     ($($arg:tt)*) => { $crate::printk!("{}\r\n", format_args!($($arg)*)) };
 }
-
-use_arch!("x86_64", amd64);
-use_arch!("aarch64", aarch64);
-use_arch!("riscv64", riscv64);
 
 fn init_metal() {
     arch::exceptions::init();
