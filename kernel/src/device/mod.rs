@@ -1,6 +1,6 @@
-mod block; mod nvme; mod vga;
+pub mod block; mod nvme; mod vga;
 
-use crate::{printk, printlnk, SYS_INFO};
+use crate::{printk, printlnk, ram::{glacier::GLACIER, PAGE_4KIB}, SYS_INFO};
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
 use alloc::{string::String, vec::Vec};
 use fdt::Fdt;
@@ -11,13 +11,13 @@ pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
-        &self, physical_address: usize, size: usize,
+        &self, physical_address: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        unsafe { PhysicalMapping::new(
+        return unsafe { PhysicalMapping::new(
             physical_address,
             core::ptr::NonNull::new(physical_address as *mut T).unwrap(),
             size, size, Self
-        ) }
+        ) };
     }
 
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
@@ -37,8 +37,12 @@ unsafe impl Sync for PciDevice {}
 #[allow(dead_code)]
 impl PciDevice {
     pub fn read(base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
-        let ptr = (base + ((bus as u64) << 20) + ((device as u64) << 15) + ((function as u64) << 12)) as *mut u32;
-        let dev = PciDevice { bus, device, function, ptr };
+        let ptr = base as usize
+            + ((bus as usize) << 20)
+            + ((device as usize) << 15)
+            + ((function as usize) << 12);
+        GLACIER.map_range(ptr, ptr, PAGE_4KIB, crate::arch::mmu::flags::PAGE_DEVICE);
+        let dev = PciDevice { bus, device, function, ptr: ptr as *mut u32 };
         if dev.vendor_id() == 0xFFFF { return None; }
         return Some(dev);
     }
@@ -196,14 +200,16 @@ pub fn scan_pci() {
 }
 
 pub fn init_acpi() {
-    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, SYS_INFO.lock().acpi_ptr) } {
+    let ptr = SYS_INFO.lock().acpi_ptr;
+    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, ptr) } {
         Ok(tables) => Some(tables),
         Err(_) => None
     };
 }
 
 pub fn init_device_tree() {
-    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(SYS_INFO.lock().dtb_ptr as *const u8) } {
+    let ptr = SYS_INFO.lock().dtb_ptr;
+    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(ptr as *const u8) } {
         Ok(devtree) => Some(devtree),
         Err(_) => None
     }

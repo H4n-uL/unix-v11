@@ -1,7 +1,7 @@
 use crate::{
     device::block::BlockDevice,
     printlnk,
-    ram::{physalloc::{AllocParams, PHYS_ALLOC}, PageAligned}
+    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
 };
 use super::PCI_DEVICES;
 use alloc::{format, string::String, vec::Vec};
@@ -83,6 +83,7 @@ pub fn init_nvme() {
             ((pci_dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)
         } else { base & !0b11 };
 
+        GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, crate::arch::mmu::flags::PAGE_DEVICE);
         let nvme_device = Device::init(mmio_addr, NVMeAlloc).unwrap();
         for ns in nvme_device.list_namespaces() {
             nvme_dev.push(NVMeBlockDevice::new(nvme_dev_low.len(), ns));

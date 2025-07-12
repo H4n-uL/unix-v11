@@ -1,4 +1,8 @@
-use crate::{device::{PciDevice, PCI_DEVICES}, printk, printlnk};
+use crate::{
+    device::{PciDevice, PCI_DEVICES},
+    printk, printlnk,
+    ram::{glacier::GLACIER, PAGE_4KIB}
+};
 use spin::Mutex;
 
 #[repr(C, packed)]
@@ -66,7 +70,7 @@ impl Vga {
         }
         edid_addr &= !0xf; // 16 byte alignment
 
-
+        GLACIER.map_range(edid_addr, edid_addr, PAGE_4KIB, crate::arch::mmu::flags::PAGE_DEVICE);
         let edid_regs = unsafe {
             core::slice::from_raw_parts(edid_addr as *mut u8, 0x400)
         };
@@ -74,19 +78,20 @@ impl Vga {
         if &edid_regs[0..8] != Self::EDID_HEADER { return None; }
 
         let timing_desc = &edid_regs[54..72];
-        let width = timing_desc[2] as u32 | ((timing_desc[4] as u32 & 0xf0) << 4);
-        let height = timing_desc[5] as u32 | ((timing_desc[7] as u32 & 0xf0) << 4);
+        let mut width = timing_desc[2] as u32 | ((timing_desc[4] as u32 & 0xf0) << 4);
+        let mut height = timing_desc[5] as u32 | ((timing_desc[7] as u32 & 0xf0) << 4);
         let width_blanking = timing_desc[3] as u32 | ((timing_desc[4] as u32 & 0x0f) << 8);
         let height_blanking = timing_desc[6] as u32 | ((timing_desc[7] as u32 & 0x0f) << 8);
-
-        printlnk!("width: {}, height: {}, width_blanking: {}, height_blanking: {}",
-                 width, height, width_blanking, height_blanking);
-
-        if width == 0 || height == 0 { return None; }
-
-        // can vary depending on the display, assuming 32 bits per pixel for now
         let pitch = width * 4;
 
+        let manufacturer_id = u16::from_be_bytes([edid_regs[8], edid_regs[9]]);
+        let c1 = (((manufacturer_id >> 10) & 0x1f) + b'A' as u16 - 1) as u8;
+        let c2 = (((manufacturer_id >> 5) & 0x1f) + b'A' as u16 - 1) as u8;
+        let c3 = ((manufacturer_id & 0x1f) + b'A' as u16 - 1) as u8;
+        if [c1, c2, c3] == "RHT".as_bytes() { (width, height) = (800, 600); }
+
+        let map_size = width as usize * height as usize * pitch as usize;
+        GLACIER.map_range(fb_addr, fb_addr, map_size, crate::arch::mmu::flags::PAGE_DEVICE);
         return Some(Vga {
             framebuffer: fb_addr as *mut u32,
             edid: edid_addr as *mut u8,
@@ -225,8 +230,6 @@ pub fn init_vga() {
                 Some(vga) => vga,
                 None => { continue; }
             };
-            // i rly hate qemu edid, it's reporting a fake resolution
-            (vga.width, vga.height) = (800, 600);
             vga.fill_screen(Colour::WHITE);
             vga.print_edid_info();
             vga.test_pattern();
