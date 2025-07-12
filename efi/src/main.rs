@@ -7,6 +7,7 @@
 #![no_std]
 #![no_main]
 
+mod arch;
 mod sysinfo;
 
 use core::panic::PanicInfo;
@@ -20,17 +21,6 @@ use uefi::{
 use xmas_elf::{program::Type, ElfFile};
 
 const PAGE_4KIB: usize = 0x1000;
-
-macro_rules! arch {
-    ($arch:literal, $modname:ident) => {
-        #[cfg(target_arch = $arch)] mod $modname;
-        #[cfg(target_arch = $arch)] use $modname as arch;
-    };
-}
-
-arch!("x86_64", amd64);
-arch!("aarch64", aarch64);
-arch!("riscv64", riscv64);
 
 #[repr(C)]
 pub struct RelaEntry {
