@@ -12,7 +12,7 @@ pub mod flags {
     pub const BLOCK_DESC: usize = 0b01; // Block descriptor (levels 0-2)
     pub const PAGE_DESC: usize  = 0b11; // Page descriptor (level 3)
 
-    // Memory attributes
+    // Attributes
     pub const ATTR_IDX_NORMAL: usize = 0 << 2;
     pub const ATTR_IDX_DEVICE: usize = 1 << 2;
 
