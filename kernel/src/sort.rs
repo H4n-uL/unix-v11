@@ -28,7 +28,7 @@ fn block_merge_sort<T, F>(arr: &mut [T], cmp: &mut F)
 where F: FnMut(&T, &T) -> Ordering {
     let len = arr.len();
     if len <= 16 { insertion_sort(arr, cmp); return; }
-    let block_size = isqrt(len).max(16);
+    let block_size = len.isqrt().max(16);
 
     let mut width = 1;
     while width < len {
@@ -116,14 +116,5 @@ where F: FnMut(&T, &T) -> Ordering {
         while j > 0 && cmp(&arr[j - 1], &arr[j]) == Ordering::Greater {
             arr.swap(j - 1, j); j -= 1;
         }
-    }
-}
-
-fn isqrt(n: usize) -> usize {
-    if n < 2 { return n; }
-    let mut x = 1 << ((n.ilog2() + 1) >> 1);
-    loop {
-        let y = (x + n / x) >> 1;
-        if y >= x { return x; } x = y;
     }
 }
