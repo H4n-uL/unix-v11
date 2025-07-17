@@ -1,4 +1,4 @@
-pub mod exceptions; pub mod mmu;
+/* pub mod exceptions; */ pub mod mmu;
 
 use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
 
