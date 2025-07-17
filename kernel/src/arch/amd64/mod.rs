@@ -1,4 +1,4 @@
-pub mod exceptions; pub mod mmu;
+/* pub mod exceptions; */ pub mod mmu;
 
 use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
 
@@ -75,10 +75,6 @@ pub fn serial_putchar(byte: u8) {
             out("al") _
         );
     }
-}
-
-pub fn serial_puts(s: &str) {
-    for byte in s.bytes() { serial_putchar(byte); }
 }
 
 pub struct SerialWriter;
