@@ -113,7 +113,7 @@ impl GlacierData {
         let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
-                .as_type(ramtype::PAGE_TABLE)
+                .as_type(ramtype::KERNEL_PAGE_TABLE)
         ).expect("Failed to allocate root page table");
 
         unsafe { core::ptr::write_bytes(root_table.ptr::<u8>(), 0, table_size); }
@@ -144,7 +144,7 @@ impl GlacierData {
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
-                        .as_type(ramtype::PAGE_TABLE)
+                        .as_type(ramtype::KERNEL_PAGE_TABLE)
                 ).expect("Failed to allocate page table");
 
                 unsafe {
