@@ -6,8 +6,6 @@
 
 #![no_std]
 #![no_main]
-#![feature(abi_x86_interrupt)]
-#![feature(abi_riscv_interrupt)]
 
 extern crate alloc;
 
@@ -36,7 +34,7 @@ macro_rules! printlnk {
 }
 
 fn init_metal() {
-    arch::exceptions::init();
+    // arch::exceptions::init();
     arch::init_serial();
     printlnk!("Uniplexed Information and Computing Service Version 11");
     ram::init_ram();
