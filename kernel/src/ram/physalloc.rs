@@ -1,7 +1,7 @@
 use crate::{
     ram::{align_up, PAGE_4KIB},
     sort::HeaplessSort,
-    sysinfo::{ramtype, RAMDescriptor}
+    sysinfo::{ramtype, RAMDescriptor, NON_RAM}
 };
 use spin::Mutex;
 
@@ -354,7 +354,7 @@ impl PhysAlloc {
     }
 
     pub fn total(&self) -> usize {
-        return self.0.lock().size_filter(|block| block.ty() == ramtype::CONVENTIONAL);
+        return self.0.lock().size_filter(|block| !NON_RAM.contains(&block.ty()));
     }
 
     pub fn sort(&self) { self.0.lock().sort(); }

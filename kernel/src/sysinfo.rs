@@ -47,7 +47,8 @@ pub mod ramtype {
 
     pub const KERNEL_DATA          : u32 = 0x44415441;
     pub const EFI_RAM_LAYOUT       : u32 = 0x524c594f;
-    pub const PAGE_TABLE           : u32 = 0x766d6170;
+    pub const KERNEL_PAGE_TABLE    : u32 = 0x929b4000;
+    pub const USER_PAGE_TABLE      : u32 = 0xba9b4000;
     pub const KERNEL               : u32 = 0xffffffff;
 }
 
@@ -56,6 +57,12 @@ const RECLAMABLE: &[u32] = &[
     ramtype::LOADER_DATA,
     ramtype::BOOT_SERVICES_CODE,
     ramtype::BOOT_SERVICES_DATA
+];
+
+pub const NON_RAM: &[u32] = &[
+    ramtype::RESERVED,
+    ramtype::MMIO,
+    ramtype::MMIO_PORT_SPACE
 ];
 
 unsafe impl Sync for SysInfo {}
