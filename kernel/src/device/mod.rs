@@ -236,6 +236,5 @@ pub fn init_device() {
     }
 
     nvme::init_nvme();
-    nvme::test_nvme();
     vga::init_vga();
 }
