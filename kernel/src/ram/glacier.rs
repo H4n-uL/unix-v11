@@ -31,11 +31,7 @@ impl PageSize {
     }
 
     pub const fn shift(&self) -> u8 {
-        match self {
-            Self::Size4kiB  => 12,
-            Self::Size16kiB => 14,
-            Self::Size64kiB => 16
-        }
+        self.size().ilog2() as u8
     }
 
     pub const fn index_bits(&self) -> u8 {
