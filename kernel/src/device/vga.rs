@@ -72,7 +72,7 @@ impl Vga {
 
         GLACIER.map_range(edid_addr, edid_addr, PAGE_4KIB, crate::arch::mmu::flags::PAGE_DEVICE);
         let edid_regs = unsafe {
-            core::slice::from_raw_parts(edid_addr as *mut u8, 0x400)
+            core::slice::from_raw_parts(edid_addr as *mut u8, PAGE_4KIB)
         };
 
         if &edid_regs[0..8] != Self::EDID_HEADER { return None; }
@@ -83,12 +83,7 @@ impl Vga {
         let width_blanking = timing_desc[3] as u32 | ((timing_desc[4] as u32 & 0x0f) << 8);
         let height_blanking = timing_desc[6] as u32 | ((timing_desc[7] as u32 & 0x0f) << 8);
         let pitch = width * 4;
-
-        let manufacturer_id = u16::from_be_bytes([edid_regs[8], edid_regs[9]]);
-        let c1 = (((manufacturer_id >> 10) & 0x1f) + b'A' as u16 - 1) as u8;
-        let c2 = (((manufacturer_id >> 5) & 0x1f) + b'A' as u16 - 1) as u8;
-        let c3 = ((manufacturer_id & 0x1f) + b'A' as u16 - 1) as u8;
-        if [c1, c2, c3] == "RHT".as_bytes() { (width, height) = (800, 600); }
+        if dev.vendor_id() == 0x1234 && dev.device_id() == 0x1111 { (width, height) = (800, 600); }
 
         let map_size = width as usize * height as usize * pitch as usize;
         GLACIER.map_range(fb_addr, fb_addr, map_size, crate::arch::mmu::flags::PAGE_DEVICE);
@@ -166,7 +161,7 @@ impl Vga {
     }
 
     pub fn edid_regs(&self) -> &[u8] {
-        unsafe { core::slice::from_raw_parts(self.edid(), 0x400) }
+        unsafe { core::slice::from_raw_parts(self.edid(), 0x1000) }
     }
 
     pub fn print_edid_info(&self) {
@@ -226,14 +221,12 @@ pub static VGA_DEVICE: Mutex<Option<Vga>> = Mutex::new(None);
 pub fn init_vga() {
     for dev in PCI_DEVICES.lock().iter() {
         if dev.is_vga() {
-            let mut vga = match Vga::new(dev) {
+            let vga = match Vga::new(dev) {
                 Some(vga) => vga,
                 None => { continue; }
             };
             vga.fill_screen(Colour::WHITE);
-            vga.print_edid_info();
             vga.test_pattern();
-            draw_rect(100, 100, 200, 150, Colour::RED);
             *VGA_DEVICE.lock() = Some(vga);
         }
     }
