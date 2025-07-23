@@ -17,10 +17,9 @@ pub mod flags {
     pub const ATTR_IDX_DEVICE: usize = 1 << 2;
 
     // Access permissions
-    pub const AP_RW_EL1: usize       = 0b00 << 6;
-    pub const AP_RW_ALL: usize       = 0b01 << 6;
-    pub const AP_RO_EL1: usize       = 0b10 << 6;
-    pub const AP_RO_ALL: usize       = 0b11 << 6;
+    pub const AP_EL1: usize          = 0 << 6; // EL1 only
+    pub const AP_EL0: usize          = 1 << 6; // Both EL1 and EL0
+    pub const READ_ONLY: usize       = 1 << 7;
 
     // Shareability
     pub const SH_NONE: usize         = 0b00 << 8;
@@ -33,9 +32,9 @@ pub mod flags {
     pub const UXN: usize             = 1 << 54; // Unprivileged execute never
     pub const PXN: usize             = 1 << 53; // Privileged execute never
 
-    pub const PAGE_DEFAULT: usize = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1;
-    pub const PAGE_NOEXEC: usize  = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_RW_EL1 | UXN | PXN;
-    pub const PAGE_DEVICE: usize  = PAGE_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_RW_EL1 | UXN | PXN;
+    pub const PAGE_DEFAULT: usize = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
+    pub const PAGE_NOEXEC: usize  = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
+    pub const PAGE_DEVICE: usize  = PAGE_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1 | UXN | PXN;
 }
 
 pub fn flags_for_type(ty: u32) -> usize {
