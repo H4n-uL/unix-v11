@@ -1,7 +1,8 @@
-//!          Uniplexed Information and Computing Service Version 11          !//
+//!                       The UNIX Time-Sharing System                       !//
+//!                             Eleventh Edition                             !//
 //!
 //! Crafted by HaמuL in 2025
-//! Description: Kernel of Research UNIX Version 11
+//! Description: Kernel of UNIX Version 11
 //! Licence: Public Domain
 
 #![no_std]
