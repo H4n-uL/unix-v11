@@ -47,7 +47,7 @@ pub fn flags_for_type(ty: u32) -> usize {
         ramtype::KERNEL_DATA => PAGE_NOEXEC,
         ramtype::KERNEL_PAGE_TABLE => PAGE_NOEXEC,
         ramtype::MMIO => PAGE_DEVICE,
-        _ => PAGE_NOEXEC,
+        _ => PAGE_NOEXEC
     }
 }
 
