@@ -58,8 +58,9 @@ where F: FnMut(&T, &T) -> Ordering {
             let left_block_end = (left_pos + block_size).min(mid);
             let right_block_end = (right_pos + block_size).min(end);
 
-            if cmp(&arr[left_pos], &arr[right_pos]) != Ordering::Greater { left_pos = left_block_end; }
-            else {
+            if cmp(&arr[left_pos], &arr[right_pos]) != Ordering::Greater {
+                left_pos = left_block_end;
+            } else {
                 rotate_merge(arr, left_pos, right_pos, right_block_end, cmp);
                 let moved_len = right_block_end - right_pos;
                 left_pos += moved_len;
