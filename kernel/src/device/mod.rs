@@ -11,9 +11,6 @@ use spin::Mutex;
 pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
-    // The `#[inline(always)]` attribute is *required* here because of an
-    // AArch64 codegen bug making `phys_addr` as zero when not inlined.
-    #[inline(always)]
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
@@ -24,7 +21,6 @@ impl AcpiHandler for KernelAcpiHandler {
         ) };
     }
 
-    #[inline(always)]
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
