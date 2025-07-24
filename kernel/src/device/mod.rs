@@ -1,6 +1,7 @@
 pub mod block; mod nvme; mod vga;
 
 use crate::{printk, printlnk, ram::{glacier::GLACIER, PAGE_4KIB}, SYS_INFO};
+use core::ptr::NonNull;
 use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
 use alloc::{string::String, vec::Vec};
 use fdt::Fdt;
@@ -11,11 +12,11 @@ pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
-        &self, physical_address: usize, size: usize
+        &self, physical_start: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
+        GLACIER.map_range(physical_start, physical_start, size, crate::arch::mmu::flags::PAGE_DEVICE);
         return unsafe { PhysicalMapping::new(
-            physical_address,
-            core::ptr::NonNull::new(physical_address as *mut T).unwrap(),
+            physical_start, NonNull::new_unchecked(physical_start as *mut T),
             size, size, Self
         ) };
     }
