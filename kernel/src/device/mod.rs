@@ -11,6 +11,9 @@ use spin::Mutex;
 pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
+    // Compiler opt bug workaround for AArch64
+    // i don't know why it happens and why it works
+    #[inline(always)]
     unsafe fn map_physical_region<T>(
         &self, physical_start: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
@@ -21,6 +24,7 @@ impl AcpiHandler for KernelAcpiHandler {
         ) };
     }
 
+    #[inline(always)]
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
