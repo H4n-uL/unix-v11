@@ -40,6 +40,7 @@ fn init_metal() {
     printlnk!("Uniplexed Information and Computing Service Version 11");
     ram::init_ram();
     device::init_device();
+    filesys::init_filesys();
 }
 fn exec_aleph() {}
 fn schedule() -> ! { loop { arch::halt(); } }
