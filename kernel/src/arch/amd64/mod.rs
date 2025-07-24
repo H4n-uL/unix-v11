@@ -4,8 +4,11 @@ use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
 
 pub fn set_interrupts(enabled: bool) {
     unsafe {
-        if enabled { core::arch::asm!("sti"); }
-        else { core::arch::asm!("cli"); }
+        if enabled {
+            core::arch::asm!("sti");
+        } else {
+            core::arch::asm!("cli");
+        }
     }
 }
 
