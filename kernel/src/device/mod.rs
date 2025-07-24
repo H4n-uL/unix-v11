@@ -11,15 +11,15 @@ use spin::Mutex;
 pub struct KernelAcpiHandler;
 
 impl AcpiHandler for KernelAcpiHandler {
-    // Compiler opt bug workaround for AArch64
-    // i don't know why it happens and why it works
+    // The `#[inline(always)]` attribute is *required* here because of an
+    // AArch64 codegen bug making `phys_addr` as zero when not inlined.
     #[inline(always)]
     unsafe fn map_physical_region<T>(
-        &self, physical_start: usize, size: usize
+        &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        GLACIER.map_range(physical_start, physical_start, size, crate::arch::mmu::flags::PAGE_DEVICE);
+        GLACIER.map_range(phys_addr, phys_addr, size, crate::arch::mmu::flags::PAGE_DEVICE);
         return unsafe { PhysicalMapping::new(
-            physical_start, NonNull::new_unchecked(physical_start as *mut T),
+            phys_addr, NonNull::new_unchecked(phys_addr as *mut T),
             size, size, Self
         ) };
     }
