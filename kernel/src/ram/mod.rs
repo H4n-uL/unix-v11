@@ -10,10 +10,9 @@ use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
 use linked_list_allocator::LockedHeap;
 
+pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x100000;
 pub const HEAP_SIZE: usize = 0x100000;
-
-pub const PAGE_4KIB: usize = 0x1000;
 
 pub struct PageAligned {
     ptr: *mut u8,
