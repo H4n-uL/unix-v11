@@ -222,6 +222,9 @@ impl PhysAllocData {
 
     fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
         let args = args.aligned();
+        if NON_RAM.contains(&args.from_type) || NON_RAM.contains(&args.as_type) {
+            return None; // Cannot allocate from or as non-RAM types
+        }
         let ptr = match args.addr {
             Some(addr) => addr,
             None => self.find_free_ram(args)?.ptr()
