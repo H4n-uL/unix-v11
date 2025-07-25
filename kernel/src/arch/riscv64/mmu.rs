@@ -7,10 +7,10 @@ use crate::{
 #[allow(dead_code)]
 pub mod flags {
     // Descriptor type
-    pub const VALID: usize       = 1 << 0; // V bit - Present
-    const READABLE: usize    = 1 << 1; // R bit
-    const WRITABLE: usize    = 1 << 2; // W bit
-    const EXECUTABLE: usize  = 1 << 3; // X bit
+    pub const VALID: usize   = 1 << 0; // V bit - Present
+    const READ: usize        = 1 << 1; // R bit
+    const WRITE: usize       = 1 << 2; // W bit
+    const EXEC: usize        = 1 << 3; // X bit
     const USER: usize        = 1 << 4; // U bit - User accessible
     const GLOBAL: usize      = 1 << 5; // G bit
     const AF: usize          = 1 << 6; // A bit - Accessed flag
@@ -20,14 +20,10 @@ pub mod flags {
     const ATTR_NORMAL: usize = 0 << 8; // Normal (cacheable)
     const ATTR_DEVICE: usize = 1 << 8; // Device (uncached)
 
-    // Access permissions
-    const AP_EL1: usize      = 0;    // EL1 only
-    const AP_ALL: usize      = USER; // Both EL1 and EL0
-
     pub const NEXT_TABLE: usize    = VALID;
-    pub const PAGE_DEFAULT: usize  = VALID | READABLE | WRITABLE | EXECUTABLE | AF | ATTR_NORMAL | AP_EL1;
-    pub const PAGE_NOEXEC: usize   = VALID | READABLE | WRITABLE | AF | ATTR_NORMAL | AP_EL1;
-    pub const PAGE_DEVICE: usize   = VALID | READABLE | WRITABLE | AF | ATTR_DEVICE | AP_EL1;
+    pub const PAGE_DEFAULT: usize  = VALID | READ | WRITE | EXEC | AF | ATTR_NORMAL;
+    pub const PAGE_NOEXEC: usize   = VALID | READ | WRITE | AF | ATTR_NORMAL;
+    pub const PAGE_DEVICE: usize   = VALID | READ | WRITE | AF | ATTR_DEVICE;
     pub const LARGE_DEFAULT: usize = PAGE_DEFAULT;
     pub const LARGE_NOEXEC: usize  = PAGE_NOEXEC;
     pub const LARGE_DEVICE: usize  = PAGE_DEVICE;
