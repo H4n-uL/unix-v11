@@ -7,34 +7,36 @@ use crate::{
 #[allow(dead_code)]
 pub mod flags {
     // Descriptor type bits [1:0]
-    pub const VALID: usize      = 1 << 0;
-    pub const TABLE_DESC: usize = 0b11; // Table descriptor (levels 0-2)
-    pub const BLOCK_DESC: usize = 0b01; // Block descriptor (levels 0-2)
-    pub const PAGE_DESC: usize  = 0b11; // Page descriptor (level 3)
+    pub const VALID: usize       = 1 << 0;  // Present bit
+    const AF: usize              = 1 << 10; // Access Flag
+    const NEXT_DESC: usize       = 1 << 1;  // Next descriptor bit
 
     // Attributes
-    pub const ATTR_IDX_NORMAL: usize = 0 << 2;
-    pub const ATTR_IDX_DEVICE: usize = 1 << 2;
+    const ATTR_IDX_NORMAL: usize = 0 << 2;
+    const ATTR_IDX_DEVICE: usize = 1 << 2;
 
     // Access permissions
-    pub const AP_EL1: usize          = 0 << 6; // EL1 only
-    pub const AP_EL0: usize          = 1 << 6; // Both EL1 and EL0
-    pub const READ_ONLY: usize       = 1 << 7;
+    const AP_EL1: usize          = 0 << 6; // EL1 only
+    const AP_EL0: usize          = 1 << 6; // Both EL1 and EL0
+    const READ_ONLY: usize       = 1 << 7;
 
     // Shareability
-    pub const SH_NONE: usize         = 0b00 << 8;
-    pub const SH_OUTER: usize        = 0b10 << 8;
-    pub const SH_INNER: usize        = 0b11 << 8;
+    const SH_NONE: usize         = 0b00 << 8;
+    const SH_OUTER: usize        = 0b10 << 8;
+    const SH_INNER: usize        = 0b11 << 8;
 
     // Other flags
-    pub const AF: usize              = 1 << 10; // Access Flag
-    pub const NG: usize              = 1 << 11; // Not global
-    pub const UXN: usize             = 1 << 54; // Unprivileged execute never
-    pub const PXN: usize             = 1 << 53; // Privileged execute never
+    const NG: usize              = 1 << 11; // Not global
+    const UXN: usize             = 1 << 54; // Unprivileged execute never
+    const PXN: usize             = 1 << 53; // Privileged execute never
 
-    pub const PAGE_DEFAULT: usize = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
-    pub const PAGE_NOEXEC: usize  = PAGE_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
-    pub const PAGE_DEVICE: usize  = PAGE_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1 | UXN | PXN;
+    pub const NEXT_TABLE: usize    = VALID | NEXT_DESC;
+    pub const PAGE_DEFAULT: usize  = VALID | NEXT_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
+    pub const PAGE_NOEXEC: usize   = VALID | NEXT_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
+    pub const PAGE_DEVICE: usize   = VALID | NEXT_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1 | UXN | PXN;
+    pub const LARGE_DEFAULT: usize = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
+    pub const LARGE_NOEXEC: usize  = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
+    pub const LARGE_DEVICE: usize  = VALID | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1
 }
 
 pub fn flags_for_type(ty: u32) -> usize {

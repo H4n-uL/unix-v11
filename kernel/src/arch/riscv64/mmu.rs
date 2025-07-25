@@ -8,29 +8,29 @@ use crate::{
 pub mod flags {
     // Descriptor type
     pub const VALID: usize       = 1 << 0; // V bit - Present
-    pub const READABLE: usize    = 1 << 1; // R bit
-    pub const WRITABLE: usize    = 1 << 2; // W bit
-    pub const EXECUTABLE: usize  = 1 << 3; // X bit
-    pub const USER: usize        = 1 << 4; // U bit - User accessible
-    pub const GLOBAL: usize      = 1 << 5; // G bit
-    pub const AF: usize          = 1 << 6; // A bit - Accessed flag
-    pub const DIRTY: usize       = 1 << 7; // D bit
-
-    // Unified descriptors for compatibility
-    pub const TABLE_DESC: usize  = VALID;                       // Non-leaf: only V bit set
-    pub const PAGE_DESC: usize   = VALID | READABLE | WRITABLE; // Leaf: V+R+W
+    const READABLE: usize    = 1 << 1; // R bit
+    const WRITABLE: usize    = 1 << 2; // W bit
+    const EXECUTABLE: usize  = 1 << 3; // X bit
+    const USER: usize        = 1 << 4; // U bit - User accessible
+    const GLOBAL: usize      = 1 << 5; // G bit
+    const AF: usize          = 1 << 6; // A bit - Accessed flag
+    const DIRTY: usize       = 1 << 7; // D bit
 
     // Attributes
-    pub const ATTR_NORMAL: usize = 0 << 8; // Normal (cacheable)
-    pub const ATTR_DEVICE: usize = 1 << 8; // Device (uncached)
+    const ATTR_NORMAL: usize = 0 << 8; // Normal (cacheable)
+    const ATTR_DEVICE: usize = 1 << 8; // Device (uncached)
 
     // Access permissions
-    pub const AP_EL1: usize      = 0;    // EL1 only
-    pub const AP_ALL: usize      = USER; // Both EL1 and EL0
+    const AP_EL1: usize      = 0;    // EL1 only
+    const AP_ALL: usize      = USER; // Both EL1 and EL0
 
-    pub const PAGE_DEFAULT: usize = PAGE_DESC | EXECUTABLE | AF | ATTR_NORMAL | AP_EL1;
-    pub const PAGE_NOEXEC: usize  = PAGE_DESC | AF | ATTR_NORMAL | AP_EL1;
-    pub const PAGE_DEVICE: usize  = PAGE_DESC | AF | ATTR_DEVICE | AP_EL1;
+    pub const NEXT_TABLE: usize    = VALID;
+    pub const PAGE_DEFAULT: usize  = VALID | READABLE | WRITABLE | EXECUTABLE | AF | ATTR_NORMAL | AP_EL1;
+    pub const PAGE_NOEXEC: usize   = VALID | READABLE | WRITABLE | AF | ATTR_NORMAL | AP_EL1;
+    pub const PAGE_DEVICE: usize   = VALID | READABLE | WRITABLE | AF | ATTR_DEVICE | AP_EL1;
+    pub const LARGE_DEFAULT: usize = PAGE_DEFAULT;
+    pub const LARGE_NOEXEC: usize  = PAGE_NOEXEC;
+    pub const LARGE_DEVICE: usize  = PAGE_DEVICE;
 }
 
 pub fn flags_for_type(ty: u32) -> usize {
