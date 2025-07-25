@@ -36,7 +36,7 @@ pub mod flags {
     pub const PAGE_DEVICE: usize   = VALID | NEXT_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1 | UXN | PXN;
     pub const LARGE_DEFAULT: usize = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
     pub const LARGE_NOEXEC: usize  = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
-    pub const LARGE_DEVICE: usize  = VALID | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1
+    pub const LARGE_DEVICE: usize  = VALID | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1;
 }
 
 pub fn flags_for_type(ty: u32) -> usize {
