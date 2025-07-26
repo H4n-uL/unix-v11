@@ -145,7 +145,7 @@ impl GlacierData {
 
                 unsafe {
                     core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
-                    *entry = next_table.addr() | flags::TABLE_DESC;
+                    *entry = next_table.addr() | flags::NEXT_TABLE;
                 }
                 table = next_table.ptr();
             } else {
