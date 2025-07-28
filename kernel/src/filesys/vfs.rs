@@ -1,6 +1,6 @@
 use core::fmt;
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
-use spin::{Mutex, RwLock};
+use spin::{Lazy, Mutex, RwLock};
 
 pub type Result<T> = core::result::Result<T, FsError>;
 
@@ -355,15 +355,12 @@ fn split_path(path: &str) -> Result<(&str, &str)> {
     }
 }
 
-pub static VFS: Mutex<Option<VirtualFileSystem>> = Mutex::new(None);
-
-pub fn init_vfs() {
-    *VFS.lock() = Some(VirtualFileSystem::new());
-}
+pub static VFS: Lazy<Mutex<VirtualFileSystem>> = Lazy::new(|| {
+    Mutex::new(VirtualFileSystem::new())
+});
 
 pub fn with_vfs<F, R>(f: F) -> Result<R>
 where F: FnOnce(&VirtualFileSystem) -> Result<R> {
     let vfs = VFS.lock();
-    let vfs = vfs.as_ref().ok_or(FsError::NotFound)?;
-    return f(vfs);
+    return f(&vfs);
 }

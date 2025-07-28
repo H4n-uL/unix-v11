@@ -1,9 +1,10 @@
-pub mod vfs;
 pub mod devfs;
+pub mod vfs;
 
 use crate::{
     device::block::BLOCK_DEVICES,
-    filesys::{devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice}, vfs::NodeType}
+    filesys::{devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice}, vfs::NodeType},
+    printlnk
 };
 use alloc::{format, sync::Arc};
 
@@ -83,8 +84,6 @@ impl Device for BlockDeviceWrapper {
 }
 
 pub fn init_filesys() {
-    vfs::init_vfs();
-
     let devfs = Arc::new(DevFS::new());
     devfs.add_device("null", Arc::new(NullDevice), NodeType::CharDevice)
         .expect("Failed to add null device");
