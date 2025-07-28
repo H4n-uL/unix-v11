@@ -50,7 +50,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-ARCH=$(to_lower "$1")
+ARCH=`to_lower "$1"`
 case $ARCH in
     help)
         usage
@@ -94,7 +94,7 @@ esac
 shift
 
 while [ $# -gt 0 ]; do
-    case $(to_lower "$1") in
+    case `to_lower "$1"` in
         -disk)
             if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
                 echo "Error: -disk requires a size argument"
@@ -167,18 +167,18 @@ DISK_NAME="unixv11-${DISK_ARCH}.disk"
 dd if=/dev/zero of=$DISK_NAME bs=1M count=$DISK_SIZE status=none 2>/dev/null || \
 dd if=/dev/zero of=$DISK_NAME bs=1m count=$DISK_SIZE status=none
 
-if [ "$(uname)" = "Darwin" ]; then
-    diskno=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount $DISK_NAME | head -n 1 | awk '{print $1}')
+if [ "`uname`" = "Darwin" ]; then
+    diskno=`hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount $DISK_NAME | head -n 1 | awk '{print $1}'`
     diskutil eraseDisk FAT32 UNIXV11EFI GPTFormat $diskno > /dev/null
     cp -R dist/* /Volumes/UNIXV11EFI/
     hdiutil detach $diskno > /dev/null
 else
-    LOOP_DEV=$(sudo losetup -f --show $DISK_NAME)
+    LOOP_DEV=`sudo losetup -f --show $DISK_NAME`
     sudo parted -s $LOOP_DEV mklabel gpt
     sudo parted -s $LOOP_DEV mkpart primary fat32 1MiB 100%
     sudo mkfs.vfat -n UNIXV11EFI ${LOOP_DEV}p1 > /dev/null
 
-    MOUNT_DIR=$(mktemp -d)
+    MOUNT_DIR=`mktemp -d`
     sudo mount ${LOOP_DEV}p1 $MOUNT_DIR
     sudo cp -R dist/* $MOUNT_DIR/
     sudo umount $MOUNT_DIR
