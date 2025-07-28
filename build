@@ -177,7 +177,7 @@ else
     sudo parted -s $LOOP_DEV mklabel gpt
     sudo parted -s $LOOP_DEV mkpart primary fat32 1MiB 100%
     sudo mkfs.vfat -n UNIXV11EFI ${LOOP_DEV}p1 > /dev/null
-    
+
     MOUNT_DIR=$(mktemp -d)
     sudo mount ${LOOP_DEV}p1 $MOUNT_DIR
     sudo cp -R dist/* $MOUNT_DIR/
