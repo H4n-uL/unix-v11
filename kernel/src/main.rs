@@ -37,7 +37,7 @@ macro_rules! printlnk {
 fn init_metal() {
     // arch::exceptions::init();
     arch::init_serial();
-    printlnk!("Uniplexed Information and Computing Service Version 11");
+    printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
     ram::init_ram();
     device::init_device();
 }
