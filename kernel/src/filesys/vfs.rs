@@ -1,6 +1,6 @@
 use core::fmt;
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
-use spin::{Lazy, Mutex, RwLock};
+use spin::{Mutex, RwLock};
 
 pub type Result<T> = core::result::Result<T, FsError>;
 
@@ -209,25 +209,28 @@ struct MountPoint {
 }
 
 pub struct VirtualFileSystem {
-    root: Arc<VfsDir>,
+    root: Option<Arc<VfsDir>>,
     mounts: RwLock<Vec<MountPoint>>
 }
 
 impl VirtualFileSystem {
-    pub fn new() -> Self {
+    const fn empty() -> Self {
+        return Self {
+            root: None,
+            mounts: RwLock::new(Vec::new())
+        };
+    }
+
+    pub fn init(&mut self) {
         let root = VfsDir::new("/".to_string());
 
-        // Create standard directories
         let dirs = ["dev", "bin", "etc", "tmp", "usr", "var"];
         for dir in dirs.iter() {
             let new_dir = VfsDir::new(dir.to_string());
             root.add_child(dir.to_string(), new_dir as Arc<dyn VNode>).unwrap();
         }
 
-        return Self {
-            root,
-            mounts: RwLock::new(Vec::new())
-        };
+        self.root = Some(root);
     }
 
     pub fn mount(&self, path: &str, fs: Arc<dyn FileSystem>) -> Result<()> {
@@ -251,14 +254,18 @@ impl VirtualFileSystem {
     }
 
     pub fn lookup(&self, path: &str) -> Result<Arc<dyn VNode>> {
+        if self.root.is_none() {
+            return Err(FsError::NotFound);
+        }
+        let root = self.root.clone();
         if path == "/" {
-            return Ok(self.root.clone() as Arc<dyn VNode>);
+            return Ok(root.unwrap() as Arc<dyn VNode>);
         }
 
         let path = path.trim_start_matches('/');
         let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-        let mut current = self.root.clone() as Arc<dyn VNode>;
+        let mut current = root.unwrap() as Arc<dyn VNode>;
         let mut current_path = String::new();
 
         for component in components {
@@ -355,9 +362,7 @@ fn split_path(path: &str) -> Result<(&str, &str)> {
     }
 }
 
-pub static VFS: Lazy<Mutex<VirtualFileSystem>> = Lazy::new(|| {
-    Mutex::new(VirtualFileSystem::new())
-});
+pub static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
 
 pub fn with_vfs<F, R>(f: F) -> Result<R>
 where F: FnOnce(&VirtualFileSystem) -> Result<R> {
