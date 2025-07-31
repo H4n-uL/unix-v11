@@ -222,8 +222,9 @@ impl VirtualFileSystem {
     }
 
     pub fn init(&mut self) {
-        let root = VfsDir::new("/".to_string());
+        if self.root.is_some() { return; }
 
+        let root = VfsDir::new("/".to_string());
         let dirs = ["dev", "bin", "etc", "tmp", "usr", "var"];
         for dir in dirs.iter() {
             let new_dir = VfsDir::new(dir.to_string());
