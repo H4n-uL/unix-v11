@@ -1,6 +1,6 @@
 use crate::{arch, filesys::vfs::{self, DirEntry, FileSystem, FsError, Metadata, NodeType, Result, VNode}};
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
-use spin::{RwLock};
+use spin::RwLock;
 
 pub trait Device: Send + Sync {
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize>;
