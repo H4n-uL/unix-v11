@@ -7,8 +7,10 @@ edition = "2024"
 uefi = "0.35.0"
 xmas-elf = "0.10.0"
 
-[profile.dev]
-panic = "abort"
+[[bin]]
+name = "unix-v11-efi"
+path = "src/main.rs"
 
-[profile.release]
-panic = "abort"
+[lib]
+name = "unix_v11_efi"
+path = "src/main.rs"
