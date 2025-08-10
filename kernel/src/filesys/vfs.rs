@@ -1,39 +1,6 @@
-use core::fmt;
+use crate::filesys::{FsError, Result};
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::{Mutex, RwLock};
-
-pub type Result<T> = core::result::Result<T, FsError>;
-
-#[derive(Debug, Clone)]
-pub enum FsError {
-    NotFound,
-    PermissionDenied,
-    NotDirectory,
-    NotFile,
-    AlreadyExists,
-    DirectoryNotEmpty,
-    InvalidPath,
-    IoError(String),
-    NotSupported,
-    DeviceError(String)
-}
-
-impl fmt::Display for FsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FsError::NotFound => write!(f, "File not found"),
-            FsError::PermissionDenied => write!(f, "Permission denied"),
-            FsError::NotDirectory => write!(f, "Not a directory"),
-            FsError::NotFile => write!(f, "Not a file"),
-            FsError::AlreadyExists => write!(f, "Already exists"),
-            FsError::DirectoryNotEmpty => write!(f, "Directory not empty"),
-            FsError::InvalidPath => write!(f, "Invalid path"),
-            FsError::IoError(s) => write!(f, "I/O error: {}", s),
-            FsError::NotSupported => write!(f, "Operation not supported"),
-            FsError::DeviceError(s) => write!(f, "Device error: {}", s)
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeType {
@@ -223,19 +190,15 @@ impl VirtualFileSystem {
 
     pub fn init(&mut self) {
         if self.root.is_some() { return; }
-
-        let root = VfsDir::new("/".to_string());
-        let dirs = ["dev", "bin", "etc", "tmp", "usr", "var"];
-        for dir in dirs.iter() {
-            let new_dir = VfsDir::new(dir.to_string());
-            root.add_child(dir.to_string(), new_dir as Arc<dyn VNode>).unwrap();
-        }
-
-        self.root = Some(root);
+        self.root = Some(VfsDir::new("/".to_string()));
     }
 
     pub fn mount(&self, path: &str, fs: Arc<dyn FileSystem>) -> Result<()> {
-        self.lookup(path)?;
+        let mount_point = self.lookup(path)?;
+        if mount_point.metadata()?.node_type != NodeType::Directory {
+            return Err(FsError::NotDirectory);
+        }
+
         let mut mounts = self.mounts.write();
         if mounts.iter().any(|m| m.path == path) {
             return Err(FsError::AlreadyExists);
@@ -307,6 +270,8 @@ impl VirtualFileSystem {
     }
 }
 
+pub static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
+
 pub struct File {
     vnode: Arc<dyn VNode>,
     offset: Mutex<usize>
@@ -361,12 +326,4 @@ fn split_path(path: &str) -> Result<(&str, &str)> {
         }
         None => Err(FsError::InvalidPath)
     }
-}
-
-pub static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
-
-pub fn with_vfs<F, R>(f: F) -> Result<R>
-where F: FnOnce(&VirtualFileSystem) -> Result<R> {
-    let vfs = VFS.lock();
-    return f(&vfs);
 }

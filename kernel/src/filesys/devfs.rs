@@ -1,4 +1,4 @@
-use crate::{arch, filesys::vfs::{self, DirEntry, FileSystem, FsError, Metadata, NodeType, Result, VNode}};
+use crate::{arch, filesys::{vfs::{DirEntry, FileSystem, Metadata, NodeType, VNode}, FsError, Result}};
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::RwLock;
 
@@ -207,16 +207,16 @@ impl Device for ZeroDevice {
 pub struct ConsoleDevice;
 
 impl Device for ConsoleDevice {
-    fn read(&self, _offset: usize, _buf: &mut [u8]) -> vfs::Result<usize> {
-        return Err(vfs::FsError::NotSupported);
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
+        return Err(FsError::NotSupported);
     }
 
-    fn write(&self, _offset: usize, buf: &[u8]) -> vfs::Result<usize> {
+    fn write(&self, _offset: usize, buf: &[u8]) -> Result<usize> {
         for &byte in buf { arch::serial_putchar(byte); }
         return Ok(buf.len());
     }
 
-    fn ioctl(&self, _cmd: u32, _arg: usize) -> vfs::Result<usize> {
-        return Err(vfs::FsError::NotSupported);
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<usize> {
+        return Err(FsError::NotSupported);
     }
 }

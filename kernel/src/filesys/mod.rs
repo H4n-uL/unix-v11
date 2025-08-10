@@ -3,10 +3,43 @@ pub mod vfs;
 
 use crate::{
     device::block::BLOCK_DEVICES,
-    filesys::{devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice}, vfs::{NodeType, VFS}},
-    printlnk
+    filesys::{devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice}, vfs::{NodeType, VFS}}
 };
-use alloc::{format, sync::Arc};
+use core::fmt;
+use alloc::{format, string::String, sync::Arc};
+
+pub type Result<T> = core::result::Result<T, FsError>;
+
+#[derive(Debug, Clone)]
+pub enum FsError {
+    NotFound,
+    PermissionDenied,
+    NotDirectory,
+    NotFile,
+    AlreadyExists,
+    DirectoryNotEmpty,
+    InvalidPath,
+    IoError(String),
+    NotSupported,
+    DeviceError(String)
+}
+
+impl fmt::Display for FsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FsError::NotFound => write!(f, "File not found"),
+            FsError::PermissionDenied => write!(f, "Permission denied"),
+            FsError::NotDirectory => write!(f, "Not a directory"),
+            FsError::NotFile => write!(f, "Not a file"),
+            FsError::AlreadyExists => write!(f, "Already exists"),
+            FsError::DirectoryNotEmpty => write!(f, "Directory not empty"),
+            FsError::InvalidPath => write!(f, "Invalid path"),
+            FsError::IoError(s) => write!(f, "I/O error: {}", s),
+            FsError::NotSupported => write!(f, "Operation not supported"),
+            FsError::DeviceError(s) => write!(f, "Device error: {}", s)
+        }
+    }
+}
 
 struct BlockDeviceWrapper {
     device_index: usize
@@ -19,10 +52,10 @@ impl BlockDeviceWrapper {
 }
 
 impl Device for BlockDeviceWrapper {
-    fn read(&self, offset: usize, buf: &mut [u8]) -> vfs::Result<usize> {
+    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
         let devices = BLOCK_DEVICES.lock();
         let device = devices.get(self.device_index)
-            .ok_or(vfs::FsError::DeviceError("Device not found".into()))?;
+            .ok_or(FsError::DeviceError("Device not found".into()))?;
 
         let block_size = device.block_size();
         let start_block = offset / block_size;
@@ -31,7 +64,7 @@ impl Device for BlockDeviceWrapper {
         let mut temp_buf = alloc::vec![0u8; block_size];
 
         device.read(start_block as u64, &mut temp_buf)
-            .map_err(|e| vfs::FsError::DeviceError(e))?;
+            .map_err(|e| FsError::DeviceError(e))?;
 
         let bytes_to_copy = (block_size - block_offset).min(buf.len());
         buf[..bytes_to_copy].copy_from_slice(&temp_buf[block_offset..block_offset + bytes_to_copy]);
@@ -39,10 +72,10 @@ impl Device for BlockDeviceWrapper {
         return Ok(bytes_to_copy);
     }
 
-    fn write(&self, offset: usize, buf: &[u8]) -> vfs::Result<usize> {
+    fn write(&self, offset: usize, buf: &[u8]) -> Result<usize> {
         let devices = BLOCK_DEVICES.lock();
         let device = devices.get(self.device_index)
-            .ok_or(vfs::FsError::DeviceError("Device not found".into()))?;
+            .ok_or(FsError::DeviceError("Device not found".into()))?;
 
         let block_size = device.block_size();
         let start_block = offset / block_size;
@@ -52,33 +85,33 @@ impl Device for BlockDeviceWrapper {
 
         if block_offset != 0 || buf.len() < block_size {
             device.read(start_block as u64, &mut temp_buf)
-                .map_err(|e| vfs::FsError::DeviceError(e))?;
+                .map_err(|e| FsError::DeviceError(e))?;
         }
 
         let bytes_to_copy = (block_size - block_offset).min(buf.len());
         temp_buf[block_offset..block_offset + bytes_to_copy].copy_from_slice(&buf[..bytes_to_copy]);
 
         device.write(start_block as u64, &temp_buf)
-            .map_err(|e| vfs::FsError::DeviceError(e))?;
+            .map_err(|e| FsError::DeviceError(e))?;
 
         return Ok(bytes_to_copy);
     }
 
-    fn ioctl(&self, cmd: u32, _arg: usize) -> vfs::Result<usize> {
+    fn ioctl(&self, cmd: u32, _arg: usize) -> Result<usize> {
         match cmd {
             0x1260 => {
                 let devices = BLOCK_DEVICES.lock();
                 let device = devices.get(self.device_index)
-                    .ok_or(vfs::FsError::DeviceError("Device not found".into()))?;
+                    .ok_or(FsError::DeviceError("Device not found".into()))?;
                 return Ok(device.block_count());
             }
             0x1268 => {
                 let devices = BLOCK_DEVICES.lock();
                 let device = devices.get(self.device_index)
-                    .ok_or(vfs::FsError::DeviceError("Device not found".into()))?;
+                    .ok_or(FsError::DeviceError("Device not found".into()))?;
                 return Ok(device.block_size());
             }
-            _ => return Err(vfs::FsError::NotSupported)
+            _ => return Err(FsError::NotSupported)
         }
     }
 }
@@ -103,5 +136,6 @@ pub fn init_filesys() {
         ).expect("Failed to add block device");
     }
 
-    vfs::with_vfs(|vfs| vfs.mount("/dev", devfs)).expect("Failed to mount devfs");
+    VFS.lock().create("/dev", NodeType::Directory).expect("Failed to create /dev directory");
+    VFS.lock().mount("/dev", devfs).expect("Failed to mount devfs");
 }
