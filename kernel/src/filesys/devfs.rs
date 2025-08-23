@@ -14,6 +14,12 @@ struct DeviceNode {
     metadata: Metadata
 }
 
+impl DeviceNode {
+    fn new(name: String, device: Arc<dyn Device>, metadata: Metadata) -> Self {
+        return Self { name, device, metadata };
+    }
+}
+
 impl VNode for DeviceNode {
     fn metadata(&self) -> Result<Metadata> {
         return Ok(self.metadata.clone());
@@ -74,12 +80,7 @@ impl DevDir {
         metadata.node_type = node_type;
         metadata.permissions = 0o666;
 
-        let node = Arc::new(DeviceNode {
-            name: name.clone(),
-            device,
-            metadata
-        });
-
+        let node = Arc::new(DeviceNode::new(name.clone(), device, metadata));
         devices.insert(name, node);
         return Ok(());
     }
@@ -147,9 +148,7 @@ pub struct DevFS {
 
 impl DevFS {
     pub fn new() -> Self {
-        return Self {
-            root: Arc::new(DevDir::new())
-        };
+        return Self { root: Arc::new(DevDir::new()) };
     }
 
     pub fn add_device(&self, name: &str, device: Arc<dyn Device>, node_type: NodeType) -> Result<()> {
