@@ -3,7 +3,7 @@ use crate::{
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PAGE_4KIB}
 };
 use super::PCI_DEVICES;
-use alloc::{boxed::Box, collections::btree_map::BTreeMap, format, string::String, sync::Arc};
+use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
 use nvme::{Allocator, Device};
 use spin::Mutex;
 
@@ -81,7 +81,7 @@ pub fn init_nvme() {
         GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, crate::arch::mmu::flags::PAGE_DEVICE);
         let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
         for ns in nvme_arc.list_namespaces() {
-            block_devices.push(Box::new(NVMeBlockDevice::new(nvme_arc.clone(), devid, ns)));
+            block_devices.push(Arc::new(NVMeBlockDevice::new(nvme_arc.clone(), devid, ns)));
         }
         nvme_devices.insert(devid, nvme_arc.clone());
     }
