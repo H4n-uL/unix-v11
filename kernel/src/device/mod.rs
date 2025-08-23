@@ -2,7 +2,7 @@ pub mod block; mod nvme; mod vga;
 
 use crate::{printk, printlnk, ram::{glacier::GLACIER, PAGE_4KIB}, SYS_INFO};
 use core::ptr::NonNull;
-use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
+use acpi::{aml::AmlError, sdt::mcfg::Mcfg, AcpiTables, Handle, Handler, PciAddress, PhysicalMapping};
 use alloc::{string::String, vec::Vec};
 use fdt::Fdt;
 use spin::Mutex;
@@ -10,18 +10,54 @@ use spin::Mutex;
 #[derive(Clone, Copy, Debug)]
 pub struct KernelAcpiHandler;
 
-impl AcpiHandler for KernelAcpiHandler {
+impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
         GLACIER.map_range(phys_addr, phys_addr, size, crate::arch::mmu::flags::PAGE_DEVICE);
-        return unsafe { PhysicalMapping::new(
-            phys_addr, NonNull::new_unchecked(phys_addr as *mut T),
-            size, size, Self
-        ) };
+
+        return unsafe { PhysicalMapping {
+            physical_start: phys_addr,
+            virtual_start: NonNull::new_unchecked(phys_addr as *mut T),
+            region_length: size,
+            mapped_length: size,
+            handler: *self
+        } };
     }
 
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
+
+    fn read_u8(&self, addr: usize) -> u8 { unsafe { *(addr as *const u8) } }
+    fn read_u16(&self, addr: usize) -> u16 { unsafe { *(addr as *const u16) } }
+    fn read_u32(&self, addr: usize) -> u32 { unsafe { *(addr as *const u32) } }
+    fn read_u64(&self, addr: usize) -> u64 { unsafe { *(addr as *const u64) } }
+
+    fn write_u8(&self, addr: usize, val: u8) { unsafe { *(addr as *mut u8) = val; } }
+    fn write_u16(&self, addr: usize, val: u16) { unsafe { *(addr as *mut u16) = val; } }
+    fn write_u32(&self, addr: usize, val: u32) { unsafe { *(addr as *mut u32) = val; } }
+    fn write_u64(&self, addr: usize, val: u64) { unsafe { *(addr as *mut u64) = val; } }
+
+    fn read_io_u8(&self, _port: u16) -> u8 { 0 }
+    fn read_io_u16(&self, _port: u16) -> u16 { 0 }
+    fn read_io_u32(&self, _port: u16) -> u32 { 0 }
+    fn write_io_u8(&self, _port: u16, _val: u8) {}
+    fn write_io_u16(&self, _port: u16, _val: u16) {}
+    fn write_io_u32(&self, _port: u16, _val: u32) {}
+
+    fn read_pci_u8(&self, _addr: PciAddress, _offset: u16) -> u8 { 0 }
+    fn read_pci_u16(&self, _addr: PciAddress, _offset: u16) -> u16 { 0 }
+    fn read_pci_u32(&self, _addr: PciAddress, _offset: u16) -> u32 { 0 }
+    fn write_pci_u8(&self, _addr: PciAddress, _offset: u16, _val: u8) {}
+    fn write_pci_u16(&self, _addr: PciAddress, _offset: u16, _val: u16) {}
+    fn write_pci_u32(&self, _addr: PciAddress, _offset: u16, _val: u32) {}
+
+    fn nanos_since_boot(&self) -> u64 { 0 }
+    fn stall(&self, _us: u64) {}
+    fn sleep(&self, _ms: u64) {}
+
+    fn create_mutex(&self) -> Handle { Handle(0) }
+    fn acquire(&self, _mutex: Handle, _timeout: u16) -> Result<(), AmlError> { Ok(()) }
+    fn release(&self, _mutex: Handle) {}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -159,16 +195,15 @@ pub static DEVICETREE: Mutex<Option<Fdt>> = Mutex::new(None);
 
 pub fn scan_pci() {
     if let Some(acpi) = ACPI.lock().as_ref() {
-        match acpi.find_table::<Mcfg>() {
-            Ok(mcfg) => {
-                *PCI_DEVICES.lock() = mcfg.get().entries().iter().flat_map(|entry| {
-                    let mcfg_base = entry.base_address;
-                    let start_bus = entry.bus_number_start;
-                    let end_bus = entry.bus_number_end;
-                    scan_pcie_devices(mcfg_base, start_bus, end_bus)
-                }).collect();
-            }
-            Err(_) => panic!("No PCIe devices found")
+        if let Some(mcfg) = acpi.find_table::<Mcfg>() {
+            *PCI_DEVICES.lock() = mcfg.get().entries().iter().flat_map(|entry| {
+                let mcfg_base = entry.base_address;
+                let start_bus = entry.bus_number_start;
+                let end_bus = entry.bus_number_end;
+                scan_pcie_devices(mcfg_base, start_bus, end_bus)
+            }).collect();
+        } else {
+            panic!("No PCIe devices found")
         }
     }
     if let Some(dtb) = DEVICETREE.lock().as_ref() {

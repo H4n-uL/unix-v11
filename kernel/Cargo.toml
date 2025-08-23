@@ -4,8 +4,7 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-acpi = { version = "5.2.0", default-features = false }
-aml = "0.16.4"
+acpi = "6.0.0"
 fdt = "0.1.5"
 linked_list_allocator = "0.10.5"
 nvme = { git = "https://github.com/H4n-uL/NVMe-Rust", version = "0.4.0" }
