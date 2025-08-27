@@ -13,10 +13,17 @@ mod sysinfo;
 use core::panic::PanicInfo;
 use sysinfo::{RAMDescriptor, SysInfo};
 use uefi::{
-    boot::{allocate_pages, exit_boot_services, get_image_file_system, image_handle, AllocateType, MemoryType},
-    cstr16, entry, mem::memory_map::MemoryMap, println,
-    proto::media::file::{File, FileAttribute, FileInfo, FileMode},
-    table::{cfg, system_table_raw}, Status
+    boot::{
+        allocate_pages, exit_boot_services, get_image_file_system, image_handle,
+        open_protocol_exclusive as open_protocol,
+        AllocateType, MemoryType
+    },
+    cstr16, entry,
+    mem::memory_map::MemoryMap, println,
+    proto::{loaded_image::LoadedImage, media::{block::BlockIO, file::{File, FileAttribute, FileInfo, FileMode}}},
+    system::with_config_table,
+    table::cfg,
+    Status
 };
 use xmas_elf::{program::Type, ElfFile};
 
@@ -40,22 +47,6 @@ pub fn align_up(val: usize, align: usize) -> usize {
 
 #[entry]
 fn spark() -> Status {
-    let systemtable = system_table_raw().unwrap();
-    let (mut acpi_ptr, mut dtb_ptr) = (0, 0);
-    unsafe {
-        let config_ptr = systemtable.as_ref().configuration_table;
-        let config_size = systemtable.as_ref().number_of_configuration_table_entries;
-        let config = core::slice::from_raw_parts(config_ptr, config_size);
-
-        for cfg in config.iter() {
-            let isacpi = cfg.vendor_guid == cfg::ACPI_GUID && acpi_ptr == 0;
-            let isacpi2 = cfg.vendor_guid == cfg::ACPI2_GUID;
-            let isdtb = cfg.vendor_guid == cfg::SMBIOS3_GUID;
-            if isacpi || isacpi2 { acpi_ptr = cfg.vendor_table as usize; }
-            if isdtb             { dtb_ptr  = cfg.vendor_table as usize; }
-        }
-    }
-
     let mut filesys_protocol = get_image_file_system(image_handle()).unwrap();
     let mut root = filesys_protocol.open_volume().unwrap();
 
@@ -108,15 +99,54 @@ fn spark() -> Status {
         }
     }
 
+    let (acpi_ptr, dtb_ptr) = with_config_table(|config| {
+        let (mut acpi_ptr, mut dtb_ptr) = (0, 0);
+        for cfg in config.iter() {
+            let isacpi = cfg.guid == cfg::ACPI_GUID && acpi_ptr == 0;
+            let isacpi2 = cfg.guid == cfg::ACPI2_GUID;
+            let isdtb = cfg.guid == cfg::SMBIOS3_GUID;
+            if isacpi && acpi_ptr == 0 || isacpi2 {
+                acpi_ptr = cfg.address as usize;
+            }
+            if isdtb {
+                dtb_ptr  = cfg.address as usize;
+            }
+        }
+
+        return (acpi_ptr, dtb_ptr);
+    });
+
+    let mut disk_uuid = [0u8; 16];
+
+    let loaded_image = open_protocol::<LoadedImage>(image_handle()).unwrap();
+    if let Ok(block_io) = open_protocol::<BlockIO>(loaded_image.device().unwrap()) {
+        let media = block_io.media();
+        let block_size = media.block_size() as usize;
+        let gpt_header_pages = align_up(block_size, PAGE_4KIB) / PAGE_4KIB;
+        let gpt_header_ptr = allocate_pages(
+            AllocateType::AnyPages,
+            MemoryType::LOADER_DATA,
+            gpt_header_pages
+        ).unwrap();
+
+        let gpt_header = unsafe {
+            core::slice::from_raw_parts_mut(gpt_header_ptr.as_ptr(), block_size)
+        };
+
+        if block_io.read_blocks(media.media_id(), 1, gpt_header).is_ok() && &gpt_header[0..8] == b"EFI PART" {
+            disk_uuid.copy_from_slice(&gpt_header[56..72]);
+        }
+    }
+
     let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base;
     let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(entrypoint) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr();
     let sysinfo = SysInfo {
+        kernel_base, kernel_size, stack_base,
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
-        acpi_ptr, dtb_ptr,
-        stack_base, kernel_base, kernel_size
+        acpi_ptr, dtb_ptr, disk_uuid
     };
     ignite(sysinfo);
 }
