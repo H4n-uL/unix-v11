@@ -14,16 +14,13 @@ use core::panic::PanicInfo;
 use sysinfo::{RAMDescriptor, SysInfo};
 use uefi::{
     boot::{
-        allocate_pages, exit_boot_services, get_image_file_system, image_handle,
+        allocate_pages, exit_boot_services, get_image_file_system, image_handle, locate_handle_buffer,
         open_protocol_exclusive as open_protocol,
-        AllocateType, MemoryType
+        AllocateType, MemoryType, SearchType
     },
-    cstr16, entry,
-    mem::memory_map::MemoryMap, println,
-    proto::{loaded_image::LoadedImage, media::{block::BlockIO, file::{File, FileAttribute, FileInfo, FileMode}}},
-    system::with_config_table,
-    table::cfg,
-    Status
+    cstr16, entry, mem::memory_map::MemoryMap, println,
+    proto::media::{block::BlockIO, file::{File, FileAttribute, FileInfo, FileMode}},
+    system::with_config_table, table::cfg, Identify, Status
 };
 use xmas_elf::{program::Type, ElfFile};
 
@@ -47,21 +44,23 @@ pub fn align_up(val: usize, align: usize) -> usize {
 
 #[entry]
 fn spark() -> Status {
-    let mut filesys_protocol = get_image_file_system(image_handle()).unwrap();
-    let mut root = filesys_protocol.open_volume().unwrap();
+    let mut file_binary: &mut [u8] = &mut [];
+    if let Ok(mut filesys_protocol) = get_image_file_system(image_handle()) {
+        let mut root = filesys_protocol.open_volume().unwrap();
 
-    let mut file = root.open(
-        cstr16!("\\unix"), FileMode::Read, FileAttribute::empty()
-    ).unwrap().into_regular_file().unwrap();
+        let mut file = root.open(
+            cstr16!("\\unix"), FileMode::Read, FileAttribute::empty()
+        ).unwrap().into_regular_file().unwrap();
 
-    let mut info_buf = [0u8; 512];
-    let info = file.get_info::<FileInfo>(&mut info_buf).unwrap();
-    let file_size = info.file_size() as usize;
+        let mut info_buf = [0u8; 512];
+        let info = file.get_info::<FileInfo>(&mut info_buf).unwrap();
+        let file_size = info.file_size() as usize;
 
-    let file_pages = align_up(file_size, PAGE_4KIB) / PAGE_4KIB;
-    let file_ptr = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, file_pages).unwrap();
-    let file_binary = unsafe { core::slice::from_raw_parts_mut(file_ptr.as_ptr(), file_size) };
-    file.read(file_binary).unwrap();
+        let file_pages = align_up(file_size, PAGE_4KIB) / PAGE_4KIB;
+        let file_ptr = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, file_pages).unwrap();
+        file_binary = unsafe { core::slice::from_raw_parts_mut(file_ptr.as_ptr(), file_size) };
+        file.read(file_binary).unwrap();
+    }
 
     let elf = ElfFile::new(file_binary).unwrap();
 
@@ -117,24 +116,26 @@ fn spark() -> Status {
     });
 
     let mut disk_uuid = [0u8; 16];
+    if let Ok(handle_buffer) = locate_handle_buffer(SearchType::ByProtocol(&BlockIO::GUID)) {
+        for &handle in handle_buffer.iter() {
+            if let Ok(block_io) = open_protocol::<BlockIO>(handle) {
+                let media = block_io.media();
+                if media.is_logical_partition() { continue; }
 
-    let loaded_image = open_protocol::<LoadedImage>(image_handle()).unwrap();
-    if let Ok(block_io) = open_protocol::<BlockIO>(loaded_image.device().unwrap()) {
-        let media = block_io.media();
-        let block_size = media.block_size() as usize;
-        let gpt_header_pages = align_up(block_size, PAGE_4KIB) / PAGE_4KIB;
-        let gpt_header_ptr = allocate_pages(
-            AllocateType::AnyPages,
-            MemoryType::LOADER_DATA,
-            gpt_header_pages
-        ).unwrap();
+                let block_size = media.block_size() as usize;
+                let gpt_header_pages = align_up(block_size, PAGE_4KIB) / PAGE_4KIB;
+                let gpt_header_ptr = allocate_pages(
+                    AllocateType::AnyPages,
+                    MemoryType::LOADER_DATA,
+                    gpt_header_pages
+                ).unwrap();
 
-        let gpt_header = unsafe {
-            core::slice::from_raw_parts_mut(gpt_header_ptr.as_ptr(), block_size)
-        };
-
-        if block_io.read_blocks(media.media_id(), 1, gpt_header).is_ok() && &gpt_header[0..8] == b"EFI PART" {
-            disk_uuid.copy_from_slice(&gpt_header[56..72]);
+                let gpt_header = unsafe { core::slice::from_raw_parts_mut(gpt_header_ptr.as_ptr(), block_size) };
+                if block_io.read_blocks(media.media_id(), 1, gpt_header).is_ok() && &gpt_header[0..8] == b"EFI PART" {
+                    disk_uuid.copy_from_slice(&gpt_header[56..72]);
+                    break;
+                }
+            }
         }
     }
 
