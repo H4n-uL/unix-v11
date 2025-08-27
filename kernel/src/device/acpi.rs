@@ -88,7 +88,7 @@ impl Handler for KernelAcpiHandler {
     }
 
     fn read_pci_u8(&self, addr: PciAddress, offset: u16) -> u8 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *const u8) }
@@ -97,7 +97,7 @@ impl Handler for KernelAcpiHandler {
         }
     }
     fn read_pci_u16(&self, addr: PciAddress, offset: u16) -> u16 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *const u16) }
@@ -106,7 +106,7 @@ impl Handler for KernelAcpiHandler {
         }
     }
     fn read_pci_u32(&self, addr: PciAddress, offset: u16) -> u32 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *const u32) }
@@ -115,21 +115,21 @@ impl Handler for KernelAcpiHandler {
         }
     }
     fn write_pci_u8(&self, addr: PciAddress, offset: u16, val: u8) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *mut u8) = val; }
         }
     }
     fn write_pci_u16(&self, addr: PciAddress, offset: u16, val: u16) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *mut u16) = val; }
         }
     }
     fn write_pci_u32(&self, addr: PciAddress, offset: u16, val: u32) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d| 
+        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
             d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
         ) {
             unsafe { *((dev.ptr() as usize + offset as usize) as *mut u32) = val; }

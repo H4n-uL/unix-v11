@@ -124,13 +124,13 @@ fn spark() -> Status {
         let block_size = media.block_size() as usize;
         let gpt_header_pages = align_up(block_size, PAGE_4KIB) / PAGE_4KIB;
         let gpt_header_ptr = allocate_pages(
-            AllocateType::AnyPages, 
-            MemoryType::LOADER_DATA, 
+            AllocateType::AnyPages,
+            MemoryType::LOADER_DATA,
             gpt_header_pages
         ).unwrap();
 
-        let gpt_header = unsafe { 
-            core::slice::from_raw_parts_mut(gpt_header_ptr.as_ptr(), block_size) 
+        let gpt_header = unsafe {
+            core::slice::from_raw_parts_mut(gpt_header_ptr.as_ptr(), block_size)
         };
 
         if block_io.read_blocks(media.media_id(), 1, gpt_header).is_ok() && &gpt_header[0..8] == b"EFI PART" {
