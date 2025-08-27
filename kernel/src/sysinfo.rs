@@ -12,13 +12,14 @@ pub struct RAMDescriptor {
 
 #[repr(C)]
 pub struct SysInfo {
-    layout_ptr: *const RAMDescriptor,
-    layout_len: usize,
+    pub kernel_base: usize,
+    pub kernel_size: usize,
+    pub stack_base: usize,
+    pub layout_ptr: *const RAMDescriptor,
+    pub layout_len: usize,
     pub acpi_ptr: usize,
     pub dtb_ptr: usize,
-    pub stack_base: usize,
-    pub kernel_base: usize,
-    pub kernel_size: usize
+    pub disk_uuid: [u8; 16]
 }
 
 const PAGE_4KIB: usize = 0x1000;
@@ -70,13 +71,14 @@ unsafe impl Send for SysInfo {}
 impl SysInfo {
     pub const fn empty() -> Self {
         Self {
+            kernel_base: 0,
+            kernel_size: 0,
+            stack_base: 0,
             layout_ptr: core::ptr::null(),
             layout_len: 0,
             acpi_ptr: 0,
             dtb_ptr: 0,
-            stack_base: 0,
-            kernel_base: 0,
-            kernel_size: 0
+            disk_uuid: [0; 16]
         }
     }
 

@@ -13,11 +13,12 @@ pub struct RAMDescriptor {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct SysInfo {
+    pub kernel_base: usize,
+    pub kernel_size: usize,
+    pub stack_base: usize,
     pub layout_ptr: *const RAMDescriptor,
     pub layout_len: usize,
     pub acpi_ptr: usize,
     pub dtb_ptr: usize,
-    pub stack_base: usize,
-    pub kernel_base: usize,
-    pub kernel_size: usize
+    pub disk_uuid: [u8; 16]
 }
