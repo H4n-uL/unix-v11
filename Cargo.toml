@@ -3,9 +3,9 @@ members = ["efi", "kernel"]
 resolver = "3"
 
 [profile.dev]
-panic = "abort"
 codegen-units = 1
+panic = "abort"
 
 [profile.release]
-panic = "abort"
 codegen-units = 1
+panic = "abort"
