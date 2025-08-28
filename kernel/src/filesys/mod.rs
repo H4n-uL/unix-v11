@@ -1,9 +1,15 @@
 pub mod devfs;
+pub mod part;
 pub mod vfs;
 
 use crate::{
     device::block::BLOCK_DEVICES,
-    filesys::{devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice}, vfs::{NodeType, VFS}}
+    filesys::{
+        devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice},
+        part::{gpt::Gpt, PartitionDevice, fat32::Fat32},
+        vfs::{NodeType, VFS}
+    },
+    printlnk, ram::PageAligned
 };
 use core::fmt;
 use alloc::{format, string::String, sync::Arc};
@@ -61,7 +67,7 @@ impl Device for BlockDeviceWrapper {
         let start_block = offset / block_size;
         let block_offset = offset % block_size;
 
-        let mut temp_buf = alloc::vec![0u8; block_size];
+        let mut temp_buf = PageAligned::new(block_size);
 
         device.read(start_block as u64, &mut temp_buf)
             .map_err(|e| FsError::DeviceError(e))?;
@@ -81,7 +87,7 @@ impl Device for BlockDeviceWrapper {
         let start_block = offset / block_size;
         let block_offset = offset % block_size;
 
-        let mut temp_buf = alloc::vec![0u8; block_size];
+        let mut temp_buf = PageAligned::new(block_size);
 
         if block_offset != 0 || buf.len() < block_size {
             device.read(start_block as u64, &mut temp_buf)
@@ -138,4 +144,27 @@ pub fn init_filesys() {
 
     VFS.lock().create("/dev", NodeType::Directory).expect("Failed to create /dev directory");
     VFS.lock().mount("/dev", devfs).expect("Failed to mount devfs");
+
+    let devices = BLOCK_DEVICES.lock();
+
+    for device in devices.iter() {
+        let gpt = match Gpt::read(device) {
+            Ok(gpt) => gpt,
+            Err(_) => continue
+        };
+
+        gpt.print_info();
+
+        for part in gpt.partitions.iter() {
+            let part_device = Arc::new(PartitionDevice::new(
+                device.clone(),
+                part.start_lba
+            ));
+
+            match Fat32::new(part_device) {
+                Ok(fat32) => fat32.print_info(),
+                Err(e) => printlnk!("Failed to read FAT32: {:?}", e)
+            }
+        }
+    }
 }
