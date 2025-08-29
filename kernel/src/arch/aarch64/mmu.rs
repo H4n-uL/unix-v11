@@ -1,7 +1,6 @@
 use crate::{
-    ram::{glacier::{MMUCfg, PageSize, GLACIER}, PAGE_4KIB},
-    sysinfo::ramtype,
-    SYS_INFO
+    ram::glacier::{GlacierData, MMUCfg, PageSize},
+    sysinfo::ramtype
 };
 
 #[allow(dead_code)]
@@ -114,21 +113,7 @@ impl MMUCfg {
     }
 }
 
-pub unsafe fn identity_map() {
-    let cfg = GLACIER.cfg();
-
-    for desc in SYS_INFO.lock().efi_ram_layout() {
-        let block_ty = desc.ty;
-        let addr = desc.phys_start as usize;
-        let size = desc.page_count as usize * PAGE_4KIB;
-
-        GLACIER.map_range(addr, addr, size, flags_for_type(block_ty));
-    }
-
-    GLACIER.map_page(0x0900_0000, 0x0900_0000, flags::PAGE_DEVICE); // QEMU UART0
-    GLACIER.map_page(0x0800_0000, 0x0800_0000, flags::PAGE_DEVICE); // GICD
-    GLACIER.map_page(0x0801_0000, 0x0801_0000, flags::PAGE_DEVICE); // GICC
-
+pub fn identity_map(glacier: &GlacierData) {
     // Attr0 = Normal memory, Inner/Outer Write-Back Non-transient
     // Attr1 = Device memory nGnRnE
     let mair_el1: u64 = 0xff | (0x00 << 8);
@@ -152,8 +137,8 @@ pub unsafe fn identity_map() {
             "dsb sy",
             "isb",
             mair = in(reg) mair_el1,
-            tcr = in(reg) cfg.tcr_el1(),
-            ttbr0 = in(reg) GLACIER.root_table()
+            tcr = in(reg) glacier.cfg().tcr_el1(),
+            ttbr0 = in(reg) glacier.root_table()
         );
     }
 }
