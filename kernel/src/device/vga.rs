@@ -78,12 +78,11 @@ impl Vga {
         if &edid_regs[0..8] != Self::EDID_HEADER { return None; }
 
         let timing_desc = &edid_regs[54..72];
-        let mut width = timing_desc[2] as u32 | ((timing_desc[4] as u32 & 0xf0) << 4);
-        let mut height = timing_desc[5] as u32 | ((timing_desc[7] as u32 & 0xf0) << 4);
+        let width = timing_desc[2] as u32 | ((timing_desc[4] as u32 & 0xf0) << 4);
+        let height = timing_desc[5] as u32 | ((timing_desc[7] as u32 & 0xf0) << 4);
         let width_blanking = timing_desc[3] as u32 | ((timing_desc[4] as u32 & 0x0f) << 8);
         let height_blanking = timing_desc[6] as u32 | ((timing_desc[7] as u32 & 0x0f) << 8);
         let pitch = width * 4;
-        if dev.vendor_id() == 0x1234 && dev.device_id() == 0x1111 { (width, height) = (800, 600); }
 
         let map_size = width as usize * height as usize * pitch as usize;
         GLACIER.map_range(fb_addr, fb_addr, map_size, crate::arch::mmu::flags::PAGE_DEVICE);
