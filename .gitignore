@@ -16,3 +16,7 @@ Cargo.lock
 ## Disk images ##
 *.disk
 /dist
+
+## Firmware files ##
+firmwares/*
+*.fd
