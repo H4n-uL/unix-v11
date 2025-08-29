@@ -13,6 +13,8 @@ pub fn halt() {
     unsafe { core::arch::asm!("wfi"); }
 }
 
+pub const R_RELATIVE: u64 = 1027;
+
 #[inline(always)]
 pub fn stack_ptr() -> usize {
     let sp: usize;

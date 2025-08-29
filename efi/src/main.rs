@@ -10,8 +10,8 @@
 mod arch;
 mod sysinfo;
 
+use crate::{arch::R_RELATIVE, sysinfo::{KernelInfo, RAMDescriptor, RelaEntry, SysInfo}};
 use core::panic::PanicInfo;
-use sysinfo::{RAMDescriptor, SysInfo};
 use uefi::{
     boot::{
         allocate_pages, exit_boot_services, get_image_file_system, image_handle, locate_handle_buffer,
@@ -25,17 +25,6 @@ use uefi::{
 use xmas_elf::{program::Type, ElfFile};
 
 const PAGE_4KIB: usize = 0x1000;
-
-#[repr(C)]
-pub struct RelaEntry {
-    offset: u64,
-    info: u64,
-    addend: u64
-}
-
-#[cfg(target_arch = "x86_64")]  const R_RELATIVE: u64 = 8;
-#[cfg(target_arch = "aarch64")] const R_RELATIVE: u64 = 1027;
-#[cfg(target_arch = "riscv64")] const R_RELATIVE: u64 = 3;
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
@@ -64,20 +53,20 @@ fn spark() -> Status {
 
     let elf = ElfFile::new(file_binary).unwrap();
 
-    let kernel_size = elf.program_iter()
+    let ksize = elf.program_iter()
         .filter(|ph| ph.get_type() == Ok(Type::Load))
         .map(|ph| ph.virtual_addr() + ph.mem_size())
         .max().unwrap() as usize;
 
-    let kernel_pages = align_up(kernel_size, PAGE_4KIB) / PAGE_4KIB;
-    let kernel_base = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_CODE, kernel_pages).unwrap().as_ptr() as usize;
+    let kernel_pages = align_up(ksize, PAGE_4KIB) / PAGE_4KIB;
+    let kbase = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_CODE, kernel_pages).unwrap().as_ptr() as usize;
 
     for ph in elf.program_iter() {
         if let Ok(Type::Load) = ph.get_type() {
             let offset = ph.offset() as usize;
             let file_size = ph.file_size() as usize;
             let mem_size = ph.mem_size() as usize;
-            let phys_addr = (kernel_base + ph.virtual_addr() as usize) as *mut u8;
+            let phys_addr = (kbase + ph.virtual_addr() as usize) as *mut u8;
 
             unsafe {
                 core::ptr::copy(file_binary[offset..offset + file_size].as_ptr(), phys_addr, file_size);
@@ -87,14 +76,14 @@ fn spark() -> Status {
     }
 
     let rela = elf.find_section_by_name(".rela.dyn").unwrap();
-    let rela_ptr = (kernel_base + rela.address() as usize) as *mut RelaEntry;
-    let entry_count = rela.size() as usize / size_of::<RelaEntry>();
-    for i in 0..entry_count {
-        let entry = unsafe { &*rela_ptr.add(i) };
+    let rela_ptr = kbase + rela.address() as usize;
+    let rela_len = rela.size() as usize / size_of::<RelaEntry>();
+    for i in 0..rela_len {
+        let entry = unsafe { &*(rela_ptr as *mut RelaEntry).add(i) };
         let ty = entry.info & 0xffffffff;
         if ty == R_RELATIVE {
-            let reloc_addr = (kernel_base + entry.offset as usize) as *mut u64;
-            unsafe { *reloc_addr = kernel_base as u64 + entry.addend; }
+            let reloc_addr = (kbase + entry.offset as usize) as *mut u64;
+            unsafe { *reloc_addr = kbase as u64 + entry.addend; }
         }
     }
 
@@ -139,12 +128,16 @@ fn spark() -> Status {
         }
     }
 
-    let entrypoint = elf.header.pt2.entry_point() as usize + kernel_base;
-    let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(entrypoint) };
+    let ep = elf.header.pt2.entry_point() as usize;
+    let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(ep + kbase) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr();
     let sysinfo = SysInfo {
-        kernel_base, kernel_size, stack_base,
+        kernel: KernelInfo {
+            base: kbase, size: ksize,
+            ep, rela_ptr, rela_len
+        },
+        stack_base,
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
         layout_len: efi_ram_layout.len(),
         acpi_ptr, dtb_ptr, disk_uuid
