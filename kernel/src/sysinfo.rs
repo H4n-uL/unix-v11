@@ -11,15 +11,32 @@ pub struct RAMDescriptor {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct SysInfo {
-    pub kernel_base: usize,
-    pub kernel_size: usize,
+    pub kernel: KernelInfo,
     pub stack_base: usize,
     pub layout_ptr: *const RAMDescriptor,
     pub layout_len: usize,
     pub acpi_ptr: usize,
     pub dtb_ptr: usize,
     pub disk_uuid: [u8; 16]
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct KernelInfo {
+    pub base: usize,
+    pub size: usize,
+    pub ep: usize,
+    pub rela_ptr: usize,
+    pub rela_len: usize
+}
+
+#[repr(C)]
+pub struct RelaEntry {
+    pub offset: u64,
+    pub info: u64,
+    pub addend: u64
 }
 
 const PAGE_4KIB: usize = 0x1000;
@@ -66,13 +83,24 @@ pub const NON_RAM: &[u32] = &[
     ramtype::MMIO_PORT_SPACE
 ];
 
-unsafe impl Sync for SysInfo {}
 unsafe impl Send for SysInfo {}
+unsafe impl Sync for SysInfo {}
+unsafe impl Send for KernelInfo {}
+unsafe impl Sync for KernelInfo {}
+
+impl KernelInfo {
+    pub const fn empty() -> Self {
+        Self {
+            base: 0, size: 0,
+            ep: 0, rela_ptr: 0, rela_len: 0
+        }
+    }
+}
+
 impl SysInfo {
     pub const fn empty() -> Self {
         Self {
-            kernel_base: 0,
-            kernel_size: 0,
+            kernel: KernelInfo::empty(),
             stack_base: 0,
             layout_ptr: core::ptr::null(),
             layout_len: 0,
@@ -85,8 +113,8 @@ impl SysInfo {
     pub fn init(&mut self, param: Self) {
         *self = param;
 
-        let kernel_start = self.kernel_base as u64;
-        let kernel_end = (self.kernel_base + self.kernel_size) as u64;
+        let kernel_start = self.kernel.base as u64;
+        let kernel_end = (self.kernel.base + self.kernel.size) as u64;
         let layout_start = self.layout_ptr as u64;
         let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
 

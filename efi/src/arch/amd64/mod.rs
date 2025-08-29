@@ -13,6 +13,8 @@ pub fn halt() {
     unsafe { core::arch::asm!("hlt"); }
 }
 
+pub const R_RELATIVE: u64 = 8;
+
 #[inline(always)]
 pub fn stack_ptr() -> usize {
     let rsp: usize;

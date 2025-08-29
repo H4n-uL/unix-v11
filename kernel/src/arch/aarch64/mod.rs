@@ -17,6 +17,7 @@ pub fn halt() {
     unsafe { core::arch::asm!("wfi"); }
 }
 
+pub const R_RELATIVE: u64 = 1027;
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
