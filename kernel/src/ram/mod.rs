@@ -2,7 +2,7 @@ pub mod glacier;
 pub mod physalloc;
 
 use crate::{
-    arch::{mmu, move_stack},
+    arch::move_stack,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::ramtype
 };
@@ -56,7 +56,6 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
-    unsafe { mmu::identity_map(); }
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();

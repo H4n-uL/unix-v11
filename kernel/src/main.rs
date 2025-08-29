@@ -36,7 +36,6 @@ macro_rules! printlnk {
 
 fn init_metal() {
     // arch::exceptions::init();
-    arch::init_serial();
     printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
     ram::init_ram();
     device::init_device();
@@ -51,6 +50,7 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
     SYS_INFO.lock().init(sysinfo);
     PHYS_ALLOC.init(SYS_INFO.lock().efi_ram_layout_mut());
     GLACIER.init();
+    arch::init_serial();
     init_metal();
     exec_aleph();
     schedule();

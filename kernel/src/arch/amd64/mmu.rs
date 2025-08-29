@@ -1,7 +1,6 @@
 use crate::{
-    ram::{glacier::{MMUCfg, PageSize, GLACIER}, PAGE_4KIB},
-    sysinfo::ramtype,
-    SYS_INFO
+    ram::glacier::{GlacierData, MMUCfg, PageSize},
+    sysinfo::ramtype
 };
 
 #[allow(dead_code)]
@@ -56,15 +55,7 @@ impl MMUCfg {
     }
 }
 
-pub unsafe fn identity_map() {
-    for desc in SYS_INFO.lock().efi_ram_layout() {
-        let block_ty = desc.ty;
-        let addr = desc.phys_start as usize;
-        let size = desc.page_count as usize * PAGE_4KIB;
-
-        GLACIER.map_range(addr, addr, size, flags_for_type(block_ty));
-    }
-
+pub fn identity_map(glacier: &GlacierData) {
     unsafe {
         core::arch::asm!(
             "mov cr3, {pml4}",
@@ -83,7 +74,7 @@ pub unsafe fn identity_map() {
             "or eax, 0x00000900", // NXE / LME
             "wrmsr",
 
-            pml4 = in(reg) GLACIER.root_table()
+            pml4 = in(reg) glacier.root_table()
         );
     }
 }

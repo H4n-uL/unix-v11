@@ -1,6 +1,6 @@
 /* pub mod exceptions; */ pub mod mmu;
 
-use crate::{ram::physalloc::OwnedPtr, SYS_INFO};
+use crate::{ram::{glacier::GLACIER, physalloc::OwnedPtr}, SYS_INFO};
 
 pub fn set_interrupts(enabled: bool) {
     unsafe {
@@ -20,6 +20,10 @@ pub const R_RELATIVE: u64 = 3;
 const UART0_BASE: usize = 0x1000_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
+    GLACIER.map_page(0x1000_0000, 0x1000_0000, mmu::flags::PAGE_DEVICE); // UART0
+    GLACIER.map_page(0x0c00_0000, 0x0c00_0000, mmu::flags::PAGE_DEVICE); // PLIC
+    GLACIER.map_page(0x0200_0000, 0x0200_0000, mmu::flags::PAGE_DEVICE); // CLINT
+
     unsafe {
         // Disable UART
         core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x0);
