@@ -62,7 +62,8 @@ case $ARCH in
         QEMU_SYSTEM="qemu-system-aarch64"
         QEMU_CPU="cortex-a72"
         QEMU_MACHINE="virt,accel=tcg"
-        BIOS_FILE="OVMF-AArch64.fd"
+        EFI_CODE="firmwares/OVMF-AArch64-CODE.fd"
+        EFI_VARS="firmwares/OVMF-AArch64-VARS.fd"
         ARCH_NAME="AArch64"
         DISK_ARCH="aarch64"
         ;;
@@ -73,11 +74,23 @@ case $ARCH in
         QEMU_SYSTEM="qemu-system-x86_64"
         QEMU_CPU="qemu64"
         QEMU_MACHINE="q35,accel=tcg"
-        BIOS_FILE="OVMF-AMD64.fd"
+        EFI_CODE="firmwares/OVMF-AMD64-CODE.fd"
+        EFI_VARS="firmwares/OVMF-AMD64-VARS.fd"
         ARCH_NAME="AMD64"
         DISK_ARCH="amd64"
         ;;
     riscv64|risc-v64|rv64)
+        EFI_TARGET="riscv64gc-unknown-uefi-elf.json"
+        KERNEL_TARGET="riscv64gc-unknown-none-elf"
+        EFI_BOOT_NAME="bootrv64.efi"
+        QEMU_SYSTEM="qemu-system-riscv64"
+        QEMU_CPU="max"
+        QEMU_MACHINE="virt,accel=tcg"
+        EFI_CODE="firmwares/OVMF-RISCV64-CODE.fd"
+        EFI_VARS="firmwares/OVMF-RISCV64-VARS.fd"
+        ARCH_NAME="RISC-V64"
+        DISK_ARCH="riscv64"
+
         echo "RISC-V64 EFI is not supported by Rust toolchain yet."
         echo "and someone needs to make a .json file for it."
         echo "and that someone is me."
@@ -90,6 +103,11 @@ case $ARCH in
         exit 1
         ;;
 esac
+
+if [ ! -f "$EFI_CODE" ] || [ ! -f "$EFI_VARS" ]; then
+    mkdir -p firmwares
+    unzip -q -o OVMF.zip -d firmwares
+fi
 
 shift
 
@@ -160,8 +178,12 @@ fi
 cd ..
 
 mkdir -p dist/efi/boot
-cp target/$EFI_TARGET/release/unix-v11-efi.efi dist/efi/boot/$EFI_BOOT_NAME
-cp target/$KERNEL_TARGET/release/unix-v11-kernel dist/unix
+
+EFI_TARGET_DIR=$(echo "$EFI_TARGET" | sed 's/\.json$//' | sed 's/.*\///')
+KERNEL_TARGET_DIR=$(echo "$KERNEL_TARGET" | sed 's/\.json$//' | sed 's/.*\///')
+
+cp target/$EFI_TARGET_DIR/release/unix-v11-efi.efi dist/efi/boot/$EFI_BOOT_NAME
+cp target/$KERNEL_TARGET_DIR/release/unix-v11-kernel dist/unix
 
 DISK_NAME="unixv11-${DISK_ARCH}.disk"
 dd if=/dev/zero of=$DISK_NAME bs=1M count=$DISK_SIZE status=none 2>/dev/null || \
@@ -195,7 +217,8 @@ $QEMU_SYSTEM \
     -cpu $QEMU_CPU \
     -machine $QEMU_MACHINE \
     -smp $CPU_COUNT \
-    -bios $BIOS_FILE \
+    -drive if=pflash,file=$EFI_CODE,format=raw,readonly=on \
+    -drive if=pflash,file=$EFI_VARS,format=raw \
     -drive file=$DISK_NAME,if=none,id=drv0,format=raw \
     -device nvme,drive=drv0,serial=unixv11nvme \
     -m ${RAM_SIZE}M \
