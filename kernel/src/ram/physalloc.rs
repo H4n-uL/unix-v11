@@ -167,7 +167,8 @@ impl PhysAllocData {
             if desc.ty == ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
-                self.add(ptr, size, desc.ty, false);
+                let block = RAMBlock::new(ptr, size, desc.ty, false);
+                self.add(block);
             }
         }
 
@@ -182,7 +183,8 @@ impl PhysAllocData {
             if desc.ty != ramtype::CONVENTIONAL {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
-                self.add(ptr, size, desc.ty, true);
+                let block = RAMBlock::new(ptr, size, desc.ty, true);
+                self.add(block);
             }
         }
         self.is_init = true;
@@ -248,22 +250,38 @@ impl PhysAllocData {
             ptr >= block.ptr() && ptr as usize + args.size <= block.addr() + block.size()
         };
 
-        let mut split_info = None;
+        struct AllocInfo {
+            this: RAMBlock,
+            og: RAMBlock
+        }
+        let mut alloc_info = None;
         for block in self.blocks_iter_mut() {
             if filter(block) {
                 if block.ty() == args.as_type && !args.used { break; }
-                split_info = Some(*block);
-                *block = RAMBlock::new(ptr, args.size, args.as_type, args.used);
+                alloc_info = Some(AllocInfo {
+                    this: RAMBlock::new(ptr, args.size, args.as_type, args.used),
+                    og: *block,
+                });
+                block.invalidate();
                 break;
             }
         }
 
-        if let Some(block) = split_info {
-            let before = ptr as usize - block.addr();
-            let after_ptr = (ptr as usize + args.size) as *const u8;
-            let after = block.addr() + block.size() - after_ptr as usize;
-            if before > 0 { self.add(block.ptr(), before, block.ty(), false); }
-            if after > 0 { self.add(after_ptr, after, block.ty(), false); }
+        if let Some(ainfo) = alloc_info {
+            self.add(ainfo.this);
+
+            let before_block = RAMBlock::new(
+                ainfo.og.ptr(), ptr as usize - ainfo.og.addr(),
+                ainfo.og.ty(), false
+            );
+            let after_block = RAMBlock::new(
+                (ptr as usize + args.size) as *const u8,
+                ainfo.og.addr() + ainfo.og.size() - (ptr as usize + args.size),
+                ainfo.og.ty(), false
+            );
+            self.add(before_block);
+            self.add(after_block);
+
             return Some(OwnedPtr::new_bytes(ptr, args.size));
         }
 
@@ -284,19 +302,22 @@ impl PhysAllocData {
             block.invalidate();
             if block_cp.addr() < free_start {
                 let before_size = free_start - block_cp.addr();
-                self.add(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
+                let before_block = RAMBlock::new(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
+                self.add(before_block);
             }
-            self.add(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
+            let this_block = RAMBlock::new(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
+            self.add(this_block);
             if free_end < block_cp.addr() + block_cp.size() {
                 let after_start = free_end as *const u8;
                 let after_size = block_cp.addr() + block_cp.size() - free_end;
-                self.add(after_start, after_size, block_cp.ty(), block_cp.used());
+                let after_block = RAMBlock::new(after_start, after_size, block_cp.ty(), block_cp.used());
+                self.add(after_block);
             }
         }
     }
 
-    fn add(&mut self, ptr: *const u8, size: usize, ty: u32, used: bool) {
-        let new_block = RAMBlock::new(ptr, size, ty, used);
+    fn add(&mut self, new_block: RAMBlock) {
+        if new_block.invalid() { return; }
         let (mut before, mut after) = (None, None);
         for block in self.blocks_iter_mut() {
             match new_block.is_coalescable(&block) {
