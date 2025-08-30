@@ -76,10 +76,10 @@ fn spark() -> Status {
     }
 
     let rela = elf.find_section_by_name(".rela.dyn").unwrap();
-    let rela_ptr = kbase + rela.address() as usize;
+    let rela_ptr = rela.address() as usize;
     let rela_len = rela.size() as usize / size_of::<RelaEntry>();
-    for i in 0..rela_len {
-        let entry = unsafe { &*(rela_ptr as *mut RelaEntry).add(i) };
+    let rela = unsafe { core::slice::from_raw_parts_mut((rela_ptr + kbase) as *mut RelaEntry, rela_len) };
+    for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
         if ty == R_RELATIVE {
             let reloc_addr = (kbase + entry.offset as usize) as *mut u64;
