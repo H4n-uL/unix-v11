@@ -58,36 +58,40 @@ impl RAMBlock {
 #[repr(C)]
 #[derive(Debug)]
 pub struct OwnedPtr {
-    ptr: *const u8,
+    ptr: usize,
     size: usize
 }
 
 impl OwnedPtr {
-    const fn new_bytes<T>(ptr: *const T, size: usize) -> Self {
-        Self { ptr: ptr as *const u8, size }
+    fn new_bytes<T>(ptr: *const T, size: usize) -> Self {
+        Self { ptr: ptr as usize, size }
     }
 
-    const fn new_typed<T>(ptr: *const T, count: usize) -> Self {
+    const fn null() -> Self {
+        Self { ptr: 0, size: 0 }
+    }
+
+    fn new_typed<T>(ptr: *const T, count: usize) -> Self {
         Self::new_bytes(ptr, count * size_of::<T>())
     }
 
-    const fn from_slice<T>(slice: &[T]) -> Self {
+    fn from_slice<T>(slice: &[T]) -> Self {
         Self::new_typed(slice.as_ptr(), slice.len())
     }
 
     pub fn addr(&self) -> usize { self.ptr as usize }
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
-    pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.ptr, self.size) }
+    pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.ptr::<()>(), self.size) }
 
     pub fn merge(&self, other: &Self) -> Option<Self> {
         if self.addr() + self.size != other.addr() { return None; } // Not adjacent
-        return Some(Self::new_bytes(self.ptr, self.size + other.size));
+        return Some(Self::new_bytes(self.ptr::<()>(), self.size + other.size));
     }
 
     pub fn split(&self, offset: usize) -> Option<(Self, Self)> {
         if offset >= self.size { return None; } // Offset out of bounds
-        let first = Self::new_bytes(self.ptr, offset);
+        let first = Self::new_bytes(self.ptr::<()>(), offset);
         let second = Self::new_bytes((self.addr() + offset) as *const u8, self.size - offset);
         return Some((first, second));
     }
@@ -134,7 +138,7 @@ pub struct PhysAllocData {
     is_init: bool
 }
 
-pub struct PhysAlloc(Mutex<PhysAllocData>);
+pub struct PhysAlloc(pub Mutex<PhysAllocData>);
 
 const BASE_RB_SIZE: usize = 128;
 static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
@@ -146,16 +150,18 @@ unsafe impl Send for PhysAllocData {}
 unsafe impl Sync for PhysAllocData {}
 
 impl PhysAllocData {
-    const fn empty(rb: &[RAMBlock]) -> Self {
+    const fn empty() -> Self {
         Self {
-            ptr: OwnedPtr::from_slice(rb),
+            ptr: OwnedPtr::null(),
             is_init: false,
-            max: rb.len()
+            max: 0
         }
     }
 
     fn init(&mut self, efi_ram_layout: &mut [RAMDescriptor]) {
+        let rb = &RB_EMBEDDED;
         if self.is_init { return; }
+        (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
         efi_ram_layout.sort_noheap_by_key(|desc| desc.page_count);
         for desc in efi_ram_layout.iter().rev() {
             if desc.ty == ramtype::CONVENTIONAL {
@@ -164,6 +170,13 @@ impl PhysAllocData {
                 self.add(ptr, size, desc.ty, false);
             }
         }
+
+        let new_rb = self.alloc(
+            AllocParams::new(size_of::<RAMBlock>() * self.max)
+        ).expect("Failed to relocate RAMBlocks");
+        unsafe { core::ptr::copy(self.ptr.ptr::<RAMBlock>(), new_rb.ptr::<RAMBlock>(), self.max); }
+        self.ptr = new_rb;
+
         efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
         for desc in efi_ram_layout {
             if desc.ty != ramtype::CONVENTIONAL {
@@ -338,16 +351,14 @@ impl PhysAllocData {
             core::ptr::copy(old_ptr, new_ptr, self.max);
         }
         (self.ptr, self.max) = (new_blocks, new_max);
-        if old_blocks.ptr() as *const RAMBlock != RB_EMBEDDED.as_ptr() {
-            self.free(old_blocks);
-        }
+        self.free(old_blocks);
         self.alloc(alloc_param.at(new_ptr));
     }
 }
 
 impl PhysAlloc {
     const fn empty(rb: &[RAMBlock]) -> Self {
-        return Self(Mutex::new(PhysAllocData::empty(rb)));
+        return Self(Mutex::new(PhysAllocData::empty()));
     }
 
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }

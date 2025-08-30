@@ -1,7 +1,7 @@
 use spin::Mutex;
 
 use crate::{
-    arch::mmu::flags,
+    arch::mmu,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::ramtype, SYS_INFO
 };
@@ -35,7 +35,7 @@ impl PageSize {
     }
 
     pub const fn index_bits(&self) -> u8 {
-        self.shift() - (usize::BITS / u8::BITS).ilog2() as u8
+        self.shift() - size_of::<usize>().ilog2() as u8
     }
 
     pub const fn entries_per_table(&self) -> usize {
@@ -82,7 +82,7 @@ impl MMUCfg {
 
 pub struct GlacierData {
     cfg: MMUCfg,
-    root_table: *mut usize,
+    root_table: usize,
     is_init: bool
 }
 
@@ -97,7 +97,7 @@ impl GlacierData {
                 va_bits: 0,
                 pa_bits: 0
             },
-            root_table: core::ptr::null_mut(),
+            root_table: 0,
             is_init: false
         }
     }
@@ -113,7 +113,7 @@ impl GlacierData {
         ).expect("Failed to allocate root page table");
 
         unsafe { core::ptr::write_bytes(root_table.ptr::<u8>(), 0, table_size); }
-        self.root_table = root_table.ptr();
+        self.root_table = root_table.addr();
         self.is_init = true;
     }
 
@@ -128,14 +128,14 @@ impl GlacierData {
 
         for level in 0..levels {
             let index = self.cfg.get_index(level, va);
-            let entry = unsafe { table.add(index) };
+            let entry = unsafe { (table as *mut usize).add(index) };
 
             if level == levels - 1 {
                 unsafe { *entry = pa | flags; }
                 break;
             }
 
-            if unsafe { *entry & flags::VALID == 0 } {
+            if unsafe { *entry & mmu::flags::VALID == 0 } {
                 let table_size = self.cfg.page_size.table_size();
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
@@ -145,11 +145,11 @@ impl GlacierData {
 
                 unsafe {
                     core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
-                    *entry = next_table.addr() | flags::NEXT_TABLE;
+                    *entry = next_table.addr() | mmu::flags::NEXT_TABLE;
                 }
-                table = next_table.ptr();
+                table = next_table.ptr::<()>() as usize;
             } else {
-                table = unsafe { (*entry & self.cfg.page_size.addr_mask()) as *mut usize };
+                table = unsafe { *entry & self.cfg.page_size.addr_mask() };
             }
         }
     }
@@ -170,7 +170,7 @@ impl GlacierData {
     }
 
     pub fn root_table(&self) -> *mut usize {
-        return self.root_table;
+        return self.root_table as *mut usize;
     }
 
     pub fn cfg(&self) -> MMUCfg {
@@ -180,7 +180,7 @@ impl GlacierData {
 
 pub static GLACIER: Glacier = Glacier::empty();
 
-pub struct Glacier(Mutex<GlacierData>);
+pub struct Glacier(pub Mutex<GlacierData>);
 impl Glacier {
     const fn empty() -> Self {
         return Self(Mutex::new(GlacierData::empty()));
@@ -196,9 +196,9 @@ impl Glacier {
             let addr = desc.phys_start as usize;
             let size = desc.page_count as usize * 0x1000;
 
-            s.map_range(addr, addr, size, crate::arch::mmu::flags_for_type(block_ty));
+            s.map_range(addr, addr, size, mmu::flags_for_type(block_ty));
         }
-        crate::arch::mmu::identity_map(&mut s);
+        mmu::identity_map(&mut s);
     }
 
     pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
