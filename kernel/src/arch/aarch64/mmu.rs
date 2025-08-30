@@ -54,25 +54,12 @@ pub fn flags_for_type(ty: u32) -> usize {
 
 impl MMUCfg {
     pub fn detect() -> Self {
-        let mut tcr_el1: usize;
-        unsafe { core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr_el1); }
-
-        let t0sz = tcr_el1 & 0x3f;
-        let va_bits = 64 - t0sz as u8;
-
-        let tg0 = (tcr_el1 >> 14) & 0x3;
-        let page_size = match tg0 {
-            0b00 => PageSize::Size4kiB,
-            0b01 => PageSize::Size64kiB,
-            0b10 => PageSize::Size16kiB,
-            _ => unreachable!()
-        };
-
-        let mut mmfr0: u64;
+        let page_size = PageSize::Size4kiB;
+        let va_bits = 48;
+        let mut mmfr0: usize;
         unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
-
-        let parange = mmfr0 & 0xf;
-        let pa_bits = match parange {
+        let ips = mmfr0 & 0xf;
+        let pa_bits = match ips {
             0 => 32,
             1 => 36,
             2 => 40,
@@ -86,10 +73,18 @@ impl MMUCfg {
         return Self { page_size, va_bits, pa_bits };
     }
 
-    pub fn tcr_el1(&self) -> usize {
-        let mut tcr: usize;
-        unsafe { core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr); }
-        tcr &= 0xc03fc03f; // T0SZ, T1SZ, TG0, TG1
+    fn tcr_el1(&self) -> usize {
+        let tnsz = usize::BITS as usize - self.va_bits as usize;
+
+        let tg = match self.page_size {
+            PageSize::Size4kiB => 0b00,
+            PageSize::Size16kiB => 0b10,
+            PageSize::Size64kiB => 0b01
+        };
+
+        let mut tcr = 0;
+        tcr |= tnsz | (tnsz << 16); // T0SZ and T1SZ
+        tcr |= (tg << 14) | (tg << 30); // TG0 and TG1
 
         tcr |= 0b01 << 8;  // IRGN0 = Normal WB/WA
         tcr |= 0b01 << 10; // ORGN0 = Normal WB/WA
@@ -123,7 +118,7 @@ pub fn identity_map(glacier: &GlacierData) {
             "msr mair_el1, {mair}",
             "msr tcr_el1, {tcr}",
             "msr ttbr0_el1, {ttbr0}",
-            "msr ttbr1_el1, xzr",
+            "msr ttbr1_el1, {ttbr0}",
             "isb",
 
             "mrs x0, sctlr_el1",
