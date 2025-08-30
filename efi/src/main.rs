@@ -105,7 +105,7 @@ fn spark() -> Status {
     });
 
     let mut disk_uuid = [0u8; 16];
-    if let Ok(handle_buffer) = locate_handle_buffer(SearchType::ByProtocol(&BlockIO::GUID)) {        
+    if let Ok(handle_buffer) = locate_handle_buffer(SearchType::ByProtocol(&BlockIO::GUID)) {
         for &handle in handle_buffer.iter() {
             if let Ok(block_io) = open_protocol::<BlockIO>(handle) {
                 let media = block_io.media();

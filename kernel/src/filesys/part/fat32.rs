@@ -465,7 +465,7 @@ impl FileSystem for Fat32 {
         let weak_self = self.self_ref.read().as_ref()
             .expect("self_ref not initialized")
             .clone();
-        
+
         Arc::new(Fat32VNode {
             fs: weak_self,
             cluster: self.bpb.root_cluster,
