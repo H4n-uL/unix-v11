@@ -8,7 +8,7 @@ use spin::Mutex;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMBlock {
-    ptr: *const u8,
+    ptr: usize,
     size: usize,
     ty: u32,
     used: bool
@@ -16,13 +16,13 @@ pub struct RAMBlock {
 
 impl RAMBlock {
     pub fn new(ptr: *const u8, size: usize, ty: u32, used: bool) -> Self {
-        return Self { ptr, size, ty, used };
+        return Self { ptr: ptr as usize, size, ty, used };
     }
     pub const fn new_invalid() -> Self {
-        return Self { ptr: 0 as *const u8, size: 0, ty: 0, used: false };
+        return Self { ptr: 0, size: 0, ty: 0, used: false };
     }
 
-    pub fn addr(&self) -> usize    { self.ptr as usize }
+    pub fn addr(&self) -> usize    { self.ptr }
     pub fn ptr(&self) -> *mut u8   { self.ptr as *mut u8 }
     pub fn size(&self) -> usize    { self.size }
     pub fn ty(&self) -> u32        { self.ty }
@@ -31,7 +31,7 @@ impl RAMBlock {
     pub fn used(&self) -> bool     { self.used }
     pub fn not_used(&self) -> bool { !self.used }
 
-    fn set_ptr(&mut self, ptr: *const u8) { self.ptr  = ptr; }
+    fn set_ptr(&mut self, ptr: *const u8) { self.ptr  = ptr as usize; }
     fn set_size(&mut self, size: usize)   { self.size = size; }
     fn set_ty(&mut self, ty: u32)         { self.ty   = ty; }
     fn set_used(&mut self, used: bool)    { self.used = used; }
@@ -51,7 +51,7 @@ impl RAMBlock {
     }
 
     pub fn into_owned_ptr(&self) -> OwnedPtr {
-        return OwnedPtr::new_bytes(self.ptr, self.size);
+        return OwnedPtr::new_bytes(self.ptr(), self.size);
     }
 }
 
