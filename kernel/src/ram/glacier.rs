@@ -37,31 +37,15 @@ impl PageSize {
     pub const fn index_bits(&self) -> u8 {
         self.shift() - size_of::<usize>().ilog2() as u8
     }
-
-    pub const fn entries_per_table(&self) -> usize {
-        1 << self.index_bits()
-    }
-
-    pub const fn table_size(&self) -> usize {
-        self.entries_per_table() * 8
-    }
 }
 
 impl MMUCfg {
     pub fn levels(&self) -> u8 {
         let page_shift = self.page_size.shift();
         let index_bits = self.page_size.index_bits();
-        let start_bit = self.va_bits - 1;
-        let mut levels = 0;
-        let mut bit = start_bit;
+        let addr_bits = self.va_bits - page_shift;
 
-        while bit >= page_shift {
-            levels += 1;
-            if bit < index_bits { break; }
-            bit = bit.saturating_sub(index_bits);
-        }
-
-        return levels;
+        return (addr_bits + index_bits - 1) / index_bits;
     }
 
     pub fn get_index(&self, level: u8, va: usize) -> usize {
@@ -105,7 +89,7 @@ impl GlacierData {
     fn init(&mut self) {
         if self.is_init { return; }
         self.cfg = MMUCfg::detect();
-        let table_size = self.cfg.page_size.table_size();
+        let table_size = self.cfg.page_size.size();
         let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
@@ -136,7 +120,7 @@ impl GlacierData {
             }
 
             if unsafe { *entry & mmu::flags::VALID == 0 } {
-                let table_size = self.cfg.page_size.table_size();
+                let table_size = self.cfg.page_size.size();
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
