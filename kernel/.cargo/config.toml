@@ -3,6 +3,7 @@ target = ["x86_64-unknown-none", "aarch64-unknown-none", "riscv64gc-unknown-none
 
 [unstable]
 build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins"]
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64"))']
 rustflags = [
