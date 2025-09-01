@@ -82,7 +82,7 @@ case $ARCH in
     riscv64|risc-v64|rv64)
         EFI_TARGET="riscv64gc-unknown-uefi-elf.json"
         KERNEL_TARGET="riscv64gc-unknown-none-elf"
-        EFI_BOOT_NAME="bootrv64.efi"
+        EFI_BOOT_NAME="bootriscv64.efi"
         QEMU_SYSTEM="qemu-system-riscv64"
         QEMU_CPU="max"
         QEMU_MACHINE="virt,accel=tcg"
