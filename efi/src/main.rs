@@ -32,7 +32,7 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 #[entry]
-fn spark() -> Status {
+fn flint() -> Status {
     let mut file_binary: &mut [u8] = &mut [];
     if let Ok(mut filesys_protocol) = get_image_file_system(image_handle()) {
         let mut root = filesys_protocol.open_volume().unwrap();
