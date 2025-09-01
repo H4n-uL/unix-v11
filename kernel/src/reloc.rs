@@ -6,12 +6,11 @@ use crate::{
 
 #[inline(always)]
 pub fn reloc() -> ! {
-    let sysinfo = SYS_INFO.lock();
-    let kbase = sysinfo.kernel.base;
-    let ksize = sysinfo.kernel.size;
-    let rela_ptr = sysinfo.kernel.rela_ptr;
-    let rela_len = sysinfo.kernel.rela_len;
-    drop(sysinfo);
+    let kinfo = SYS_INFO.lock().kernel;
+    let kbase = kinfo.base;
+    let ksize = kinfo.size;
+    let rela_ptr = kinfo.rela_ptr;
+    let rela_len = kinfo.rela_len;
 
     let high_half: usize = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
     let new_kbase = PHYS_ALLOC.alloc(
