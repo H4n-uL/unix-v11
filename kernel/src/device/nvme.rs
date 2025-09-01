@@ -4,7 +4,7 @@ use crate::{
 };
 use super::PCI_DEVICES;
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
-use nvme::{Allocator, Device};
+use nvme_rs::{Allocator, Device};
 use spin::Mutex;
 
 pub struct NVMeAlloc;
