@@ -15,7 +15,7 @@ pub struct RAMDescriptor {
 pub struct SysInfo {
     pub kernel: KernelInfo,
     pub stack_base: usize,
-    pub layout_ptr: *const RAMDescriptor,
+    pub layout_ptr: usize,
     pub layout_len: usize,
     pub acpi_ptr: usize,
     pub dtb_ptr: usize,
@@ -102,7 +102,7 @@ impl SysInfo {
         Self {
             kernel: KernelInfo::empty(),
             stack_base: 0,
-            layout_ptr: core::ptr::null(),
+            layout_ptr: 0,
             layout_len: 0,
             acpi_ptr: 0,
             dtb_ptr: 0,
@@ -116,7 +116,7 @@ impl SysInfo {
         let kernel_start = self.kernel.base as u64;
         let kernel_end = (self.kernel.base + self.kernel.size) as u64;
         let layout_start = self.layout_ptr as u64;
-        let layout_end = unsafe { self.layout_ptr.add(self.layout_len) } as u64;
+        let layout_end = unsafe { (self.layout_ptr as *const RAMDescriptor).add(self.layout_len) } as u64;
 
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
@@ -129,7 +129,7 @@ impl SysInfo {
     }
 
     pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts(self.layout_ptr, self.layout_len) };
+        return unsafe { core::slice::from_raw_parts(self.layout_ptr as *const RAMDescriptor, self.layout_len) };
     }
 
     pub fn efi_ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
