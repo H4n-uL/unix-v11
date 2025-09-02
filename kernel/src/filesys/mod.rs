@@ -161,13 +161,14 @@ pub fn init_filesys() {
 
             match Fat32::new(part_device) {
                 Ok(fat32) => {
-                    let mp = format!("/part{}", mounted);
-                    let create_mp = vfs.create(&mp, NodeType::Directory);
-                    let mountfs = vfs.mount(&mp, fat32);
-                    match (create_mp, mountfs) {
-                        (Ok(_), Ok(_)) => mounted += 1,
-                        (Ok(_), Err(e)) => printlnk!("Failed to mount FAT32: {:?}", e),
-                        (Err(e), _) => printlnk!("Failed to create mount point: {:?}", e)
+                    let mp = if mounted == 0 { "/" } else { &format!("/part{}", mounted) };
+                    if let Some(e) = if mp != "/" { vfs.create(&mp, NodeType::Directory).err() } else { None } {
+                        printlnk!("Failed to create mount point: {:?}", e);
+                    }
+                    if let Err(e) = vfs.mount(&mp, fat32) {
+                        printlnk!("Failed to mount FAT32: {:?}", e);
+                    } else {
+                        mounted += 1;
                     }
                 }
                 Err(e) => printlnk!("Failed to read FAT32: {:?}", e)
