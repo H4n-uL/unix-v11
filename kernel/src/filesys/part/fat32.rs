@@ -7,7 +7,7 @@ use core::mem::size_of;
 use spin::RwLock;
 
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Fat32BPB {
     jmp_boot: [u8; 3],
     oem_name: [u8; 8],
@@ -39,7 +39,7 @@ struct Fat32BPB {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Fat32FSInfo {
     lead_sig: u32,
     reserved1: [u8; 480],
@@ -51,7 +51,7 @@ struct Fat32FSInfo {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct FatDirEntry {
     name: [u8; 11],
     attr: u8,
@@ -68,7 +68,7 @@ struct FatDirEntry {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct LfnEntry {
     ord: u8,
     name1: [u16; 5],

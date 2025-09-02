@@ -2,7 +2,7 @@ use crate::filesys::{FsError, Result};
 use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::{Mutex, RwLock};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeType {
     File,
     Directory,
@@ -13,7 +13,7 @@ pub enum NodeType {
     Symlink
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Metadata {
     pub size: usize,
     pub node_type: NodeType,
@@ -52,7 +52,7 @@ pub trait VNode: Send + Sync {
     fn ioctl(&self, cmd: u32, arg: usize) -> Result<usize>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DirEntry {
     pub name: String,
     pub node_type: NodeType
@@ -212,7 +212,6 @@ impl VirtualFileSystem {
         let mut mounts = self.mounts.write();
         let pos = mounts.iter().position(|m| m.path == path)
             .ok_or(FsError::NotFound)?;
-
         mounts.remove(pos);
         return Ok(());
     }
