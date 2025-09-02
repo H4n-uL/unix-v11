@@ -6,7 +6,7 @@ use crate::{
     device::block::BLOCK_DEVICES,
     filesys::{
         devfs::{ConsoleDevice, DevFS, Device, NullDevice, ZeroDevice},
-        part::{gpt::Gpt, PartitionDevice, fat32::Fat32},
+        part::{fat32::Fat32, gpt::Gpt, PartitionDevice},
         vfs::{NodeType, VFS}
     },
     printlnk, ram::PageAligned
@@ -16,7 +16,7 @@ use alloc::{format, string::String, sync::Arc};
 
 pub type Result<T> = core::result::Result<T, FsError>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum FsError {
     NotFound,
     PermissionDenied,
@@ -123,7 +123,8 @@ impl Device for BlockDeviceWrapper {
 }
 
 pub fn init_filesys() {
-    VFS.lock().init();
+    let mut vfs = VFS.lock();
+    vfs.init();
 
     let devfs = Arc::new(DevFS::new());
     devfs.add_device("null", Arc::new(NullDevice), NodeType::CharDevice)
@@ -142,27 +143,33 @@ pub fn init_filesys() {
         ).expect("Failed to add block device");
     }
 
-    VFS.lock().create("/dev", NodeType::Directory).expect("Failed to create /dev directory");
-    VFS.lock().mount("/dev", devfs).expect("Failed to mount devfs");
+    vfs.create("/dev", NodeType::Directory).expect("Failed to create /dev directory");
+    vfs.mount("/dev", devfs).expect("Failed to mount devfs");
 
     let devices = BLOCK_DEVICES.lock();
-
+    let mut mounted = 0;
     for device in devices.iter() {
         let gpt = match Gpt::read(device) {
             Ok(gpt) => gpt,
             Err(_) => continue
         };
 
-        gpt.print_info();
-
         for part in gpt.partitions.iter() {
             let part_device = Arc::new(PartitionDevice::new(
-                device.clone(),
-                part.start_lba
+                device.clone(), part.start_lba
             ));
 
             match Fat32::new(part_device) {
-                Ok(fat32) => fat32.print_info(),
+                Ok(fat32) => {
+                    let mp = format!("/part{}", mounted);
+                    let create_mp = vfs.create(&mp, NodeType::Directory);
+                    let mountfs = vfs.mount(&mp, fat32);
+                    match (create_mp, mountfs) {
+                        (Ok(_), Ok(_)) => mounted += 1,
+                        (Ok(_), Err(e)) => printlnk!("Failed to mount FAT32: {:?}", e),
+                        (Err(e), _) => printlnk!("Failed to create mount point: {:?}", e)
+                    }
+                }
                 Err(e) => printlnk!("Failed to read FAT32: {:?}", e)
             }
         }
