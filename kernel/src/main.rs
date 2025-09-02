@@ -34,15 +34,6 @@ macro_rules! printlnk {
     ($($arg:tt)*) => { $crate::printk!("{}\r\n", format_args!($($arg)*)) };
 }
 
-fn init_metal() {
-    // arch::exceptions::init();
-    printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
-    ram::init_ram();
-    device::init_device();
-}
-fn exec_aleph() {}
-fn schedule() -> ! { loop { arch::halt(); } }
-
 pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
 
 #[unsafe(no_mangle)]
@@ -56,9 +47,12 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
-    init_metal();
-    exec_aleph();
-    schedule();
+    // arch::exceptions::init();
+    printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
+    ram::init_ram();
+    device::init_device();
+    // exec_aleph();
+    loop { arch::halt(); }
 }
 
 #[panic_handler]
