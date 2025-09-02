@@ -308,18 +308,4 @@ impl Gpt {
             return false;
         }
     }
-
-    pub fn print_info(&self) {
-        crate::printlnk!("GPT Disk UUID: {:02x?}", self.header.disk_uuid);
-        crate::printlnk!("Usable LBAs: {} - {}",
-            self.header.first_usable_lba,
-            self.header.last_usable_lba
-        );
-        crate::printlnk!("Protective MBR: {}",
-            if self.has_protective_mbr { "Yes" } else { "No" }
-        );
-        crate::printlnk!("Backup GPT: {}",
-            if self.backup_header_valid { "Valid" } else { "Invalid/Not checked" }
-        );
-    }
 }

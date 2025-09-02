@@ -1,6 +1,5 @@
-use crate::{
-    filesys::{FsError, Result, devfs::Device, vfs::{FileSystem, NodeType, VNode, DirEntry, Metadata}},
-    printlnk
+use crate::filesys::{
+    FsError, Result, devfs::Device, vfs::{FileSystem, NodeType, VNode, DirEntry, Metadata}
 };
 use alloc::{sync::{Arc, Weak}, vec::Vec, vec, string::{String, ToString}, collections::BTreeMap, format};
 use core::mem::size_of;
@@ -198,33 +197,6 @@ impl Fat32 {
 
         *fs.self_ref.write() = Some(Arc::downgrade(&fs));
         return Ok(fs);
-    }
-
-    pub fn print_info(&self) {
-        printlnk!("FAT32 Info:");
-        let oem_name = self.bpb.oem_name;
-        printlnk!("OEM Name: {:?}", core::str::from_utf8(&oem_name).unwrap_or("Invalid"));
-        let bytes_per_sector = self.bpb.bytes_per_sector;
-        printlnk!("Bytes per sector: {}", bytes_per_sector);
-        let sectors_per_cluster = self.bpb.sectors_per_cluster;
-        printlnk!("Sectors per cluster: {}", sectors_per_cluster);
-        let reserved_sectors = self.bpb.reserved_sectors;
-        printlnk!("Reserved sectors: {}", reserved_sectors);
-        let num_fats = self.bpb.num_fats;
-        printlnk!("Number of FATs: {}", num_fats);
-        let fat_size_32 = self.bpb.fat_size_32;
-        printlnk!("FAT size: {} sectors", fat_size_32);
-        let root_cluster = self.bpb.root_cluster;
-        printlnk!("Root cluster: {}", root_cluster);
-        printlnk!("Total clusters: {}", self.total_clusters);
-        printlnk!("Cluster size: {} bytes", self.cluster_size);
-
-        if let Some(fs_info) = &self.fs_info {
-            let free_count = fs_info.free_count;
-            printlnk!("Free clusters: {}", free_count);
-            let next_free = fs_info.next_free;
-            printlnk!("Next free cluster: {}", next_free);
-        }
     }
 
     fn cluster_to_sector(&self, cluster: u32) -> u32 {
