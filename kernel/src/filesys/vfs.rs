@@ -1,5 +1,5 @@
 use crate::filesys::{FsError, Result};
-use alloc::{collections::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec};
+use alloc::{collections::{BTreeMap, BTreeSet}, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::{Mutex, RwLock};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,19 +172,19 @@ impl VNode for VfsDir {
 
 struct MountPoint {
     path: String,
-    fs: Arc<dyn FileSystem>
+    fsys: Vec<Arc<dyn FileSystem>>
 }
 
 pub struct VirtualFileSystem {
     root: Option<Arc<VfsDir>>,
-    mounts: RwLock<Vec<MountPoint>>
+    mounts: RwLock<BTreeMap<String, MountPoint>>
 }
 
 impl VirtualFileSystem {
     const fn empty() -> Self {
         return Self {
             root: None,
-            mounts: RwLock::new(Vec::new())
+            mounts: RwLock::new(BTreeMap::new())
         };
     }
 
@@ -194,55 +194,82 @@ impl VirtualFileSystem {
     }
 
     pub fn mount(&self, path: &str, fs: Arc<dyn FileSystem>) -> Result<()> {
-        let mount_point = self.lookup(path)?;
-        if mount_point.metadata()?.node_type != NodeType::Directory {
-            return Err(FsError::NotDirectory);
+        if !path.is_empty() && !path.starts_with('/') {
+            return Err(FsError::InvalidPath);
         }
-
+        if !path.is_empty() && path != "/" {
+            let mount_point = self.lookup(path)?;
+            if mount_point.metadata()?.node_type != NodeType::Directory {
+                return Err(FsError::NotDirectory);
+            }
+        }
         let mut mounts = self.mounts.write();
-        if mounts.iter().any(|m| m.path == path) {
-            return Err(FsError::AlreadyExists);
+        match mounts.get_mut(path) {
+            Some(mount_point) => mount_point.fsys.push(fs),
+            None => { mounts.insert(path.to_string(), MountPoint {
+                path: path.to_string(),
+                fsys: alloc::vec![fs]
+            }); }
         }
-
-        mounts.push(MountPoint { path: path.to_string(), fs });
         return Ok(());
     }
 
     pub fn umount(&self, path: &str) -> Result<()> {
         let mut mounts = self.mounts.write();
-        let pos = mounts.iter().position(|m| m.path == path)
-            .ok_or(FsError::NotFound)?;
-        mounts.remove(pos);
-        return Ok(());
+        match mounts.get_mut(path) {
+            Some(mount_point) => {
+                if mount_point.fsys.is_empty() {
+                    return Err(FsError::NotFound);
+                }
+                mount_point.fsys.pop();
+                if mount_point.fsys.is_empty() {
+                    mounts.remove(path);
+                }
+                Ok(())
+            }
+            None => Err(FsError::NotFound)
+        }
     }
 
     pub fn lookup(&self, path: &str) -> Result<Arc<dyn VNode>> {
         if self.root.is_none() {
             return Err(FsError::NotFound);
         }
-        let root = self.root.clone();
-        if path == "/" {
-            return Ok(root.unwrap() as Arc<dyn VNode>);
+        let mounts = self.mounts.read();
+        if let Some(mount_point) = mounts.get(path) {
+            if let Some(top_fs) = mount_point.fsys.last() {
+                return Ok(top_fs.root());
+            }
         }
-
+        if path.is_empty() || path == "/" {
+            return Ok(self.root.clone().unwrap() as Arc<dyn VNode>);
+        }
         let path = path.trim_start_matches('/');
         let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        if let Some(root_mount) = mounts.get("/") {
+            for fs in root_mount.fsys.iter().rev() {
+                if let Ok(node) = self.traverse_path(&fs.root(), &components, &mounts) {
+                    return Ok(node);
+                }
+            }
+        }
+        return self.traverse_path(&(self.root.clone().unwrap() as Arc<dyn VNode>), &components, &mounts);
+    }
 
-        let mut current = root.unwrap() as Arc<dyn VNode>;
+    fn traverse_path(&self, start: &Arc<dyn VNode>, components: &[&str], mounts: &BTreeMap<String, MountPoint>) -> Result<Arc<dyn VNode>> {
+        let mut current = start.clone();
         let mut current_path = String::new();
-
         for component in components {
             current_path.push('/');
             current_path.push_str(component);
-
-            if let Some(mount) = self.mounts.read().iter().find(|m| m.path == current_path) {
-                current = mount.fs.root();
-                continue;
+            if let Some(mount) = mounts.get(&current_path) {
+                if let Some(top_fs) = mount.fsys.last() {
+                    current = top_fs.root();
+                    continue;
+                }
             }
-
             current = current.lookup(component)?;
         }
-
         return Ok(current);
     }
 
@@ -264,8 +291,46 @@ impl VirtualFileSystem {
     }
 
     pub fn readdir(&self, path: &str) -> Result<Vec<DirEntry>> {
+        let mounts = self.mounts.read();
+        if let Some(mount_point) = mounts.get(path) {
+            if !mount_point.fsys.is_empty() {
+                let mut merged = Vec::new();
+                let mut seen_names = BTreeSet::new();
+                for fs in mount_point.fsys.iter().rev() {
+                    let entries = fs.root().readdir()?;
+                    for entry in entries {
+                        if !seen_names.contains(&entry.name) {
+                            seen_names.insert(entry.name.clone());
+                            merged.push(entry);
+                        }
+                    }
+                }
+                if let Ok(base_vnode) = self.lookup_base(path) {
+                    let base_entries = base_vnode.readdir()?;
+                    for entry in base_entries {
+                        if !seen_names.contains(&entry.name) {
+                            merged.push(entry);
+                        }
+                    }
+                }
+                return Ok(merged);
+            }
+        }
         let vnode = self.lookup(path)?;
         return vnode.readdir();
+    }
+
+    fn lookup_base(&self, path: &str) -> Result<Arc<dyn VNode>> {
+        if self.root.is_none() {
+            return Err(FsError::NotFound);
+        }
+        if path.is_empty() || path == "/" {
+            return Ok(self.root.clone().unwrap() as Arc<dyn VNode>);
+        }
+        let path = path.trim_start_matches('/');
+        let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        let mounts = self.mounts.read();
+        return self.traverse_path(&(self.root.clone().unwrap() as Arc<dyn VNode>), &components, &mounts);
     }
 }
 
