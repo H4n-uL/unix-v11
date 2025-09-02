@@ -4,7 +4,6 @@ use crate::{
     sysinfo::{ramtype, RelaEntry}, SYS_INFO
 };
 
-#[inline(always)]
 pub fn reloc() -> ! {
     let kinfo = SYS_INFO.lock().kernel;
     let kbase = kinfo.base;
