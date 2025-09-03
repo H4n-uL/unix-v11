@@ -142,7 +142,7 @@ pub struct PhysAlloc(pub Mutex<PhysAllocData>);
 
 const BASE_RB_SIZE: usize = 128;
 static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
-pub static PHYS_ALLOC: PhysAlloc = PhysAlloc::empty(&RB_EMBEDDED);
+pub static PHYS_ALLOC: PhysAlloc = PhysAlloc::empty();
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
@@ -378,7 +378,7 @@ impl PhysAllocData {
 }
 
 impl PhysAlloc {
-    const fn empty(rb: &[RAMBlock]) -> Self {
+    const fn empty() -> Self {
         return Self(Mutex::new(PhysAllocData::empty()));
     }
 
