@@ -454,8 +454,8 @@ impl FileSystem for Fat32 {
 }
 
 impl VNode for Fat32VNode {
-    fn metadata(&self) -> Result<Metadata> {
-        return Ok(Metadata {
+    fn metadata(&self) -> Metadata {
+        return Metadata {
             size: self.file_size as usize,
             node_type: self.node_type,
             permissions: if self.attributes & ATTR_READ_ONLY != 0 { 0o444 } else { 0o644 },
@@ -464,7 +464,7 @@ impl VNode for Fat32VNode {
             atime: 0,
             mtime: 0,
             ctime: 0
-        });
+        };
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {

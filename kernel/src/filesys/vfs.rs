@@ -41,7 +41,7 @@ impl Default for Metadata {
 }
 
 pub trait VNode: Send + Sync {
-    fn metadata(&self) -> Result<Metadata>;
+    fn metadata(&self) -> Metadata;
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize>;
     fn write(&self, offset: usize, buf: &[u8]) -> Result<usize>;
     fn readdir(&self) -> Result<Vec<DirEntry>>;
@@ -99,10 +99,10 @@ impl VfsDir {
 }
 
 impl VNode for VfsDir {
-    fn metadata(&self) -> Result<Metadata> {
+    fn metadata(&self) -> Metadata {
         let mut metadata = self.metadata.clone();
         metadata.size = self.children.read().len();
-        return Ok(metadata);
+        return metadata;
     }
 
     fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
@@ -127,7 +127,7 @@ impl VNode for VfsDir {
         });
 
         for (name, node) in children.iter() {
-            let metadata = node.metadata()?;
+            let metadata = node.metadata();
             entries.push(DirEntry {
                 name: name.clone(),
                 node_type: metadata.node_type
@@ -199,7 +199,7 @@ impl VirtualFileSystem {
         }
         if !path.is_empty() && path != "/" {
             let mount_point = self.lookup(path)?;
-            if mount_point.metadata()?.node_type != NodeType::Directory {
+            if mount_point.metadata().node_type != NodeType::Directory {
                 return Err(FsError::NotDirectory);
             }
         }
@@ -365,7 +365,7 @@ impl File {
         return Ok(());
     }
 
-    pub fn metadata(&self) -> Result<Metadata> {
+    pub fn metadata(&self) -> Metadata {
         return self.vnode.metadata();
     }
 

@@ -21,8 +21,8 @@ impl DeviceNode {
 }
 
 impl VNode for DeviceNode {
-    fn metadata(&self) -> Result<Metadata> {
-        return Ok(self.metadata.clone());
+    fn metadata(&self) -> Metadata {
+        return self.metadata.clone();
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
@@ -93,11 +93,11 @@ impl DevDir {
 }
 
 impl VNode for DevDir {
-    fn metadata(&self) -> Result<Metadata> {
+    fn metadata(&self) -> Metadata {
         let mut metadata = Metadata::default();
         metadata.node_type = NodeType::Directory;
         metadata.permissions = 0o755;
-        return Ok(metadata);
+        return metadata;
     }
 
     fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
