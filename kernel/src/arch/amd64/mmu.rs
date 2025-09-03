@@ -55,26 +55,28 @@ impl MMUCfg {
     }
 }
 
-pub fn identity_map(glacier: &GlacierData) {
-    unsafe {
-        core::arch::asm!(
-            "mov cr3, {pml4}",
+impl GlacierData {
+    pub fn identity_map(&self) {
+        unsafe {
+            core::arch::asm!(
+                "mov cr3, {pml4}",
 
-            "mov rax, cr0",
-            "mov rbx, 0x80000000",
-            "or rax, rbx",
-            "mov cr0, rax",
+                "mov rax, cr0",
+                "mov rbx, 0x80000000",
+                "or rax, rbx",
+                "mov cr0, rax",
 
-            "mov rax, cr4",
-            "or eax, 0x00000030", // PAE / PSE
-            "mov cr4, rax",
+                "mov rax, cr4",
+                "or eax, 0x00000030", // PAE / PSE
+                "mov cr4, rax",
 
-            "mov ecx, 0xc0000080",
-            "rdmsr",
-            "or eax, 0x00000900", // NXE / LME
-            "wrmsr",
+                "mov ecx, 0xc0000080",
+                "rdmsr",
+                "or eax, 0x00000900", // NXE / LME
+                "wrmsr",
 
-            pml4 = in(reg) glacier.root_table()
-        );
+                pml4 = in(reg) self.root_table()
+            );
+        }
     }
 }

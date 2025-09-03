@@ -1,10 +1,10 @@
-use spin::Mutex;
-
 use crate::{
     arch::mmu,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::ramtype, SYS_INFO
 };
+
+use spin::Mutex;
 
 #[derive(Clone, Copy, Debug)]
 pub struct MMUCfg {
@@ -99,6 +99,15 @@ impl GlacierData {
         unsafe { core::ptr::write_bytes(root_table.ptr::<u8>(), 0, table_size); }
         self.root_table = root_table.addr();
         self.is_init = true;
+
+        for desc in SYS_INFO.lock().efi_ram_layout() {
+            let block_ty = desc.ty;
+            let addr = desc.phys_start as usize;
+            let size = desc.page_count as usize * 0x1000;
+
+            self.map_range(addr, addr, size, mmu::flags_for_type(block_ty));
+        }
+        self.identity_map();
     }
 
     pub fn map_page(&mut self, va: usize, pa: usize, flags: usize) {
@@ -171,18 +180,7 @@ impl Glacier {
     }
 
     pub fn init(&self) {
-        let mut s = self.0.lock();
-        if s.is_init { return; }
-        s.init();
-
-        for desc in SYS_INFO.lock().efi_ram_layout() {
-            let block_ty = desc.ty;
-            let addr = desc.phys_start as usize;
-            let size = desc.page_count as usize * 0x1000;
-
-            s.map_range(addr, addr, size, mmu::flags_for_type(block_ty));
-        }
-        mmu::identity_map(&mut s);
+        self.0.lock().init();
     }
 
     pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
