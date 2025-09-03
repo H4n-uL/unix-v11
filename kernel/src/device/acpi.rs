@@ -1,4 +1,4 @@
-use crate::{device::PCI_DEVICES, ram::glacier::GLACIER};
+use crate::{arch::mmu::flags, device::PCI_DEVICES, ram::{glacier::GLACIER, physalloc::PHYS_ALLOC}};
 use core::ptr::NonNull;
 use acpi::{aml::AmlError, Handle, Handler, PciAddress, PhysicalMapping};
 
@@ -9,7 +9,10 @@ impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        GLACIER.map_range(phys_addr, phys_addr, size, crate::arch::mmu::flags::PAGE_DEVICE);
+        GLACIER.lock().map_range(
+            phys_addr, phys_addr, size,
+            flags::PAGE_DEVICE, &mut PHYS_ALLOC.lock()
+        );
 
         return unsafe { PhysicalMapping {
             physical_start: phys_addr,

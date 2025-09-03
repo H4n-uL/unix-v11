@@ -38,9 +38,15 @@ pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
 
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
-    SYS_INFO.lock().init(sysinfo);
-    PHYS_ALLOC.init(SYS_INFO.lock().efi_ram_layout_mut());
-    GLACIER.init();
+    {
+        let mut sys_lock = SYS_INFO.lock();
+        let mut alloc_lock = PHYS_ALLOC.lock();
+        let mut glacier = GLACIER.lock();
+
+        sys_lock.init(sysinfo);
+        alloc_lock.init(sys_lock.efi_ram_layout_mut());
+        glacier.init(&mut alloc_lock, &sys_lock);
+    }
     arch::init_serial();
     reloc::reloc();
 }
@@ -49,9 +55,8 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 pub extern "C" fn spark(old_kbase: usize) -> ! {
     unsafe {
         let ksize = SYS_INFO.lock().kernel.size;
-        PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
+        PHYS_ALLOC.lock().free_raw(old_kbase as *mut u8, ksize);
     }
-
     // arch::exceptions::init();
     printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
     ram::init_ram();

@@ -1,6 +1,10 @@
 /* pub mod exceptions; */ pub mod mmu;
 
-use crate::{ram::{glacier::GLACIER, physalloc::OwnedPtr}, SYS_INFO};
+use crate::{
+    arch::mmu::flags,
+    ram::{glacier::GLACIER, physalloc::{OwnedPtr, PHYS_ALLOC}},
+    SYS_INFO
+};
 
 pub fn set_interrupts(enabled: bool) {
     unsafe {
@@ -21,9 +25,11 @@ pub const R_RELATIVE: u64 = 1027;
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
-    GLACIER.map_page(0x0900_0000, 0x0900_0000, mmu::flags::PAGE_DEVICE); // QEMU UART0
-    GLACIER.map_page(0x0800_0000, 0x0800_0000, mmu::flags::PAGE_DEVICE); // GICD
-    GLACIER.map_page(0x0801_0000, 0x0801_0000, mmu::flags::PAGE_DEVICE); // GICC
+    let glacier = GLACIER.lock();
+    let mut phys_alloc = PHYS_ALLOC.lock();
+    glacier.map_page(0x0900_0000, 0x0900_0000, flags::PAGE_DEVICE, &mut phys_alloc); // QEMU UART0
+    glacier.map_page(0x0800_0000, 0x0800_0000, flags::PAGE_DEVICE, &mut phys_alloc); // GICD
+    glacier.map_page(0x0801_0000, 0x0801_0000, flags::PAGE_DEVICE, &mut phys_alloc); // GICC
     unsafe {
         // Disable UART
         core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x0);

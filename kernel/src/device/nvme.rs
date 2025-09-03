@@ -1,4 +1,5 @@
 use crate::{
+    arch::mmu::flags,
     device::block::{BlockDevice, BLOCK_DEVICES},
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PAGE_4KIB}
 };
@@ -11,11 +12,11 @@ pub struct NVMeAlloc;
 
 impl Allocator for NVMeAlloc {
     unsafe fn allocate(&self, size: usize) -> usize {
-        return PHYS_ALLOC.alloc(AllocParams::new(size)).unwrap().addr();
+        return PHYS_ALLOC.lock().alloc(AllocParams::new(size)).unwrap().addr();
     }
 
     unsafe fn deallocate(&self, addr: usize, size: usize) {
-        unsafe { PHYS_ALLOC.free_raw(addr as *mut u8, size); }
+        unsafe { PHYS_ALLOC.lock().free_raw(addr as *mut u8, size); }
     }
 
     fn translate(&self, addr: usize) -> usize { addr }
@@ -78,7 +79,10 @@ pub fn init_nvme() {
         } else { base & !0b11 };
 
         let devid = nvme_devices.len();
-        GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, crate::arch::mmu::flags::PAGE_DEVICE);
+        GLACIER.lock().map_range(
+            mmio_addr, mmio_addr, PAGE_4KIB * 2,
+            flags::PAGE_DEVICE, &mut PHYS_ALLOC.lock()
+        );
         let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
         for ns in nvme_arc.list_namespaces() {
             block_devices.push(Arc::new(NVMeBlockDevice::new(nvme_arc.clone(), devid, ns)));

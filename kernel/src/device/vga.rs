@@ -1,7 +1,7 @@
 use crate::{
     device::{PciDevice, PCI_DEVICES},
     printk, printlnk,
-    ram::{glacier::GLACIER, PAGE_4KIB}
+    ram::{glacier::GLACIER, physalloc::PHYS_ALLOC, PAGE_4KIB}
 };
 use spin::Mutex;
 
@@ -56,6 +56,8 @@ impl Vga {
     const EDID_HEADER: [u8; 8] = [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00];
 
     pub fn new(dev: &PciDevice) -> Option<Self> {
+        let glacier = GLACIER.lock();
+        let mut phys_alloc = &mut PHYS_ALLOC.lock();
         if !dev.is_vga() { return None; }
 
         let mut fb_addr = dev.bar(0).unwrap() as usize;
@@ -70,7 +72,11 @@ impl Vga {
         }
         edid_addr &= !0xf; // 16 byte alignment
 
-        GLACIER.map_range(edid_addr, edid_addr, PAGE_4KIB, crate::arch::mmu::flags::PAGE_DEVICE);
+        glacier.map_range(
+            edid_addr, edid_addr, PAGE_4KIB,
+            crate::arch::mmu::flags::PAGE_DEVICE,
+            &mut phys_alloc
+        );
         let edid_regs = unsafe {
             core::slice::from_raw_parts(edid_addr as *mut u8, PAGE_4KIB)
         };
@@ -85,7 +91,11 @@ impl Vga {
         let pitch = width * 4;
 
         let map_size = width as usize * height as usize * pitch as usize;
-        GLACIER.map_range(fb_addr, fb_addr, map_size, crate::arch::mmu::flags::PAGE_DEVICE);
+        glacier.map_range(
+            fb_addr, fb_addr, map_size,
+            crate::arch::mmu::flags::PAGE_DEVICE,
+            &mut phys_alloc
+        );
         return Some(Vga {
             framebuffer: fb_addr as *mut u32,
             edid: edid_addr as *mut u8,
