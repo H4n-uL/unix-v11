@@ -251,16 +251,16 @@ impl PhysAllocData {
         };
 
         struct AllocInfo {
-            this: RAMBlock,
-            og: RAMBlock
+            from: RAMBlock,
+            to: RAMBlock
         }
         let mut alloc_info = None;
         for block in self.blocks_iter_mut() {
             if filter(block) {
                 if block.ty() == args.as_type && !args.used { break; }
                 alloc_info = Some(AllocInfo {
-                    this: RAMBlock::new(ptr, args.size, args.as_type, args.used),
-                    og: *block,
+                    from: *block,
+                    to: RAMBlock::new(ptr, args.size, args.as_type, args.used)
                 });
                 block.invalidate();
                 break;
@@ -268,16 +268,16 @@ impl PhysAllocData {
         }
 
         if let Some(ainfo) = alloc_info {
-            self.add(ainfo.this);
+            self.add(ainfo.to);
 
             let before_block = RAMBlock::new(
-                ainfo.og.ptr(), ptr as usize - ainfo.og.addr(),
-                ainfo.og.ty(), false
+                ainfo.from.ptr(), ptr as usize - ainfo.from.addr(),
+                ainfo.from.ty(), false
             );
             let after_block = RAMBlock::new(
                 (ptr as usize + args.size) as *const u8,
-                ainfo.og.addr() + ainfo.og.size() - (ptr as usize + args.size),
-                ainfo.og.ty(), false
+                ainfo.from.addr() + ainfo.from.size() - (ptr as usize + args.size),
+                ainfo.from.ty(), false
             );
             self.add(before_block);
             self.add(after_block);
