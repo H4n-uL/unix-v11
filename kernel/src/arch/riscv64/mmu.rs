@@ -52,22 +52,24 @@ impl MMUCfg {
     }
 }
 
-pub fn identity_map(glacier: &GlacierData) {
-    unsafe {
-        core::arch::asm!(
-            // Mode: Sv48 (9), ASID: 0, PPN: root_table >> 12
-            "li t0, 9",                  // Sv48 mode
-            "slli t0, t0, 60",           // Shift mode to bits [63:60]
-            "srli t1, {root_table}, 12", // Get PPN from root table address
-            "or t0, t0, t1",             // Combine mode and PPN
+impl GlacierData {
+    pub fn identity_map(&self) {
+        unsafe {
+            core::arch::asm!(
+                // Mode: Sv48 (9), ASID: 0, PPN: root_table >> 12
+                "li t0, 9",                  // Sv48 mode
+                "slli t0, t0, 60",           // Shift mode to bits [63:60]
+                "srli t1, {root_table}, 12", // Get PPN from root table address
+                "or t0, t0, t1",             // Combine mode and PPN
 
-            "sfence.vma",
-            "csrw satp, t0",
-            "sfence.vma",
+                "sfence.vma",
+                "csrw satp, t0",
+                "sfence.vma",
 
-            "li t0, 0x00020000", // SUM bit
-            "csrs sstatus, t0",  // Set in sstatus
-            root_table = in(reg) glacier.root_table()
-        );
+                "li t0, 0x00020000", // SUM bit
+                "csrs sstatus, t0",  // Set in sstatus
+                root_table = in(reg) self.root_table()
+            );
+        }
     }
 }

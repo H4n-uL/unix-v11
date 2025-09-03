@@ -108,32 +108,34 @@ impl MMUCfg {
     }
 }
 
-pub fn identity_map(glacier: &GlacierData) {
-    // Attr0 = Normal memory, Inner/Outer Write-Back Non-transient
-    // Attr1 = Device memory nGnRnE
-    let mair_el1: u64 = 0xff | (0x00 << 8);
+impl GlacierData {
+    pub fn identity_map(&self) {
+        // Attr0 = Normal memory, Inner/Outer Write-Back Non-transient
+        // Attr1 = Device memory nGnRnE
+        let mair_el1: u64 = 0xff | (0x00 << 8);
 
-    unsafe {
-        core::arch::asm!(
-            "msr mair_el1, {mair}",
-            "msr tcr_el1, {tcr}",
-            "msr ttbr0_el1, {ttbr0}",
-            "msr ttbr1_el1, {ttbr0}",
-            "isb",
+        unsafe {
+            core::arch::asm!(
+                "msr mair_el1, {mair}",
+                "msr tcr_el1, {tcr}",
+                "msr ttbr0_el1, {ttbr0}",
+                "msr ttbr1_el1, {ttbr0}",
+                "isb",
 
-            "mrs x0, sctlr_el1",
-            "orr x0, x0, #(1 << 0)",  // M bit: MMU enable
-            "orr x0, x0, #(1 << 2)",  // C bit: Data cache enable
-            "orr x0, x0, #(1 << 12)", // I bit: Instruction cache enable
-            "msr sctlr_el1, x0",
-            "isb",
+                "mrs x0, sctlr_el1",
+                "orr x0, x0, #(1 << 0)",  // M bit: MMU enable
+                "orr x0, x0, #(1 << 2)",  // C bit: Data cache enable
+                "orr x0, x0, #(1 << 12)", // I bit: Instruction cache enable
+                "msr sctlr_el1, x0",
+                "isb",
 
-            "ic iallu",
-            "dsb sy",
-            "isb",
-            mair = in(reg) mair_el1,
-            tcr = in(reg) glacier.cfg().tcr_el1(),
-            ttbr0 = in(reg) glacier.root_table()
-        );
+                "ic iallu",
+                "dsb sy",
+                "isb",
+                mair = in(reg) mair_el1,
+                tcr = in(reg) self.cfg().tcr_el1(),
+                ttbr0 = in(reg) self.root_table()
+            );
+        }
     }
 }
