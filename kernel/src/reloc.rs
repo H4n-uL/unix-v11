@@ -6,7 +6,7 @@ use crate::{
 
 pub fn reloc() -> ! {
     let kinfo = SYS_INFO.lock().kernel;
-    let kbase = kinfo.base;
+    let old_kbase = kinfo.base;
     let ksize = kinfo.size;
     let rela_ptr = kinfo.rela_ptr;
     let rela_len = kinfo.rela_len;
@@ -17,12 +17,11 @@ pub fn reloc() -> ! {
     ).expect("Failed to allocate Hi-Half Kernel");
 
     GLACIER.map_range(high_half, new_kbase.addr(), ksize, flags::PAGE_DEFAULT);
-    unsafe { PHYS_ALLOC.free_raw(kbase as *mut u8, ksize); }
     SYS_INFO.lock().kernel.base = new_kbase.addr();
-    unsafe { core::ptr::copy(kbase as *const u8, new_kbase.ptr(), ksize); }
+    unsafe { core::ptr::copy(old_kbase as *const u8, new_kbase.ptr(), ksize); }
 
-    let delta = high_half - kbase;
-    let rela = unsafe { core::slice::from_raw_parts((rela_ptr + kbase) as *const RelaEntry, rela_len) };
+    let delta = high_half - old_kbase;
+    let rela = unsafe { core::slice::from_raw_parts((rela_ptr + old_kbase) as *const RelaEntry, rela_len) };
 
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
@@ -33,6 +32,6 @@ pub fn reloc() -> ! {
     }
 
     let spark_ptr = crate::spark as usize + delta;
-    let spark = unsafe { core::mem::transmute::<usize, extern "C" fn() -> !>(spark_ptr) };
-    spark();
+    let spark = unsafe { core::mem::transmute::<usize, extern "C" fn(usize) -> !>(spark_ptr) };
+    spark(old_kbase);
 }

@@ -46,7 +46,12 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn spark() -> ! {
+pub extern "C" fn spark(old_kbase: usize) -> ! {
+    unsafe {
+        let ksize = SYS_INFO.lock().kernel.size;
+        PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
+    }
+
     // arch::exceptions::init();
     printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
     ram::init_ram();
