@@ -1,5 +1,5 @@
 use crate::{
-    ram::glacier::{GlacierData, MMUCfg, PageSize},
+    ram::glacier::{Glacier, MMUCfg, PageSize},
     sysinfo::ramtype
 };
 
@@ -52,7 +52,7 @@ impl MMUCfg {
     }
 }
 
-impl GlacierData {
+impl Glacier {
     pub fn identity_map(&self) {
         unsafe {
             core::arch::asm!(

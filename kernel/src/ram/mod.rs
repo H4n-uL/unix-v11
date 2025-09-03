@@ -56,14 +56,15 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
-    let stack_ptr = PHYS_ALLOC.alloc(
+    let mut phys_alloc = PHYS_ALLOC.lock();
+    let stack_ptr = phys_alloc.alloc(
         AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { move_stack(&stack_ptr); }
 
-    let available = PHYS_ALLOC.available();
+    let available = phys_alloc.available();
     let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
-    let heap_ptr = PHYS_ALLOC.alloc(
+    let heap_ptr = phys_alloc.alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
     unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_ptr.size()); }

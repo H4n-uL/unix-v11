@@ -132,33 +132,31 @@ impl AllocParams {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct PhysAllocData {
+pub struct PhysAlloc {
     ptr: OwnedPtr,
     max: usize,
     is_init: bool
 }
 
-pub struct PhysAlloc(pub Mutex<PhysAllocData>);
-
 const BASE_RB_SIZE: usize = 128;
 static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
-pub static PHYS_ALLOC: PhysAlloc = PhysAlloc::empty();
+pub static PHYS_ALLOC: Mutex<PhysAlloc> = PhysAlloc::empty();
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
-unsafe impl Send for PhysAllocData {}
-unsafe impl Sync for PhysAllocData {}
+unsafe impl Send for PhysAlloc {}
+unsafe impl Sync for PhysAlloc {}
 
-impl PhysAllocData {
-    const fn empty() -> Self {
-        Self {
+impl PhysAlloc {
+    const fn empty() -> Mutex<Self> {
+        Mutex::new(Self {
             ptr: OwnedPtr::null(),
             is_init: false,
             max: 0
-        }
+        })
     }
 
-    fn init(&mut self, efi_ram_layout: &mut [RAMDescriptor]) {
+    pub fn init(&mut self, efi_ram_layout: &mut [RAMDescriptor]) {
         let rb = &RB_EMBEDDED;
         if self.is_init { return; }
         (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
@@ -213,6 +211,14 @@ impl PhysAllocData {
             .map(|block| block.size()).sum();
     }
 
+    pub fn available(&self) -> usize {
+        return self.size_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
+    }
+
+    pub fn total(&self) -> usize {
+        return self.size_filter(|block| !NON_RAM.contains(&block.ty()));
+    }
+
     fn sort(&mut self) {
         self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
@@ -235,7 +241,7 @@ impl PhysAllocData {
         ).map(|block| OwnedPtr::new_bytes(block.ptr(), args.size));
     }
 
-    fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
+    pub fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
         let args = args.aligned();
         if NON_RAM.contains(&args.from_type) || NON_RAM.contains(&args.as_type) {
             return None; // Cannot allocate from or as non-RAM types
@@ -288,7 +294,7 @@ impl PhysAllocData {
         return None;
     }
 
-    fn free(&mut self, ptr: OwnedPtr) {
+    pub fn free(&mut self, ptr: OwnedPtr) {
         let found_block = self.find(|block|
             block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr()
         );
@@ -314,6 +320,10 @@ impl PhysAllocData {
                 self.add(after_block);
             }
         }
+    }
+
+    pub unsafe fn free_raw(&mut self, ptr: *mut u8, size: usize) {
+        self.free(OwnedPtr::new_bytes(ptr, size));
     }
 
     fn add(&mut self, new_block: RAMBlock) {
@@ -374,48 +384,5 @@ impl PhysAllocData {
         (self.ptr, self.max) = (new_blocks, new_max);
         self.free(old_blocks);
         self.alloc(alloc_param.at(new_ptr));
-    }
-}
-
-impl PhysAlloc {
-    const fn empty() -> Self {
-        return Self(Mutex::new(PhysAllocData::empty()));
-    }
-
-    pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
-
-    pub fn available(&self) -> usize {
-        return self.0.lock().size_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
-    }
-
-    pub fn total(&self) -> usize {
-        return self.0.lock().size_filter(|block| !NON_RAM.contains(&block.ty()));
-    }
-
-    pub fn sort(&self) { self.0.lock().sort(); }
-
-    pub fn with_blocks<F, R>(&self, f: F) -> R
-    where F: FnOnce(&dyn Iterator<Item = &RAMBlock>) -> R {
-        f(&self.0.lock().blocks_iter())
-    }
-
-    pub fn find_free_ram(&self, args: AllocParams) -> Option<OwnedPtr> {
-        return self.0.lock().find_free_ram(args);
-    }
-
-    pub fn alloc(&self, args: AllocParams) -> Option<OwnedPtr> {
-        return self.0.lock().alloc(args);
-    }
-
-    pub fn free(&self, ptr: OwnedPtr) {
-        self.0.lock().free(ptr);
-    }
-
-    pub unsafe fn free_raw(&self, ptr: *mut u8, size: usize) {
-        self.free(OwnedPtr::new_bytes(ptr, size));
-    }
-
-    pub fn expand(&self, new_max: usize) {
-        self.0.lock().expand(new_max);
     }
 }

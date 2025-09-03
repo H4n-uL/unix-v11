@@ -5,23 +5,29 @@ use crate::{
 };
 
 pub fn reloc() -> ! {
-    let kinfo = SYS_INFO.lock().kernel;
+    let kinfo;
+    let new_kbase;
+    let high_half;
+    { // Mutex lock
+        let glacier = GLACIER.lock();
+        let mut sysinfo = SYS_INFO.lock();
+        let mut phys_alloc = PHYS_ALLOC.lock();
+        kinfo = sysinfo.kernel;
+
+        new_kbase = phys_alloc.alloc(
+            AllocParams::new(kinfo.size).as_type(ramtype::KERNEL)
+        ).expect("Failed to allocate Hi-Half Kernel");
+
+        high_half = !((1 << (glacier.cfg().va_bits - 1)) - 1);
+        glacier.map_range(high_half, new_kbase.addr(), kinfo.size, flags::PAGE_DEFAULT, &mut phys_alloc);
+        sysinfo.kernel.base = new_kbase.addr();
+    } // Mutex unlock
     let old_kbase = kinfo.base;
-    let ksize = kinfo.size;
-    let rela_ptr = kinfo.rela_ptr;
-    let rela_len = kinfo.rela_len;
 
-    let high_half: usize = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
-    let new_kbase = PHYS_ALLOC.alloc(
-        AllocParams::new(ksize).as_type(ramtype::KERNEL)
-    ).expect("Failed to allocate Hi-Half Kernel");
-
-    GLACIER.map_range(high_half, new_kbase.addr(), ksize, flags::PAGE_DEFAULT);
-    SYS_INFO.lock().kernel.base = new_kbase.addr();
-    unsafe { core::ptr::copy(old_kbase as *const u8, new_kbase.ptr(), ksize); }
+    unsafe { core::ptr::copy(old_kbase as *const u8, new_kbase.ptr(), kinfo.size); }
 
     let delta = high_half - old_kbase;
-    let rela = unsafe { core::slice::from_raw_parts((rela_ptr + old_kbase) as *const RelaEntry, rela_len) };
+    let rela = unsafe { core::slice::from_raw_parts((kinfo.rela_ptr + old_kbase) as *const RelaEntry, kinfo.rela_len) };
 
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
@@ -32,6 +38,6 @@ pub fn reloc() -> ! {
     }
 
     let spark_ptr = crate::spark as usize + delta;
-    let spark = unsafe { core::mem::transmute::<usize, extern "C" fn(usize) -> !>(spark_ptr) };
+    let spark: fn(usize) -> ! = unsafe { core::mem::transmute(spark_ptr) };
     spark(old_kbase);
 }
