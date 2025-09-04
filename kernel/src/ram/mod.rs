@@ -8,7 +8,8 @@ use crate::{
 };
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use alloc::alloc::{alloc, dealloc};
-use linked_list_allocator::LockedHeap;
+use spin::Mutex;
+use talc::{ErrOnOom, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x100000;
@@ -48,7 +49,7 @@ impl DerefMut for PageAligned {
 }
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: Talck<Mutex<()>, ErrOnOom> = Talc::new(ErrOnOom).lock();
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
@@ -67,5 +68,5 @@ pub fn init_ram() {
     let heap_ptr = phys_alloc.alloc(
         AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
     ).unwrap();
-    unsafe { ALLOCATOR.lock().init(heap_ptr.ptr(), heap_ptr.size()); }
+    unsafe { ALLOCATOR.lock().claim(heap_ptr.into_slice::<u8>().into()).unwrap(); }
 }
