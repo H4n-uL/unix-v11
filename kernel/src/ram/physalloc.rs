@@ -83,6 +83,10 @@ impl OwnedPtr {
         unsafe { core::slice::from_raw_parts(self.ptr::<T>(), self.size / size_of::<T>()) }
     }
 
+    pub fn into_slice_mut<T>(&self) -> &mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.ptr::<T>(), self.size / size_of::<T>()) }
+    }
+
     pub fn addr(&self) -> usize { self.ptr as usize }
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
