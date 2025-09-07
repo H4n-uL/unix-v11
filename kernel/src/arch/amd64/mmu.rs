@@ -3,15 +3,15 @@ use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
 #[allow(dead_code)]
 pub mod flags {
     pub const VALID: usize = 0b1;
-    pub const NEXT: usize = 0b11;
+    pub const NEXT: usize  = 0b11;
 
     pub const K_ROO: usize = 0b1 | 1 << 63;
     pub const K_RWO: usize = 0b11 | 1 << 63;
     pub const K_ROX: usize = 0b1;
     pub const K_RWX: usize = 0b11;
 
-    pub const D_RO: usize = 0b10001 | 1 << 63;
-    pub const D_RW: usize = 0b10001;
+    pub const D_RO: usize  = 0b10001 | 1 << 63;
+    pub const D_RW: usize  = 0b10001;
 
     pub const U_ROO: usize = 0b101 | 1 << 63;
     pub const U_RWO: usize = 0b111 | 1 << 63;
