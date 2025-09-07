@@ -11,7 +11,7 @@ pub mod flags {
     pub const K_RWX: usize = 0b11;
 
     pub const D_RO: usize  = 0b10001 | 1 << 63;
-    pub const D_RW: usize  = 0b10001;
+    pub const D_RW: usize  = 0b10011 | 1 << 63;
 
     pub const U_ROO: usize = 0b101 | 1 << 63;
     pub const U_RWO: usize = 0b111 | 1 << 63;
