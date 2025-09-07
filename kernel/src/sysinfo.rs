@@ -28,6 +28,8 @@ pub struct KernelInfo {
     pub base: usize,
     pub size: usize,
     pub ep: usize,
+    pub text_ptr: usize,
+    pub text_len: usize,
     pub rela_ptr: usize,
     pub rela_len: usize
 }
@@ -92,7 +94,8 @@ impl KernelInfo {
     pub const fn empty() -> Self {
         Self {
             base: 0, size: 0,
-            ep: 0, rela_ptr: 0, rela_len: 0
+            ep: 0, text_ptr: 0, text_len: 0,
+            rela_ptr: 0, rela_len: 0
         }
     }
 }

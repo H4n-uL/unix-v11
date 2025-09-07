@@ -52,6 +52,7 @@ fn flint() -> Status {
     }
 
     let elf = ElfFile::new(file_binary).unwrap();
+    let ep = elf.header.pt2.entry_point() as usize;
 
     let ksize = elf.program_iter()
         .filter(|ph| ph.get_type() == Ok(Type::Load))
@@ -61,16 +62,24 @@ fn flint() -> Status {
     let kernel_pages = align_up(ksize, PAGE_4KIB) / PAGE_4KIB;
     let kbase = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_CODE, kernel_pages).unwrap().as_ptr() as usize;
 
+    let mut text_ptr = 0;
+    let mut text_len = 0;
+
     for ph in elf.program_iter() {
         if let Ok(Type::Load) = ph.get_type() {
             let offset = ph.offset() as usize;
             let file_size = ph.file_size() as usize;
             let mem_size = ph.mem_size() as usize;
-            let phys_addr = (kbase + ph.virtual_addr() as usize) as *mut u8;
+            let virt_addr = ph.virtual_addr() as usize;
+            let phys_addr = (kbase + virt_addr) as *mut u8;
 
             unsafe {
                 core::ptr::copy(file_binary[offset..offset + file_size].as_ptr(), phys_addr, file_size);
                 core::ptr::write_bytes(phys_addr.add(file_size), 0, mem_size - file_size);
+            }
+
+            if (virt_addr..virt_addr + mem_size).contains(&ep) {
+                (text_ptr, text_len) = (virt_addr, mem_size);
             }
         }
     }
@@ -128,14 +137,14 @@ fn flint() -> Status {
         }
     }
 
-    let ep = elf.header.pt2.entry_point() as usize;
     let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(ep + kbase) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr();
     let sysinfo = SysInfo {
         kernel: KernelInfo {
             base: kbase, size: ksize,
-            ep, rela_ptr, rela_len
+            ep, text_ptr, text_len,
+            rela_ptr, rela_len
         },
         stack_base,
         layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,

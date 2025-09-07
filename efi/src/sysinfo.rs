@@ -28,6 +28,8 @@ pub struct KernelInfo {
     pub base: usize,
     pub size: usize,
     pub ep: usize,
+    pub text_ptr: usize,
+    pub text_len: usize,
     pub rela_ptr: usize,
     pub rela_len: usize
 }
