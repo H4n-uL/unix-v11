@@ -1,3 +1,4 @@
+pub use crate::arch::mmu::flags;
 use crate::{
     arch::mmu,
     ram::physalloc::{AllocParams, PhysAlloc},
@@ -75,6 +76,19 @@ unsafe impl Sync for Glacier {}
 
 pub static GLACIER: Mutex<Glacier> = Glacier::empty();
 
+pub fn flags_for_type(ty: u32) -> usize {
+    match ty { // This is not good, but I'm too lazy
+        ramtype::CONVENTIONAL => flags::K_RWX,
+        ramtype::BOOT_SERVICES_CODE => flags::K_RWX,
+        ramtype::RUNTIME_SERVICES_CODE => flags::K_RWX,
+        ramtype::KERNEL => flags::K_RWX,
+        ramtype::KERNEL_DATA => flags::K_RWX,
+        ramtype::KERNEL_PAGE_TABLE => flags::K_RWX,
+        ramtype::MMIO => flags::D_RW,
+        _ => flags::K_RWX
+    }
+}
+
 impl Glacier {
     const fn empty() -> Mutex<Self> {
         Mutex::new(Self {
@@ -107,7 +121,7 @@ impl Glacier {
             let addr = desc.phys_start as usize;
             let size = desc.page_count as usize * 0x1000;
 
-            self.map_range(addr, addr, size, mmu::flags_for_type(block_ty), physalloc);
+            self.map_range(addr, addr, size, flags_for_type(block_ty), physalloc);
         }
         self.identity_map();
     }
@@ -140,7 +154,7 @@ impl Glacier {
 
                 unsafe {
                     core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
-                    *entry = next_table.addr() | mmu::flags::NEXT_TABLE;
+                    *entry = next_table.addr() | flags::NEXT;
                 }
                 table = next_table.ptr::<()>() as usize;
             } else {

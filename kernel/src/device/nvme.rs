@@ -81,7 +81,7 @@ pub fn init_nvme() {
         let devid = nvme_devices.len();
         GLACIER.lock().map_range(
             mmio_addr, mmio_addr, PAGE_4KIB * 2,
-            flags::PAGE_DEVICE, &mut PHYS_ALLOC.lock()
+            flags::D_RW, &mut PHYS_ALLOC.lock()
         );
         let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
         for ns in nvme_arc.list_namespaces() {

@@ -32,7 +32,7 @@ impl PciDevice {
             + ((function as usize) << 12);
         GLACIER.lock().map_range(
             ptr, ptr, PAGE_4KIB,
-            flags::PAGE_DEVICE, &mut PHYS_ALLOC.lock()
+            flags::D_RW, &mut PHYS_ALLOC.lock()
         );
         let dev = PciDevice { bus, device, function, ptr: ptr as *mut u32 };
         if dev.vendor_id() == 0xFFFF { return None; }

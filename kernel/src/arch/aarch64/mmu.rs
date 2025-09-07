@@ -1,55 +1,22 @@
-use crate::{
-    ram::glacier::{Glacier, MMUCfg, PageSize},
-    sysinfo::ramtype
-};
+use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
 
 #[allow(dead_code)]
 pub mod flags {
-    // Descriptor type bits [1:0]
-    pub const VALID: usize       = 1 << 0;  // Present bit
-    const AF: usize              = 1 << 10; // Access Flag
-    const NEXT_DESC: usize       = 1 << 1;  // Next descriptor bit
+    pub const VALID: usize = 0b1;
+    pub const NEXT: usize = 0b10000000011;
 
-    // Attributes
-    const ATTR_IDX_NORMAL: usize = 0 << 2;
-    const ATTR_IDX_DEVICE: usize = 1 << 2;
+    pub const K_ROO: usize = 0b11110000011 | 0b11 << 53;
+    pub const K_RWO: usize = 0b11100000011 | 0b11 << 53;
+    pub const K_ROX: usize = 0b11110000011;
+    pub const K_RWX: usize = 0b11100000011;
 
-    // Access permissions
-    const AP_EL1: usize          = 0 << 6; // EL1 only
-    const AP_EL0: usize          = 1 << 6; // Both EL1 and EL0
-    const READ_ONLY: usize       = 1 << 7;
+    pub const D_RO: usize = 0b10010000111 | 0b11 << 53;
+    pub const D_RW: usize = 0b10010000111;
 
-    // Shareability
-    const SH_NONE: usize         = 0b00 << 8;
-    const SH_OUTER: usize        = 0b10 << 8;
-    const SH_INNER: usize        = 0b11 << 8;
-
-    // Other flags
-    const NG: usize              = 1 << 11; // Not global
-    const UXN: usize             = 1 << 54; // Unprivileged execute never
-    const PXN: usize             = 1 << 53; // Privileged execute never
-
-    pub const NEXT_TABLE: usize    = VALID | NEXT_DESC;
-    pub const PAGE_DEFAULT: usize  = VALID | NEXT_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
-    pub const PAGE_NOEXEC: usize   = VALID | NEXT_DESC | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
-    pub const PAGE_DEVICE: usize   = VALID | NEXT_DESC | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1 | UXN | PXN;
-    pub const LARGE_DEFAULT: usize = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1;
-    pub const LARGE_NOEXEC: usize  = VALID | AF | ATTR_IDX_NORMAL | SH_INNER | AP_EL1 | UXN | PXN;
-    pub const LARGE_DEVICE: usize  = VALID | AF | ATTR_IDX_DEVICE | SH_NONE | AP_EL1;
-}
-
-pub fn flags_for_type(ty: u32) -> usize {
-    use flags::*;
-    match ty {
-        ramtype::CONVENTIONAL => PAGE_DEFAULT,
-        ramtype::BOOT_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::RUNTIME_SERVICES_CODE => PAGE_DEFAULT,
-        ramtype::KERNEL => PAGE_DEFAULT,
-        ramtype::KERNEL_DATA => PAGE_NOEXEC,
-        ramtype::KERNEL_PAGE_TABLE => PAGE_NOEXEC,
-        ramtype::MMIO => PAGE_DEVICE,
-        _ => PAGE_NOEXEC
-    }
+    pub const U_ROO: usize = 0b11111000011 | 0b11 << 53;
+    pub const U_RWO: usize = 0b11101000011 | 0b11 << 53;
+    pub const U_ROX: usize = 0b11111000011;
+    pub const U_RWX: usize = 0b11101000011;
 }
 
 impl MMUCfg {

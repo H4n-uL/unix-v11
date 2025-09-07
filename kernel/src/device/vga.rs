@@ -1,4 +1,5 @@
 use crate::{
+    arch::mmu::flags,
     device::{PciDevice, PCI_DEVICES},
     printk, printlnk,
     ram::{glacier::GLACIER, physalloc::PHYS_ALLOC, PAGE_4KIB}
@@ -74,8 +75,7 @@ impl Vga {
 
         glacier.map_range(
             edid_addr, edid_addr, PAGE_4KIB,
-            crate::arch::mmu::flags::PAGE_DEVICE,
-            &mut phys_alloc
+            flags::D_RW, &mut phys_alloc
         );
         let edid_regs = unsafe {
             core::slice::from_raw_parts(edid_addr as *mut u8, PAGE_4KIB)
@@ -93,8 +93,7 @@ impl Vga {
         let map_size = width as usize * height as usize * pitch as usize;
         glacier.map_range(
             fb_addr, fb_addr, map_size,
-            crate::arch::mmu::flags::PAGE_DEVICE,
-            &mut phys_alloc
+            flags::D_RW, &mut phys_alloc
         );
         return Some(Vga {
             framebuffer: fb_addr as *mut u32,

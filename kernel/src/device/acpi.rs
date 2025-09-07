@@ -11,7 +11,7 @@ impl Handler for KernelAcpiHandler {
     ) -> PhysicalMapping<Self, T> {
         GLACIER.lock().map_range(
             phys_addr, phys_addr, size,
-            flags::PAGE_DEVICE, &mut PHYS_ALLOC.lock()
+            flags::D_RW, &mut PHYS_ALLOC.lock()
         );
 
         return unsafe { PhysicalMapping {
