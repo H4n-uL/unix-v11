@@ -27,9 +27,9 @@ const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 pub fn init_serial() {
     let glacier = GLACIER.lock();
     let mut phys_alloc = PHYS_ALLOC.lock();
-    glacier.map_page(0x0900_0000, 0x0900_0000, flags::PAGE_DEVICE, &mut phys_alloc); // QEMU UART0
-    glacier.map_page(0x0800_0000, 0x0800_0000, flags::PAGE_DEVICE, &mut phys_alloc); // GICD
-    glacier.map_page(0x0801_0000, 0x0801_0000, flags::PAGE_DEVICE, &mut phys_alloc); // GICC
+    glacier.map_page(0x0900_0000, 0x0900_0000, flags::D_RW, &mut phys_alloc); // QEMU UART0
+    glacier.map_page(0x0800_0000, 0x0800_0000, flags::D_RW, &mut phys_alloc); // GICD
+    glacier.map_page(0x0801_0000, 0x0801_0000, flags::D_RW, &mut phys_alloc); // GICC
     unsafe {
         // Disable UART
         core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x0);

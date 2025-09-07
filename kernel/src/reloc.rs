@@ -19,7 +19,7 @@ pub fn reloc() -> ! {
         ).expect("Failed to allocate Hi-Half Kernel");
 
         high_half = !((1 << (glacier.cfg().va_bits - 1)) - 1);
-        glacier.map_range(high_half, new_kbase.addr(), kinfo.size, flags::K_ROX, &mut phys_alloc);
+        glacier.map_range(high_half, new_kbase.addr(), kinfo.size, flags::K_RWX, &mut phys_alloc);
         sysinfo.kernel.base = new_kbase.addr();
     } // Mutex unlock
     let old_kbase = kinfo.base;
