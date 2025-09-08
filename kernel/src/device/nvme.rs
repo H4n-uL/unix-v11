@@ -38,17 +38,17 @@ impl NVMeBlockDevice {
 }
 
 impl BlockDevice for NVMeBlockDevice {
-    fn block_size(&self) -> usize {
+    fn block_size(&self) -> u64 {
         let namespace = self.dev.get_ns(self.nsid);
-        return namespace.map_or(0, |namespace| namespace.block_size()) as usize;
+        return namespace.map_or(0, |namespace| namespace.block_size());
     }
 
-    fn block_count(&self) -> usize {
+    fn block_count(&self) -> u64 {
         let namespace = self.dev.get_ns(self.nsid);
-        return namespace.map_or(0, |namespace| namespace.block_count()) as usize;
+        return namespace.map_or(0, |namespace| namespace.block_count());
     }
 
-    fn read(&self, lba: u64, buffer: &mut [u8]) -> Result<(), String> {
+    fn read(&self, buffer: &mut [u8], lba: u64) -> Result<(), String> {
         let ns = self.dev.get_ns(self.nsid)
             .ok_or_else(|| String::from("Invalid namespace"))?;
 
@@ -57,7 +57,7 @@ impl BlockDevice for NVMeBlockDevice {
         );
     }
 
-    fn write(&self, lba: u64, buffer: &[u8]) -> Result<(), String> {
+    fn write(&self, buffer: &[u8], lba: u64) -> Result<(), String> {
         let ns = self.dev.get_ns(self.nsid)
             .ok_or_else(|| String::from("Invalid namespace"))?;
 
