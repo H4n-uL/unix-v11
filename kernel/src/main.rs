@@ -30,8 +30,8 @@ macro_rules! printk {
 
 #[macro_export]
 macro_rules! printlnk {
-    () => { $crate::printk!("\r\n"); };
-    ($($arg:tt)*) => { $crate::printk!("{}\r\n", format_args!($($arg)*)) };
+    () => { $crate::printk!("\n"); };
+    ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)) };
 }
 
 pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
