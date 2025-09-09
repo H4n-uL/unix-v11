@@ -79,24 +79,6 @@ case $ARCH in
         ARCH_NAME="AMD64"
         DISK_ARCH="amd64"
         ;;
-    riscv64|risc-v64|rv64)
-        EFI_TARGET="riscv64gc-unknown-uefi-elf.json"
-        KERNEL_TARGET="riscv64gc-unknown-none-elf"
-        EFI_BOOT_NAME="bootriscv64.efi"
-        QEMU_SYSTEM="qemu-system-riscv64"
-        QEMU_CPU="max"
-        QEMU_MACHINE="virt,accel=tcg"
-        EFI_CODE="firmwares/OVMF-RISCV64-CODE.fd"
-        EFI_VARS="firmwares/OVMF-RISCV64-VARS.fd"
-        ARCH_NAME="RISC-V64"
-        DISK_ARCH="riscv64"
-
-        echo "RISC-V64 EFI is not supported by Rust toolchain yet."
-        echo "and someone needs to make a .json file for it."
-        echo "and that someone is me."
-        echo "I hate my life."
-        exit 1
-        ;;
     *)
         echo "Error: Unknown architecture: $ARCH"
         echo "Use '$0 help' for usage information"
