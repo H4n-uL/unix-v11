@@ -70,3 +70,15 @@ pub fn init_ram() {
     ).unwrap();
     unsafe { ALLOCATOR.lock().claim(heap_ptr.into_slice::<u8>().into()).unwrap(); }
 }
+
+pub fn dump_bytes(buf: &[u8]) {
+    for line in buf.chunks(16) {
+        for byte in line { crate::printk!("{:02x} ", byte); }
+        for _ in 0..16 - line.len() { crate::printk!("   "); }
+        crate::printk!("   |");
+        for byte in line { crate::printk!("{}",
+            if (0x20..0x7f).contains(byte) { *byte as char } else { '.' }
+        ); }
+        crate::printlnk!("|");
+    }
+}
