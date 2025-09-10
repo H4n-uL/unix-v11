@@ -1,3 +1,5 @@
+use spin::Mutex;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMDescriptor {
@@ -85,6 +87,9 @@ pub const NON_RAM: &[u32] = &[
     ramtype::MMIO_PORT_SPACE
 ];
 
+pub struct SysInfoMutex(Mutex<SysInfo>);
+pub static SYS_INFO: SysInfoMutex = SysInfoMutex::new();
+
 unsafe impl Send for SysInfo {}
 unsafe impl Sync for SysInfo {}
 unsafe impl Send for KernelInfo {}
@@ -141,5 +146,31 @@ impl SysInfo {
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {
         self.stack_base = stack_base;
+    }
+}
+
+impl SysInfoMutex {
+    pub const fn new() -> Self {
+        Self(Mutex::new(SysInfo::empty()))
+    }
+
+    pub fn init(&self, param: SysInfo) {
+        self.0.lock().init(param);
+    }
+
+    pub fn lock(&self) -> spin::MutexGuard<SysInfo> {
+        return self.0.lock();
+    }
+
+    pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
+        return self.0.lock().efi_ram_layout();
+    }
+
+    pub fn efi_ram_layout_mut<'a>(&self) -> &'a mut [RAMDescriptor] {
+        return self.0.lock().efi_ram_layout_mut();
+    }
+
+    pub fn set_new_stack_base(&self, stack_base: usize) {
+        self.0.lock().set_new_stack_base(stack_base);
     }
 }

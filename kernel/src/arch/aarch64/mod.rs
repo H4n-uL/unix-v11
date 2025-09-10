@@ -2,7 +2,7 @@
 
 use crate::{
     arch::mmu::flags,
-    ram::{glacier::GLACIER, physalloc::{OwnedPtr, PHYS_ALLOC}},
+    ram::{glacier::GLACIER, physalloc::OwnedPtr},
     SYS_INFO
 };
 
@@ -25,11 +25,9 @@ pub const R_RELATIVE: u64 = 1027;
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
-    let glacier = GLACIER.lock();
-    let mut phys_alloc = PHYS_ALLOC.lock();
-    glacier.map_page(0x0900_0000, 0x0900_0000, flags::D_RW, &mut phys_alloc); // QEMU UART0
-    glacier.map_page(0x0800_0000, 0x0800_0000, flags::D_RW, &mut phys_alloc); // GICD
-    glacier.map_page(0x0801_0000, 0x0801_0000, flags::D_RW, &mut phys_alloc); // GICC
+    GLACIER.map_page(0x0900_0000, 0x0900_0000, flags::D_RW);
+    GLACIER.map_page(0x0800_0000, 0x0800_0000, flags::D_RW);
+    GLACIER.map_page(0x0801_0000, 0x0801_0000, flags::D_RW);
     unsafe {
         // Disable UART
         core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x0);
@@ -64,9 +62,8 @@ pub fn stack_ptr() -> *const u8 {
 }
 
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
-    let mut sysinfo = SYS_INFO.lock();
     let stack_ptr = stack_ptr();
-    let old_stack_base = sysinfo.stack_base;
+    let old_stack_base = SYS_INFO.lock().stack_base;
     let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
 
     let new_stack_base = ptr.addr() + ptr.size();
@@ -77,5 +74,5 @@ pub unsafe fn move_stack(ptr: &OwnedPtr) {
         core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
     }
 
-    sysinfo.stack_base = new_stack_base;
+    SYS_INFO.set_new_stack_base(new_stack_base);
 }

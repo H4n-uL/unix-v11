@@ -12,11 +12,11 @@ pub struct NVMeAlloc;
 
 impl Allocator for NVMeAlloc {
     unsafe fn allocate(&self, size: usize) -> usize {
-        return PHYS_ALLOC.lock().alloc(AllocParams::new(size)).unwrap().addr();
+        return PHYS_ALLOC.alloc(AllocParams::new(size)).unwrap().addr();
     }
 
     unsafe fn deallocate(&self, addr: usize, size: usize) {
-        unsafe { PHYS_ALLOC.lock().free_raw(addr as *mut u8, size); }
+        unsafe { PHYS_ALLOC.free_raw(addr as *mut u8, size); }
     }
 
     fn translate(&self, addr: usize) -> usize { addr }
@@ -79,10 +79,7 @@ pub fn init_nvme() {
         } else { base & !0b11 };
 
         let devid = nvme_devices.len();
-        GLACIER.lock().map_range(
-            mmio_addr, mmio_addr, PAGE_4KIB * 2,
-            flags::D_RW, &mut PHYS_ALLOC.lock()
-        );
+        GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
         let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
         for ns in nvme_arc.list_namespaces() {
             block_devices.push(Arc::new(NVMeBlockDevice::new(nvme_arc.clone(), devid, ns)));

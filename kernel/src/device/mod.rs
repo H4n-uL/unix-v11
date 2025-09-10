@@ -4,7 +4,7 @@ use crate::{
     arch::mmu::flags,
     device::acpi::KernelAcpiHandler,
     printk, printlnk,
-    ram::{glacier::GLACIER, physalloc::PHYS_ALLOC, PAGE_4KIB},
+    ram::{glacier::GLACIER, PAGE_4KIB},
     SYS_INFO
 };
 use alloc::{string::String, vec::Vec};
@@ -30,10 +30,7 @@ impl PciDevice {
             + ((bus as usize) << 20)
             + ((device as usize) << 15)
             + ((function as usize) << 12);
-        GLACIER.lock().map_range(
-            ptr, ptr, PAGE_4KIB,
-            flags::D_RW, &mut PHYS_ALLOC.lock()
-        );
+        GLACIER.map_range(ptr, ptr, PAGE_4KIB, flags::D_RW);
         let dev = PciDevice { bus, device, function, ptr: ptr as *mut u32 };
         if dev.vendor_id() == 0xFFFF { return None; }
         return Some(dev);

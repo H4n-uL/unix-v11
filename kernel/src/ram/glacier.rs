@@ -1,8 +1,8 @@
 pub use crate::arch::mmu::flags;
 use crate::{
     arch::mmu,
-    ram::physalloc::{AllocParams, PhysAlloc},
-    sysinfo::{ramtype, SysInfo}
+    ram::physalloc::{AllocParams, PHYS_ALLOC},
+    sysinfo::{ramtype, SYS_INFO}
 };
 
 use spin::Mutex;
@@ -65,16 +65,14 @@ impl MMUCfg {
     }
 }
 
-pub struct Glacier {
+pub struct GlacierData {
     cfg: MMUCfg,
     root_table: usize,
     is_init: bool
 }
 
-unsafe impl Send for Glacier {}
-unsafe impl Sync for Glacier {}
-
-pub static GLACIER: Mutex<Glacier> = Glacier::empty();
+unsafe impl Send for GlacierData {}
+unsafe impl Sync for GlacierData {}
 
 pub fn flags_for_type(ty: u32) -> usize {
     match ty { // This is not good, but I'm too lazy
@@ -89,9 +87,9 @@ pub fn flags_for_type(ty: u32) -> usize {
     }
 }
 
-impl Glacier {
-    const fn empty() -> Mutex<Self> {
-        Mutex::new(Self {
+impl GlacierData {
+    const fn empty() -> Self {
+        Self {
             cfg: MMUCfg {
                 page_size: PageSize::Size4kiB,
                 va_bits: 0,
@@ -99,14 +97,14 @@ impl Glacier {
             },
             root_table: 0,
             is_init: false
-        })
+        }
     }
 
-    pub fn init(&mut self, physalloc: &mut PhysAlloc, sysinfo: &SysInfo) {
+    pub fn init(&mut self) {
         if self.is_init { return; }
         self.cfg = MMUCfg::detect();
         let table_size = self.cfg.page_size.size();
-        let root_table = physalloc.alloc(
+        let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
                 .as_type(ramtype::KERNEL_PAGE_TABLE)
@@ -116,17 +114,17 @@ impl Glacier {
         self.root_table = root_table.addr();
         self.is_init = true;
 
-        for desc in sysinfo.efi_ram_layout() {
+        for desc in SYS_INFO.efi_ram_layout() {
             let block_ty = desc.ty;
             let addr = desc.phys_start as usize;
             let size = desc.page_count as usize * 0x1000;
 
-            self.map_range(addr, addr, size, flags_for_type(block_ty), physalloc);
+            self.map_range(addr, addr, size, flags_for_type(block_ty));
         }
         self.identity_map();
     }
 
-    pub fn map_page(&self, va: usize, pa: usize, flags: usize, physalloc: &mut PhysAlloc) {
+    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
         if !self.is_init { return; }
         let page_mask = !(self.cfg.page_size() - 1);
         let va = va & page_mask;
@@ -146,7 +144,7 @@ impl Glacier {
 
             if unsafe { *entry & mmu::flags::VALID == 0 } {
                 let table_size = self.cfg.page_size.size();
-                let next_table = physalloc.alloc(
+                let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
                         .as_type(ramtype::KERNEL_PAGE_TABLE)
@@ -163,7 +161,7 @@ impl Glacier {
         }
     }
 
-    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize, physalloc: &mut PhysAlloc) {
+    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
         if !self.is_init { return; }
         let page_size = self.cfg.page_size();
         let page_mask = !(page_size - 1);
@@ -174,7 +172,7 @@ impl Glacier {
 
         for va in (va_start..va_end).step_by(page_size) {
             let pa = pa_start + (va - va_start);
-            self.map_page(va, pa, flags, physalloc);
+            self.map_page(va, pa, flags);
         }
     }
 
@@ -184,5 +182,34 @@ impl Glacier {
 
     pub fn cfg(&self) -> MMUCfg {
         return self.cfg;
+    }
+}
+
+pub static GLACIER: Glacier = Glacier::empty();
+
+pub struct Glacier(pub Mutex<GlacierData>);
+impl Glacier {
+    const fn empty() -> Self {
+        return Self(Mutex::new(GlacierData::empty()));
+    }
+
+    pub fn init(&self) {
+        self.0.lock().init();
+    }
+
+    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
+        self.0.lock().map_page(va, pa, flags);
+    }
+
+    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
+        self.0.lock().map_range(va, pa, size, flags);
+    }
+
+    pub fn root_table(&self) -> *mut usize {
+        return self.0.lock().root_table();
+    }
+
+    pub fn cfg(&self) -> MMUCfg {
+        return self.0.lock().cfg();
     }
 }

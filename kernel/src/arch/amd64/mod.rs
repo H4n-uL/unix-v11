@@ -98,9 +98,8 @@ pub fn stack_ptr() -> *const u8 {
 }
 
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
-    let mut sysinfo = SYS_INFO.lock();
     let stack_ptr = stack_ptr();
-    let old_stack_base = sysinfo.stack_base;
+    let old_stack_base = SYS_INFO.lock().stack_base;
     let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
 
     let new_stack_base = ptr.addr() + ptr.size();
@@ -111,5 +110,5 @@ pub unsafe fn move_stack(ptr: &OwnedPtr) {
         core::arch::asm!("mov rsp, {}", in(reg) new_stack_bottom);
     }
 
-    sysinfo.stack_base = new_stack_base;
+    SYS_INFO.set_new_stack_base(new_stack_base);
 }

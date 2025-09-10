@@ -1,4 +1,4 @@
-use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
+use crate::ram::glacier::{GlacierData, MMUCfg, PageSize};
 
 #[allow(dead_code)]
 pub mod flags {
@@ -29,7 +29,7 @@ impl MMUCfg {
     }
 }
 
-impl Glacier {
+impl GlacierData {
     pub fn identity_map(&self) {
         unsafe {
             core::arch::asm!(

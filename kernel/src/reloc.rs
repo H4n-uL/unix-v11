@@ -8,27 +8,16 @@ pub fn reloc() -> ! {
     let kinfo;
     let new_kbase;
     let jump_target;
-    { // Mutex lock
-        let glacier = GLACIER.lock();
-        let mut sysinfo = SYS_INFO.lock();
-        let mut phys_alloc = PHYS_ALLOC.lock();
-        kinfo = sysinfo.kernel;
+    kinfo = SYS_INFO.lock().kernel;
 
-        new_kbase = phys_alloc.alloc(
-            AllocParams::new(kinfo.size).as_type(ramtype::KERNEL)
-        ).expect("Failed to allocate Hi-Half Kernel");
+    new_kbase = PHYS_ALLOC.alloc(
+        AllocParams::new(kinfo.size).as_type(ramtype::KERNEL)
+    ).expect("Failed to allocate Hi-Half Kernel");
 
-        jump_target = !((1 << (glacier.cfg().va_bits - 1)) - 1);
-        glacier.map_range(
-            jump_target, new_kbase.addr(), kinfo.size,
-            flags::K_RWO, &mut phys_alloc
-        );
-        glacier.map_range(
-            jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr,
-            kinfo.text_len, flags::K_ROX, &mut phys_alloc
-        );
-        sysinfo.kernel.base = new_kbase.addr();
-    } // Mutex unlock
+    jump_target = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
+    GLACIER.map_range(jump_target, new_kbase.addr(), kinfo.size, flags::K_RWO);
+    GLACIER.map_range(jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr, kinfo.text_len, flags::K_ROX);
+    SYS_INFO.lock().kernel.base = new_kbase.addr();
     let old_kbase = kinfo.base;
 
     unsafe { core::ptr::copy(old_kbase as *const u8, new_kbase.ptr(), kinfo.size); }

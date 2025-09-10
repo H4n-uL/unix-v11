@@ -15,10 +15,9 @@ mod ram; mod reloc; mod sort; mod sysinfo;
 
 use crate::{
     ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
-    sysinfo::SysInfo
+    sysinfo::{SysInfo, SYS_INFO}
 };
 use core::panic::PanicInfo;
-use spin::Mutex;
 
 #[macro_export]
 macro_rules! printk {
@@ -34,19 +33,11 @@ macro_rules! printlnk {
     ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)) };
 }
 
-pub static SYS_INFO: Mutex<SysInfo> = Mutex::new(SysInfo::empty());
-
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
-    {
-        let mut sys_lock = SYS_INFO.lock();
-        let mut alloc_lock = PHYS_ALLOC.lock();
-        let mut glacier = GLACIER.lock();
-
-        sys_lock.init(sysinfo);
-        alloc_lock.init(sys_lock.efi_ram_layout_mut());
-        glacier.init(&mut alloc_lock, &sys_lock);
-    }
+    SYS_INFO.init(sysinfo);
+    PHYS_ALLOC.init(SYS_INFO.efi_ram_layout_mut());
+    GLACIER.init();
     arch::init_serial();
     reloc::reloc();
 }
@@ -55,7 +46,7 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 pub extern "C" fn spark(old_kbase: usize) -> ! {
     unsafe {
         let ksize = SYS_INFO.lock().kernel.size;
-        PHYS_ALLOC.lock().free_raw(old_kbase as *mut u8, ksize);
+        PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
     }
     // arch::exceptions::init();
     printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
