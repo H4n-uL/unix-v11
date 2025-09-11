@@ -230,20 +230,20 @@ pub fn init_filesys() {
     // echo buf > /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
     let file = Arc::new(VirtFile::new()) as Arc<dyn VirtFNode>;
-    // pre-write
-    file.write(&buf, 0);
-    vfs.link("/main.rs", file);
-    // // or post-write
+    // // pre-write
+    // file.write(&buf, 0);
     // vfs.link("/main.rs", file);
-    // vfs.write("/main.rs", &buf, 0);
+    // or post-write
+    vfs.link("/main.rs", file);
+    vfs.write("/main.rs", &buf, 0);
 
     // xd /main.rs
     buf.iter_mut().for_each(|b| *b = 0);
-    // direct read from vfs
-    if !vfs.read("/main.rs", &mut buf, 0) { return; }
-    // // or walk in to read
+    // // walk in to read
     // let Some(file) = vfs.walk("/main.rs", false) else { return; };
     // file.read(&mut buf, 0);
+    // or direct read from vfs
+    if !vfs.read("/main.rs", &mut buf, 0) { return; }
     dump_bytes(&buf);
 
     // mv
