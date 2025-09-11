@@ -213,7 +213,6 @@ fn join_path(paths: &[&str]) -> Result<String, ()> {
 }
 
 fn get_file_name(path: &str) -> Option<&str> {
-    if !path.starts_with('/') { return None; }
     let name = path.split('/').last()?;
     if name.is_empty() { return None; }
     return Some(name);
@@ -228,16 +227,23 @@ pub fn init_filesys() {
     devdir.create("dev0", Arc::new(DevFile::new(dev.first().unwrap().clone())));
     vfs.link("/dev", devdir);
 
-    // touch /main.rs
+    // echo buf > /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
     let file = Arc::new(VirtFile::new()) as Arc<dyn VirtFNode>;
+    // pre-write
     file.write(&buf, 0);
     vfs.link("/main.rs", file);
+    // // or post-write
+    // vfs.link("/main.rs", file);
+    // vfs.write("/main.rs", &buf, 0);
 
-    // R/W
-    if !vfs.write("/main.rs", &buf, 0) { return; }
+    // xd /main.rs
     buf.iter_mut().for_each(|b| *b = 0);
+    // direct read from vfs
     if !vfs.read("/main.rs", &mut buf, 0) { return; }
+    // // or walk in to read
+    // let Some(file) = vfs.walk("/main.rs", false) else { return; };
+    // file.read(&mut buf, 0);
     dump_bytes(&buf);
 
     // mv
