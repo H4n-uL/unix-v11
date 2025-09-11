@@ -19,7 +19,6 @@ Usage: $0 <arch|help> [options]
 Architectures:
     AMD64    (alias: x86-64, x64)
     AArch64  (alias: Arm64)
-    RISC-V64 (alias: riscv64, rv64)
     help     Show this help
 
 Options:
@@ -33,8 +32,8 @@ Options:
 Examples:
     $0 amd64
     $0 aarch64 -ram 8192 -cpu 4
-    $0 riscv64 -norun
-    $0 amd64 -disk 524288 -clean
+    $0 arm64 -norun
+    $0 x86-64 -disk 524288 -clean
 
 EOF
     exit 0
