@@ -161,14 +161,20 @@ impl VirtualFileSystem {
     }
 
     pub fn walk(&self, path: &str, parent: bool) -> Option<Arc<dyn VirtFNode>> {
-        let Ok(mut parts) = get_path_parts(path) else { return None; };
-        if parent { parts.pop(); }
-        let mut current = self.root.clone() as Arc<dyn VirtFNode>;
-        for part in parts {
-            let Some(next) = current.walk(part) else { return None; };
-            current = next;
+        let root = self.root.clone() as Arc<dyn VirtFNode>;
+        let partlen = path.split('/').count();
+        let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
+        for (i, part) in path.split('/').enumerate() {
+            let last = stack.last().unwrap_or(&root);
+            if last.meta().ftype != FType::Directory { return None; }
+            if !["", ".", ".."].contains(&part) {
+                if parent && i >= partlen - 1 { break; }
+                stack.push(last.walk(part)?);
+            } else if part == ".." {
+                if !stack.is_empty() { stack.pop(); }
+            }
         }
-        return Some(current);
+        return Some(stack.last().unwrap_or(&root).clone());
     }
 
     pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> bool {
@@ -182,19 +188,6 @@ impl VirtualFileSystem {
         let Some(filename) = get_file_name(path) else { return false; };
         return dir.remove(filename);
     }
-}
-
-fn get_path_parts(path: &str) -> Result<Vec<&str>, ()> {
-    if !path.starts_with('/') { return Err(()); }
-    let mut parts = Vec::new();
-    for part in path.split('/').filter(|s| !s.is_empty()) {
-        match part {
-            "" | "." => continue,
-            ".." => { if !parts.is_empty() { parts.pop(); } },
-            _ => { parts.push(part); }
-        }
-    }
-    return Ok(parts);
 }
 
 fn join_path(paths: &[&str]) -> Result<String, ()> {
@@ -214,7 +207,7 @@ fn join_path(paths: &[&str]) -> Result<String, ()> {
 
 fn get_file_name(path: &str) -> Option<&str> {
     let name = path.split('/').last()?;
-    if name.is_empty() { return None; }
+    if ["", ".", ".."].contains(&name) { return None; }
     return Some(name);
 }
 
@@ -224,7 +217,7 @@ pub fn init_filesys() {
 
     // mkdir /dev
     let devdir = Arc::new(VirtDirectory::new()) as Arc<dyn VirtFNode>;
-    devdir.create("dev0", Arc::new(DevFile::new(dev.first().unwrap().clone())));
+    devdir.create("block0", Arc::new(DevFile::new(dev.first().unwrap().clone())));
     vfs.link("/dev", devdir);
 
     // echo buf > /main.rs
@@ -237,15 +230,6 @@ pub fn init_filesys() {
     vfs.link("/main.rs", file);
     vfs.write("/main.rs", &buf, 0);
 
-    // xd /main.rs
-    buf.iter_mut().for_each(|b| *b = 0);
-    // // walk in to read
-    // let Some(file) = vfs.walk("/main.rs", false) else { return; };
-    // file.read(&mut buf, 0);
-    // or direct read from vfs
-    if !vfs.read("/main.rs", &mut buf, 0) { return; }
-    dump_bytes(&buf);
-
     // mv
     vfs.walk("/main.rs", false).and_then(|file| {
         vfs.link("/src", Arc::new(VirtDirectory::new()));
@@ -254,8 +238,18 @@ pub fn init_filesys() {
         return Some(());
     });
 
+    // xd /src/main.rs
+    buf.iter_mut().for_each(|b| *b = 0);
+    buf.resize(13, 0);
+    // // walk in to read
+    // let Some(file) = vfs.walk("/src/main.rs") else { return; };
+    // file.read(&mut buf, 0);
+    // or direct read from vfs
+    if !vfs.read("/src/main.rs", &mut buf, 26) { return; }
+    dump_bytes(&buf);
+
     // ls
-    let dir = "/src";
+    let dir = "/";
     vfs.list(dir).iter().for_each(|entries| {
         printlnk!("in {}:", dir);
         for entry in entries {
