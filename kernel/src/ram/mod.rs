@@ -77,7 +77,10 @@ pub fn dump_bytes(buf: &[u8]) {
             if i == LINE / 2 { crate::printk!(" "); }
             crate::printk!("{:02x} ", byte);
         }
-        for _ in 0..LINE - line.len() { crate::printk!("   "); }
+        for i in line.len()..LINE {
+            if i == LINE / 2 { crate::printk!(" "); }
+            crate::printk!("   ");
+        }
         crate::printk!("   |");
         for byte in line { crate::printk!("{}",
             if (0x20..0x7f).contains(byte) { *byte as char } else { '.' }
