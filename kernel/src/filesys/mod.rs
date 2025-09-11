@@ -1,7 +1,12 @@
-mod vfn;
+mod dev; mod vfn;
 
-use crate::{filesys::vfn::{FMeta, FType, VirtFNode}, ram::dump_bytes};
-use alloc::{collections::btree_map::BTreeMap, string::String, sync::Arc, vec::Vec};
+use crate::{
+    device::block::BLOCK_DEVICES,
+    filesys::{vfn::{FMeta, FType, VirtFNode}, dev::DevFile},
+    printlnk,
+    ram::dump_bytes
+};
+use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc, vec::Vec};
 use spin::Mutex;
 
 struct VirtFile {
@@ -124,11 +129,11 @@ impl VirtFNode for VirtDirectory {
     }
 }
 
-struct Ramfs {
+struct VirtualFileSystem {
     root: Arc<VirtDirectory>
 }
 
-impl Ramfs {
+impl VirtualFileSystem {
     pub fn new() -> Self {
         return Self { root: Arc::new(VirtDirectory::new()) };
     }
@@ -151,6 +156,10 @@ impl Ramfs {
         });
     }
 
+    pub fn list(&self, path: &str) -> Option<Vec<String>> {
+        return self.walk(path, false).and_then(|node| node.list());
+    }
+
     pub fn walk(&self, path: &str, parent: bool) -> Option<Arc<dyn VirtFNode>> {
         let Ok(mut parts) = get_path_parts(path) else { return None; };
         if parent { parts.pop(); }
@@ -162,17 +171,13 @@ impl Ramfs {
         return Some(current);
     }
 
-    pub fn create(&mut self, path: &str, ftype: FType) -> bool {
+    pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> bool {
         let Some(dir) = self.walk(path, true) else { return false; };
         let Some(filename) = get_file_name(path) else { return false; };
-        let node = match ftype {
-            FType::Regular => Arc::new(VirtFile::new()) as Arc<dyn VirtFNode>,
-            FType::Directory => Arc::new(VirtDirectory::new()) as Arc<dyn VirtFNode>,
-        };
         return dir.create(filename, node);
     }
 
-    pub fn remove(&mut self, path: &str) -> bool {
+    pub fn unlink(&self, path: &str) -> bool {
         let Some(dir) = self.walk(path, true) else { return false; };
         let Some(filename) = get_file_name(path) else { return false; };
         return dir.remove(filename);
@@ -192,6 +197,21 @@ fn get_path_parts(path: &str) -> Result<Vec<&str>, ()> {
     return Ok(parts);
 }
 
+fn join_path(paths: &[&str]) -> Result<String, ()> {
+    if paths.is_empty() { return Err(()); }
+    let mut parts = Vec::new();
+    for &part in paths {
+        for p in part.split('/').filter(|s| !s.is_empty()) {
+            match p {
+                "" | "." => continue,
+                ".." => { if !parts.is_empty() { parts.pop(); } },
+                _ => { parts.push(p); }
+            }
+        }
+    }
+    return Ok(format!("/{}", parts.join("/")));
+}
+
 fn get_file_name(path: &str) -> Option<&str> {
     if !path.starts_with('/') { return None; }
     let name = path.split('/').last()?;
@@ -200,11 +220,42 @@ fn get_file_name(path: &str) -> Option<&str> {
 }
 
 pub fn init_filesys() {
-    let mut filesys = Ramfs::new();
+    let dev = BLOCK_DEVICES.lock();
+    let vfs = VirtualFileSystem::new();
+
+    // mkdir /dev
+    let devdir = Arc::new(VirtDirectory::new()) as Arc<dyn VirtFNode>;
+    devdir.create("dev0", Arc::new(DevFile::new(dev.first().unwrap().clone())));
+    vfs.link("/dev", devdir);
+
+    // touch /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
-    if !filesys.create("/main.rs", FType::Regular) { return; }
-    if !filesys.write("/main.rs", &buf, 0) { return; }
+    let file = Arc::new(VirtFile::new()) as Arc<dyn VirtFNode>;
+    file.write(&buf, 0);
+    vfs.link("/main.rs", file);
+
+    // R/W
+    if !vfs.write("/main.rs", &buf, 0) { return; }
     buf.iter_mut().for_each(|b| *b = 0);
-    if !filesys.read("/main.rs", &mut buf, 0) { return; }
+    if !vfs.read("/main.rs", &mut buf, 0) { return; }
     dump_bytes(&buf);
+
+    // mv
+    vfs.walk("/main.rs", false).and_then(|file| {
+        vfs.link("/src", Arc::new(VirtDirectory::new()));
+        vfs.link("/src/main.rs", file);
+        vfs.unlink("/main.rs");
+        return Some(());
+    });
+
+    // ls
+    let dir = "/src";
+    vfs.list(dir).iter().for_each(|entries| {
+        printlnk!("in {}:", dir);
+        for entry in entries {
+            let path = join_path(&[dir, entry]).unwrap();
+            let meta = vfs.walk(&path, false).unwrap().meta();
+            printlnk!("    {:?}: {}", meta.ftype, entry);
+        }
+    });
 }
