@@ -4,7 +4,8 @@ use alloc::{string::String, sync::Arc, vec::Vec};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FType {
     Regular = 0,
-    Directory = 1
+    Directory = 1,
+    Device = 2
 }
 
 #[repr(C)]
@@ -21,7 +22,8 @@ impl FMeta {
     pub fn default(ftype: FType) -> Self {
         let perm = match ftype {
             FType::Regular => 0x644,
-            FType::Directory => 0x755
+            FType::Directory => 0x755,
+            FType::Device => 0x640
         };
         return Self {
             size: 0,

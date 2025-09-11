@@ -8,7 +8,7 @@ pub struct DevFile {
 
 impl DevFile {
     pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
-        let mut s = Self { dev, meta: FMeta::default(FType::Regular) };
+        let mut s = Self { dev, meta: FMeta::default(FType::Device) };
         s.meta.size = s.total_size();
         return s;
     }
