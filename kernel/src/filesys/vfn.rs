@@ -1,12 +1,13 @@
 use alloc::{string::String, sync::Arc, vec::Vec};
 
-#[repr(u8)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[repr(u16)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FType {
     Regular = 0,
     Directory = 1
 }
 
+#[repr(C)]
 #[derive(Clone)]
 pub struct FMeta {
     pub size: u64,
@@ -30,7 +31,8 @@ impl FMeta {
     }
 }
 
-pub trait VirtFNode {
+// INTENSIONALLY FORCING INTERIOR MUTABILITY
+pub trait VirtFNode: Send + Sync {
     fn meta(&self) -> FMeta;
     fn read(&self, buf: &mut [u8], offset: u64) -> bool;
     fn write(&self, buf: &[u8], offset: u64) -> bool;
