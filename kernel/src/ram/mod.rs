@@ -6,8 +6,7 @@ use crate::{
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::ramtype
 };
-use core::{alloc::Layout, ops::{Deref, DerefMut}};
-use alloc::alloc::{alloc, dealloc};
+use core::ops::{Deref, DerefMut};
 use spin::Mutex;
 use talc::{ErrOnOom, Talc, Talck};
 
@@ -17,34 +16,33 @@ pub const HEAP_SIZE: usize = 0x100000;
 
 pub struct PageAligned {
     ptr: *mut u8,
-    layout: Layout
+    size: usize
 }
 
 impl PageAligned {
     pub fn new(size: usize) -> Self {
-        let layout = Layout::from_size_align(size, PAGE_4KIB).unwrap();
-        let ptr = unsafe { alloc(layout) };
-        if ptr.is_null() { panic!("Failed to allocate aligned memory"); }
-        return Self { ptr, layout };
+        let ptr = PHYS_ALLOC.alloc(AllocParams::new(size))
+            .expect("Failed to allocate page-aligned RAM");
+        return Self { ptr: ptr.ptr(), size: ptr.size() };
     }
 }
 
 impl Drop for PageAligned {
     fn drop(&mut self) {
-        unsafe { dealloc(self.ptr, self.layout); }
+        unsafe { PHYS_ALLOC.free_raw(self.ptr, self.size); }
     }
 }
 
 impl Deref for PageAligned {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        unsafe { core::slice::from_raw_parts(self.ptr, self.layout.size()) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.size) }
     }
 }
 
 impl DerefMut for PageAligned {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.layout.size()) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.size) }
     }
 }
 
