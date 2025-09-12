@@ -52,7 +52,7 @@ pub extern "C" fn spark(old_kbase: usize) -> ! {
     printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
     ram::init_ram();
     device::init_device();
-    filesys::init_filesys();
+    let _ = filesys::init_filesys();
     // exec_aleph();
     loop { arch::halt(); }
 }
