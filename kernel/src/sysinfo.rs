@@ -1,4 +1,4 @@
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -158,7 +158,7 @@ impl SysInfoMutex {
         self.0.lock().init(param);
     }
 
-    pub fn lock(&self) -> spin::MutexGuard<SysInfo> {
+    pub fn lock(&'_ self) -> MutexGuard<'_, SysInfo> {
         return self.0.lock();
     }
 
