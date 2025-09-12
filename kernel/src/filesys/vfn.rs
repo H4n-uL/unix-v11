@@ -36,11 +36,11 @@ impl FMeta {
 // INTENSIONALLY FORCING INTERIOR MUTABILITY
 pub trait VirtFNode: Send + Sync {
     fn meta(&self) -> FMeta;
-    fn read(&self, buf: &mut [u8], offset: u64) -> bool;
-    fn write(&self, buf: &[u8], offset: u64) -> bool;
-    fn truncate(&self, size: u64) -> bool;
+    fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String>;
+    fn write(&self, buf: &[u8], offset: u64) -> Result<(), String>;
+    fn truncate(&self, size: u64) -> Result<(), String>;
     fn list(&self) -> Option<Vec<String>>;
     fn walk(&self, name: &str) -> Option<Arc<dyn VirtFNode>>;
-    fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> bool;
-    fn remove(&self, name: &str) -> bool;
+    fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> Result<(), String>;
+    fn remove(&self, name: &str) -> Result<(), String>;
 }

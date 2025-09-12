@@ -26,6 +26,14 @@ impl DevFile {
     pub fn total_size(&self) -> u64 {
         self.block_size() * self.block_count()
     }
+
+    pub fn read_in(&self, buf: &[u8], offset: u64) -> Result<PageAligned, String> {
+        let bs = self.block_size() as u64;
+        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
+        let mut tempbuf = PageAligned::new(((end - start) * bs) as usize);
+        self.dev.read(&mut tempbuf, start)?;
+        return Ok(tempbuf);
+    }
 }
 
 impl VirtFNode for DevFile {
@@ -33,30 +41,22 @@ impl VirtFNode for DevFile {
         return self.meta.clone();
     }
 
-    fn read(&self, buf: &mut [u8], offset: u64) -> bool {
+    fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String> {
         let bs = self.block_size() as u64;
-        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
-        let mut tempbuf = PageAligned::new(((end - start) * bs) as usize);
-        if self.dev.read(&mut tempbuf, start).is_err() {
-            return false;
-        }
-        buf.copy_from_slice(&tempbuf[(offset % bs) as usize..][..buf.len()]);
-        return true;
+        let temp_buf = self.read_in(buf, offset)?;
+        buf.copy_from_slice(&temp_buf[(offset % bs) as usize..][..buf.len()]);
+        return Ok(());
     }
 
-    fn write(&self, buf: &[u8], offset: u64) -> bool {
+    fn write(&self, buf: &[u8], offset: u64) -> Result<(), String> {
         let bs = self.block_size() as u64;
-        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
-        let mut tempbuf = PageAligned::new(((end - start) * bs) as usize);
-        if self.dev.read(&mut tempbuf, start).is_err() {
-            return false;
-        }
-        tempbuf[(offset % bs) as usize..][..buf.len()].copy_from_slice(buf);
-        return self.dev.write(&tempbuf, start).is_ok();
+        let mut temp_buf = self.read_in(buf, offset)?;
+        temp_buf[(offset % bs) as usize..][..buf.len()].copy_from_slice(buf);
+        return self.dev.write(&temp_buf, offset / bs);
     }
 
-    fn truncate(&self, _: u64) -> bool {
-        return false;
+    fn truncate(&self, _: u64) -> Result<(), String> {
+        return Err("This is not a file.".into());
     }
 
     fn list(&self) -> Option<Vec<String>> {
@@ -67,11 +67,11 @@ impl VirtFNode for DevFile {
         return None;
     }
 
-    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> bool {
-        return false;
+    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> Result<(), String> {
+        return Err("This is not a directory.".into());
     }
 
-    fn remove(&self, _: &str) -> bool {
-        return false;
+    fn remove(&self, _: &str) -> Result<(), String> {
+        return Err("This is not a directory.".into());
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     printlnk,
     ram::dump_bytes
 };
-use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc, vec::Vec};
+use alloc::{collections::btree_map::BTreeMap, format, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::Mutex;
 
 struct VirtFile {
@@ -34,16 +34,16 @@ impl VirtFNode for VirtFile {
         return self.vfd.lock().meta.clone();
     }
 
-    fn read(&self, buf: &mut [u8], offset: u64) -> bool {
+    fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String> {
         let data = &self.vfd.lock().data;
         let offset = offset as usize;
-        if offset >= data.len() { return false; }
+        if offset >= data.len() { return Err("Offset out of bounds".into()); }
         let read_len = buf.len().min(data.len() - offset);
         buf[..read_len].clone_from_slice(&data[offset..offset + read_len]);
-        return true;
+        return Ok(());
     }
 
-    fn write(&self, buf: &[u8], offset: u64) -> bool {
+    fn write(&self, buf: &[u8], offset: u64) -> Result<(), String> {
         let mut vfd = self.vfd.lock();
         let offset = offset as usize;
         let write_end = buf.len() + offset;
@@ -51,14 +51,14 @@ impl VirtFNode for VirtFile {
         vfd.data.resize(new_size, 0);
         vfd.data[offset..write_end].clone_from_slice(buf);
         vfd.meta.size = new_size as u64;
-        return true;
+        return Ok(());
     }
 
-    fn truncate(&self, size: u64) -> bool {
+    fn truncate(&self, size: u64) -> Result<(), String> {
         let mut vfd = self.vfd.lock();
         vfd.data.resize(size as usize, 0);
         vfd.meta.size = size;
-        return true;
+        return Ok(());
     }
 
     fn list(&self) -> Option<Vec<String>> {
@@ -69,12 +69,12 @@ impl VirtFNode for VirtFile {
         return None;
     }
 
-    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> bool {
-        return false;
+    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> Result<(), String> {
+        return Err("This is not a directory.".into());
     }
 
-    fn remove(&self, _: &str) -> bool {
-        return false;
+    fn remove(&self, _: &str) -> Result<(), String> {
+        return Err("This is not a directory.".into());
     }
 }
 
@@ -97,16 +97,16 @@ impl VirtFNode for VirtDirectory {
         return self.meta.clone();
     }
 
-    fn read(&self, _: &mut [u8], _: u64) -> bool {
-        return false;
+    fn read(&self, _: &mut [u8], _: u64) -> Result<(), String> {
+        return Err("This is not a file.".into());
     }
 
-    fn write(&self, _: &[u8], _: u64) -> bool {
-        return false;
+    fn write(&self, _: &[u8], _: u64) -> Result<(), String> {
+        return Err("This is not a file.".into());
     }
 
-    fn truncate(&self, _: u64) -> bool {
-        return false;
+    fn truncate(&self, _: u64) -> Result<(), String> {
+        return Err("This is not a file.".into());
     }
 
     fn list(&self) -> Option<Vec<String>> {
@@ -117,15 +117,15 @@ impl VirtFNode for VirtDirectory {
         return self.files.lock().get(name).cloned();
     }
 
-    fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> bool {
+    fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> Result<(), String> {
         let mut files = self.files.lock();
-        if files.contains_key(name) { return false; }
+        if files.contains_key(name) { return Err("File already exists.".into()); }
         files.insert(String::from(name), node);
-        return true;
+        return Ok(());
     }
 
-    fn remove(&self, name: &str) -> bool {
-        return self.files.lock().remove(name).is_some();
+    fn remove(&self, name: &str) -> Result<(), String> {
+        return self.files.lock().remove(name).map(|_| ()).ok_or("No such file.".into());
     }
 }
 
@@ -138,22 +138,22 @@ impl VirtualFileSystem {
         return Self { root: Arc::new(VirtDirectory::new()) };
     }
 
-    pub fn read(&self, path: &str, buf: &mut [u8], offset: u64) -> bool {
-        return self.walk(path, false).is_some_and(|file| {
+    pub fn read(&self, path: &str, buf: &mut [u8], offset: u64) -> Result<(), String> {
+        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
             file.read(buf, offset)
-        });
+        );
     }
 
-    pub fn write(&self, path: &str, buf: &[u8], offset: u64) -> bool {
-        return self.walk(path, false).is_some_and(|file| {
+    pub fn write(&self, path: &str, buf: &[u8], offset: u64) -> Result<(), String> {
+        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
             file.write(buf, offset)
-        });
+        );
     }
 
-    pub fn truncate(&self, path: &str, size: u64) -> bool {
-        return self.walk(path, false).is_some_and(|file| {
+    pub fn truncate(&self, path: &str, size: u64) -> Result<(), String> {
+        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
             file.truncate(size)
-        });
+        );
     }
 
     pub fn list(&self, path: &str) -> Option<Vec<String>> {
@@ -177,15 +177,15 @@ impl VirtualFileSystem {
         return Some(stack.last().unwrap_or(&root).clone());
     }
 
-    pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> bool {
-        let Some(dir) = self.walk(path, true) else { return false; };
-        let Some(filename) = get_file_name(path) else { return false; };
+    pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> Result<(), String> {
+        let dir = self.walk(path, true).ok_or("No such directory.")?;
+        let filename = get_file_name(path).ok_or("No such file.")?;
         return dir.create(filename, node);
     }
 
-    pub fn unlink(&self, path: &str) -> bool {
-        let Some(dir) = self.walk(path, true) else { return false; };
-        let Some(filename) = get_file_name(path) else { return false; };
+    pub fn unlink(&self, path: &str) -> Result<(), String> {
+        let dir = self.walk(path, true).ok_or("No such directory.")?;
+        let filename = get_file_name(path).ok_or("No such file.")?;
         return dir.remove(filename);
     }
 }
@@ -211,14 +211,14 @@ fn get_file_name(path: &str) -> Option<&str> {
     return Some(name);
 }
 
-pub fn init_filesys() {
+pub fn init_filesys() -> Result<(), String> {
     let dev = BLOCK_DEVICES.lock();
     let vfs = VirtualFileSystem::new();
 
     // mkdir /dev
     let devdir = Arc::new(VirtDirectory::new()) as Arc<dyn VirtFNode>;
-    devdir.create("block0", Arc::new(DevFile::new(dev.first().unwrap().clone())));
-    vfs.link("/dev", devdir);
+    devdir.create("block0", Arc::new(DevFile::new(dev.first().unwrap().clone())))?;
+    vfs.link("/dev", devdir)?;
 
     // echo buf > /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
@@ -227,16 +227,16 @@ pub fn init_filesys() {
     // file.write(&buf, 0);
     // vfs.link("/main.rs", file);
     // or post-write
-    vfs.link("/main.rs", file);
-    vfs.write("/main.rs", &buf, 0);
+    vfs.link("/main.rs", file)?;
+    vfs.write("/main.rs", &buf, 0)?;
 
     // mv
-    vfs.walk("/main.rs", false).and_then(|file| {
-        vfs.link("/src", Arc::new(VirtDirectory::new()));
-        vfs.link("/src/main.rs", file);
-        vfs.unlink("/main.rs");
-        return Some(());
-    });
+    vfs.walk("/main.rs", false).ok_or("No such file".to_string()).and_then(|file| {
+        vfs.link("/src", Arc::new(VirtDirectory::new()))?;
+        vfs.link("/src/main.rs", file)?;
+        vfs.unlink("/main.rs")?;
+        return Ok(());
+    })?;
 
     // xd /src/main.rs
     buf.iter_mut().for_each(|b| *b = 0);
@@ -245,7 +245,7 @@ pub fn init_filesys() {
     // let Some(file) = vfs.walk("/src/main.rs") else { return; };
     // file.read(&mut buf, 0);
     // or direct read from vfs
-    if !vfs.read("/src/main.rs", &mut buf, 26) { return; }
+    vfs.read("/src/main.rs", &mut buf, 26)?;
     dump_bytes(&buf);
 
     // ls
@@ -258,4 +258,5 @@ pub fn init_filesys() {
             printlnk!("    {:?}: {}", meta.ftype, entry);
         }
     });
+    return Ok(());
 }
