@@ -49,7 +49,7 @@ pub extern "C" fn spark(old_kbase: usize) -> ! {
         PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
     }
     // arch::exceptions::init();
-    printlnk!("The UNIX Time-Sharing System, Eleventh Edition");
+    printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
     ram::init_ram();
     device::init_device();
     let _ = filesys::init_filesys();
