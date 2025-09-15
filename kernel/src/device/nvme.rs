@@ -1,7 +1,7 @@
 use crate::{
     arch::mmu::flags,
     device::block::{BlockDevice, BLOCK_DEVICES},
-    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PAGE_4KIB}
+    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
 };
 use super::PCI_DEVICES;
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
@@ -39,29 +39,39 @@ impl NVMeBlockDevice {
 
 impl BlockDevice for NVMeBlockDevice {
     fn block_size(&self) -> u64 {
-        let namespace = self.dev.get_ns(self.nsid);
-        return namespace.map_or(0, |namespace| namespace.block_size());
+        return self.dev.get_ns(self.nsid).map_or(0, |ns| ns.block_size());
     }
 
     fn block_count(&self) -> u64 {
-        let namespace = self.dev.get_ns(self.nsid);
-        return namespace.map_or(0, |namespace| namespace.block_count());
+        return self.dev.get_ns(self.nsid).map_or(0, |ns| ns.block_count());
     }
 
-    fn read_block(&self, buffer: &mut [u8], lba: u64) -> Result<(), String> {
+    fn read_block(&self, buf: &mut [u8], lba: u64) -> Result<(), String> {
         let ns = self.dev.get_ns(self.nsid)
             .ok_or_else(|| String::from("Invalid namespace"))?;
 
-        return ns.read(lba, buffer).map_err(|e|
+        let mut pabuf = PageAligned::new(buf.len());
+        ns.read(lba, &mut pabuf).map_err(|e|
             format!("NVMe read error: {}", e)
-        );
+        )?;
+        buf.copy_from_slice(&pabuf[..buf.len()]);
+        return Ok(());
     }
 
-    fn write_block(&self, buffer: &[u8], lba: u64) -> Result<(), String> {
+    fn write_block(&self, buf: &[u8], lba: u64) -> Result<(), String> {
         let ns = self.dev.get_ns(self.nsid)
             .ok_or_else(|| String::from("Invalid namespace"))?;
 
-        return ns.write(lba, buffer).map_err(|e|
+        // PageAligned ensures both address and size alignment to 4 kiB
+        // via AllocParams' default settings.
+        let mut pabuf = PageAligned::new(buf.len());
+        if buf.len() % self.block_size() as usize != 0 {
+            ns.read(lba, &mut pabuf).map_err(|e|
+                format!("NVMe read error: {}", e)
+            )?;
+        }
+        pabuf[..buf.len()].copy_from_slice(buf);
+        return ns.write(lba, &pabuf).map_err(|e|
             format!("NVMe write error: {}", e)
         );
     }
