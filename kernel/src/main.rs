@@ -3,7 +3,7 @@
 //!
 //! Crafted by HaמuL in 2025
 //! Description: Kernel of UNIX Version 11
-//! Licence: Public Domain
+//! Licence: Copyright Non-Assertion Declaration
 
 #![no_std]
 #![no_main]
