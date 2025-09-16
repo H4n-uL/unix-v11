@@ -81,11 +81,12 @@ impl UEFIPartition {
 
     pub fn get_parts(&self) -> Vec<PartitionDev> {
         let mut parts = Vec::new();
-        for entry in &self.entries {
+        for (i, entry) in self.entries.iter().enumerate() {
             let start = entry.first_lba.get();
             let end = entry.last_lba.get();
             let part = PartitionDev::new(
-                self.dev.clone(), start, end - start + 1
+                self.dev.clone(), i as u32,
+                start, end - start + 1
             );
             parts.push(part);
         }

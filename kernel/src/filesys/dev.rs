@@ -8,7 +8,8 @@ pub struct DevFile {
 
 impl DevFile {
     pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
-        let mut s = Self { dev, meta: FMeta::vfs_only(FType::Device) };
+        let meta = FMeta::default(dev.devid(), 1, FType::Device);
+        let mut s = Self { dev, meta };
         s.meta.size = s.total_size();
         return s;
     }
@@ -41,6 +42,10 @@ impl BlockDevice for DevFile {
 
     fn write_block(&self, buf: &[u8], lba: u64) -> Result<(), String> {
         self.dev.write_block(buf, lba)
+    }
+
+    fn devid(&self) -> u64 {
+        self.meta.fid
     }
 }
 
@@ -90,8 +95,10 @@ pub struct PartitionDev {
 }
 
 impl PartitionDev {
-    pub fn new(dev: Arc<dyn BlockDevice>, start_lba: u64, block_count: u64) -> Self {
-        let mut s = Self { dev, start_lba, block_count, meta: FMeta::vfs_only(FType::Partition) };
+    pub fn new(dev: Arc<dyn BlockDevice>, part_no: u32, start_lba: u64, block_count: u64) -> Self {
+        let fid = dev.devid() | (part_no + 1 & 0xffffff) as u64;
+        let meta = FMeta::default(fid, 1, FType::Device);
+        let mut s = Self { dev, start_lba, block_count, meta };
         s.meta.size = s.total_size();
         return s;
     }
@@ -124,6 +131,10 @@ impl BlockDevice for PartitionDev {
 
     fn write_block(&self, buf: &[u8], lba: u64) -> Result<(), String> {
         self.dev.write_block(buf, lba + self.start_lba)
+    }
+
+    fn devid(&self) -> u64 {
+        self.meta.fid
     }
 }
 

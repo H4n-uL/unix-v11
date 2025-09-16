@@ -1,8 +1,8 @@
-mod dev; mod vfn;
+mod dev; mod gpt; mod vfn;
 
 use crate::{
     device::block::BLOCK_DEVICES,
-    filesys::{vfn::{FMeta, FType, VirtFNode}, dev::DevFile},
+    filesys::{dev::DevFile, gpt::UEFIPartition, vfn::{FMeta, FType, VirtFNode}},
     printlnk,
     ram::dump_bytes
 };
@@ -22,7 +22,7 @@ impl VirtFile {
     pub fn new() -> Self {
         return Self {
             vfd: Mutex::new(VFileData {
-                meta: FMeta::default(FType::Regular),
+                meta: FMeta::vfs_only(FType::Regular),
                 data: Vec::new()
             })
         };
@@ -86,7 +86,7 @@ struct VirtDirectory {
 impl VirtDirectory {
     pub fn new() -> Self {
         return Self {
-            meta: FMeta::default(vfn::FType::Directory),
+            meta: FMeta::vfs_only(FType::Directory),
             files: Mutex::new(BTreeMap::new())
         };
     }
@@ -212,17 +212,22 @@ fn get_file_name(path: &str) -> Option<&str> {
 }
 
 pub fn init_filesys() -> Result<(), String> {
-    let dev = BLOCK_DEVICES.lock();
+    let dev = BLOCK_DEVICES.lock().first().unwrap().clone();
     let vfs = VirtualFileSystem::new();
 
     // mkdir /dev
-    let devdir = Arc::new(VirtDirectory::new()) as Arc<dyn VirtFNode>;
-    devdir.create("block0", Arc::new(DevFile::new(dev.first().unwrap().clone())))?;
+    let devdir = Arc::new(VirtDirectory::new());
+    let block = Arc::new(DevFile::new(dev.clone()));
+    devdir.create("block0", block)?;
+    for (i, part) in UEFIPartition::new(dev.clone())?.get_parts().into_iter().enumerate() {
+        let partdev = Arc::new(part);
+        devdir.create(&format!("block0p{}", i), partdev)?;
+    }
     vfs.link("/dev", devdir)?;
 
     // echo buf > /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
-    let file = Arc::new(VirtFile::new()) as Arc<dyn VirtFNode>;
+    let file = Arc::new(VirtFile::new());
     // // pre-write
     // file.write(&buf, 0);
     // vfs.link("/main.rs", file);
@@ -249,13 +254,15 @@ pub fn init_filesys() -> Result<(), String> {
     dump_bytes(&buf);
 
     // ls
-    let dir = "/";
-    vfs.list(dir).iter().for_each(|entries| {
+    let dir = "/dev";
+    let vdn = vfs.walk(dir, false).ok_or("No such directory")?;
+    vdn.list().iter().for_each(|entries| {  
         printlnk!("in {}:", dir);
         for entry in entries {
-            let path = join_path(&[dir, entry]).unwrap();
-            let meta = vfs.walk(&path, false).unwrap().meta();
-            printlnk!("    {:?}: {}", meta.ftype, entry);
+            let vfn = vdn.walk(&entry).unwrap();
+            printlnk!("    {:?}: {}", vfn.meta().ftype, entry);
+            printlnk!("    fid   {}", vfn.meta().fid);
+            printlnk!("    devid {}", vfn.meta().devid);
         }
     });
     return Ok(());

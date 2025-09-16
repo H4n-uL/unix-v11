@@ -14,7 +14,7 @@ pub enum FType {
 #[derive(Clone)]
 pub struct FMeta {
     pub fid: u64,
-    pub partid: u64,
+    pub devid: u64,
     pub size: u64,
     pub ftype: FType,
     pub perm: u16,
@@ -30,7 +30,7 @@ impl FMeta {
         return Self::default(FID.fetch_add(1, SyncOrd::SeqCst), 0, ftype);
     }
 
-    pub fn default(fid: u64, partid: u64, ftype: FType) -> Self {
+    pub fn default(fid: u64, devid: u64, ftype: FType) -> Self {
         let perm = match ftype {
             FType::Regular => 0x644,
             FType::Directory => 0x755,
@@ -38,7 +38,7 @@ impl FMeta {
             FType::Partition => 0x640
         };
         return Self {
-            fid, partid,
+            fid, devid,
             size: 0, ftype, perm,
             uid: 0, gid: 0
         };
