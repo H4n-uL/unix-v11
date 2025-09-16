@@ -1,4 +1,4 @@
-use crate::{device::block::BlockDevice, filesys::{vfn::{FMeta, FType, VirtFNode}}, ram::PageAligned};
+use crate::{device::block::{BlockDevice, DevId}, filesys::vfn::{FMeta, FType, VirtFNode}, ram::PageAligned};
 use alloc::{string::String, sync::Arc, vec::Vec};
 
 pub struct DevFile {
@@ -96,7 +96,7 @@ pub struct PartitionDev {
 
 impl PartitionDev {
     pub fn new(dev: Arc<dyn BlockDevice>, part_no: u32, start_lba: u64, block_count: u64) -> Self {
-        let fid = dev.devid() | (part_no + 1 & 0xffffff) as u64;
+        let fid = DevId::new(dev.devid()).part(part_no).build();
         let meta = FMeta::default(fid, 1, FType::Device);
         let mut s = Self { dev, start_lba, block_count, meta };
         s.meta.size = s.total_size();

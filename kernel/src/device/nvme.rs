@@ -1,6 +1,6 @@
 use crate::{
     arch::mmu::flags,
-    device::block::{BlockDevType, BlockDevice, BLOCK_DEVICES},
+    device::block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES},
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
 };
 use super::PCI_DEVICES;
@@ -74,9 +74,10 @@ impl BlockDevice for NVMeBlockDevice {
     }
 
     fn devid(&self) -> u64 {
-        return (BlockDevType::PCIe as u64) << 56 |
-                (self.devid as u64) << 40 |
-                (self.nsid as u64) << 24;
+        return DevId::new(0)
+            .ty(BlockDevType::PCIe)
+            .loc(((self.devid as u32) << 16) | self.nsid)
+            .build();
     }
 }
 
