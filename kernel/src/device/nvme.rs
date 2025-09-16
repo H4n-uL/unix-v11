@@ -1,6 +1,6 @@
 use crate::{
     arch::mmu::flags,
-    device::block::{BlockDevice, BLOCK_DEVICES},
+    device::block::{BlockDevType, BlockDevice, BLOCK_DEVICES},
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
 };
 use super::PCI_DEVICES;
@@ -24,17 +24,14 @@ impl Allocator for NVMeAlloc {
 
 pub struct NVMeBlockDevice {
     dev: Arc<Device<NVMeAlloc>>,
-    devid: usize,
+    devid: u16,
     nsid: u32
 }
 
 impl NVMeBlockDevice {
-    pub fn new(dev: Arc<Device<NVMeAlloc>>, devid: usize, nsid: u32) -> Self {
+    pub fn new(dev: Arc<Device<NVMeAlloc>>, devid: u16, nsid: u32) -> Self {
         Self { dev, devid, nsid }
     }
-
-    pub fn devid(&self) -> usize { self.devid }
-    pub fn nsid(&self) -> u32 { self.nsid }
 }
 
 impl BlockDevice for NVMeBlockDevice {
@@ -75,9 +72,15 @@ impl BlockDevice for NVMeBlockDevice {
             format!("NVMe write error: {}", e)
         );
     }
+
+    fn devid(&self) -> u64 {
+        return (BlockDevType::PCIe as u64) << 56 |
+                (self.devid as u64) << 40 |
+                (self.nsid as u64) << 24;
+    }
 }
 
-pub static NVME_DEV: Mutex<BTreeMap<usize, Arc<Device<NVMeAlloc>>>> = Mutex::new(BTreeMap::new());
+pub static NVME_DEV: Mutex<BTreeMap<u16, Arc<Device<NVMeAlloc>>>> = Mutex::new(BTreeMap::new());
 
 pub fn init_nvme() {
     let mut nvme_devices = NVME_DEV.lock();
@@ -88,7 +91,7 @@ pub fn init_nvme() {
             ((pci_dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)
         } else { base & !0b11 };
 
-        let devid = nvme_devices.len();
+        let devid = pci_dev.devid;
         GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
         let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
         for ns in nvme_arc.list_namespaces() {

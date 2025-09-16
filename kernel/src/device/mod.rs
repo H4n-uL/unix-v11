@@ -14,9 +14,7 @@ use spin::Mutex;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PciDevice {
-    bus: u8,
-    device: u8,
-    function: u8,
+    devid: u16,
     ptr: *mut u32
 }
 
@@ -25,20 +23,17 @@ unsafe impl Sync for PciDevice {}
 
 #[allow(dead_code)]
 impl PciDevice {
-    pub fn read(base: u64, bus: u8, device: u8, function: u8) -> Option<Self> {
-        let ptr = base as usize
-            + ((bus as usize) << 20)
-            + ((device as usize) << 15)
-            + ((function as usize) << 12);
+    pub fn read(base: u64, devid: u16) -> Option<Self> {
+        let ptr = base as usize + ((devid as usize) << 12);
         GLACIER.map_range(ptr, ptr, PAGE_4KIB, flags::D_RW);
-        let dev = PciDevice { bus, device, function, ptr: ptr as *mut u32 };
+        let dev = PciDevice { devid, ptr: ptr as *mut u32 };
         if dev.vendor_id() == 0xFFFF { return None; }
         return Some(dev);
     }
 
-    pub fn bus(&self) -> u8 { self.bus }
-    pub fn device(&self) -> u8 { self.device }
-    pub fn function(&self) -> u8 { self.function }
+    pub fn bus(&self) -> u8 { (self.devid >> 8) as u8 }
+    pub fn device(&self) -> u8 { (self.devid >> 3) as u8 & 0x1f }
+    pub fn function(&self) -> u8 { self.devid as u8 & 0x07 }
     pub fn ptr(&self) -> *mut u32 { self.ptr }
 
     pub fn enable_pci_device(&mut self) { self.set_command(self.command() | 0x0006); }
@@ -130,13 +125,15 @@ impl PciDevice {
 
 fn scan_pcie_devices(base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
     let mut devices = Vec::new();
+    printlnk!("Scanning PCIe devices at {:#x}, bus {:02x}-{:02x}", base, start_bus, end_bus);
+    let (start, end) = ((start_bus as u16) << 8, ((end_bus as u16 + 1) << 8).wrapping_sub(1));
 
-    for bus in start_bus..=end_bus { for device in 0..32 { for function in 0..8 {
-        if let Some(mut dev) = PciDevice::read(base, bus, device, function) {
+    for devid in start..=end {
+        if let Some(mut dev) = PciDevice::read(base, devid) {
             dev.enable_pci_device();
             devices.push(dev);
         }
-    }}}
+    }
 
     return devices;
 }
