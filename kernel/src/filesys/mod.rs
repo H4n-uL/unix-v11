@@ -6,7 +6,7 @@ use crate::{
     printlnk,
     ram::dump_bytes
 };
-use alloc::{collections::btree_map::BTreeMap, format, string::{String, ToString}, sync::Arc, vec::Vec};
+use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc, vec::Vec};
 use spin::Mutex;
 
 struct VirtFile {
@@ -60,22 +60,6 @@ impl VirtFNode for VirtFile {
         vfd.meta.size = size;
         return Ok(());
     }
-
-    fn list(&self) -> Option<Vec<String>> {
-        return None;
-    }
-
-    fn walk(&self, _: &str) -> Option<Arc<dyn VirtFNode>> {
-        return None;
-    }
-
-    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> Result<(), String> {
-        return Err("This is not a directory.".into());
-    }
-
-    fn remove(&self, _: &str) -> Result<(), String> {
-        return Err("This is not a directory.".into());
-    }
 }
 
 struct VirtDirectory {
@@ -97,35 +81,23 @@ impl VirtFNode for VirtDirectory {
         return self.meta.clone();
     }
 
-    fn read(&self, _: &mut [u8], _: u64) -> Result<(), String> {
-        return Err("This is not a file.".into());
+    fn list(&self) -> Result<Vec<String>, String> {
+        return Ok(self.files.lock().keys().cloned().collect());
     }
 
-    fn write(&self, _: &[u8], _: u64) -> Result<(), String> {
-        return Err("This is not a file.".into());
-    }
-
-    fn truncate(&self, _: u64) -> Result<(), String> {
-        return Err("This is not a file.".into());
-    }
-
-    fn list(&self) -> Option<Vec<String>> {
-        return Some(self.files.lock().keys().cloned().collect());
-    }
-
-    fn walk(&self, name: &str) -> Option<Arc<dyn VirtFNode>> {
-        return self.files.lock().get(name).cloned();
+    fn walk(&self, name: &str) -> Result<Arc<dyn VirtFNode>, String> {
+        return self.files.lock().get(name).cloned().ok_or("No such file".into());
     }
 
     fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> Result<(), String> {
         let mut files = self.files.lock();
-        if files.contains_key(name) { return Err("File already exists.".into()); }
+        if files.contains_key(name) { return Err("File already exists".into()); }
         files.insert(String::from(name), node);
         return Ok(());
     }
 
     fn remove(&self, name: &str) -> Result<(), String> {
-        return self.files.lock().remove(name).map(|_| ()).ok_or("No such file.".into());
+        return self.files.lock().remove(name).map(|_| ()).ok_or("No such file".into());
     }
 }
 
@@ -139,70 +111,70 @@ impl VirtualFileSystem {
     }
 
     pub fn read(&self, path: &str, buf: &mut [u8], offset: u64) -> Result<(), String> {
-        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
+        return self.walk(path).and_then(|file|
             file.read(buf, offset)
         );
     }
 
     pub fn write(&self, path: &str, buf: &[u8], offset: u64) -> Result<(), String> {
-        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
+        return self.walk(path).and_then(|file|
             file.write(buf, offset)
         );
     }
 
     pub fn truncate(&self, path: &str, size: u64) -> Result<(), String> {
-        return self.walk(path, false).ok_or("File not found.".into()).and_then(|file|
+        return self.walk(path).and_then(|file|
             file.truncate(size)
         );
     }
 
-    pub fn list(&self, path: &str) -> Option<Vec<String>> {
-        return self.walk(path, false).and_then(|node| node.list());
+    pub fn list(&self, path: &str) -> Result<Vec<String>, String> {
+        return self.walk(path).and_then(|node| node.list());
     }
 
-    pub fn walk(&self, path: &str, parent: bool) -> Option<Arc<dyn VirtFNode>> {
+    pub fn walk_parent(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
         let root = self.root.clone() as Arc<dyn VirtFNode>;
         let partlen = path.split('/').count();
         let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
         for (i, part) in path.split('/').enumerate() {
             let last = stack.last().unwrap_or(&root);
-            if last.meta().ftype != FType::Directory { return None; }
+            if last.meta().ftype != FType::Directory { return Err("Directory walk error".into()); }
             if !["", ".", ".."].contains(&part) {
-                if parent && i >= partlen - 1 { break; }
+                if i >= partlen - 1 { break; }
                 stack.push(last.walk(part)?);
             } else if part == ".." {
                 if !stack.is_empty() { stack.pop(); }
             }
         }
-        return Some(stack.last().unwrap_or(&root).clone());
+        return Ok(stack.last().unwrap_or(&root).clone());
+    }
+
+    pub fn walk(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
+        let root = self.root.clone() as Arc<dyn VirtFNode>;
+        let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
+        for part in path.split('/') {
+            let last = stack.last().unwrap_or(&root);
+            if last.meta().ftype != FType::Directory { return Err("Directory walk error".into()); }
+            if !["", ".", ".."].contains(&part) {
+                stack.push(last.walk(part)?);
+            } else if part == ".." {
+                if !stack.is_empty() { stack.pop(); }
+            }
+        }
+        return Ok(stack.last().unwrap_or(&root).clone());
     }
 
     pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> Result<(), String> {
-        let dir = self.walk(path, true).ok_or("No such directory.")?;
-        let filename = get_file_name(path).ok_or("No such file.")?;
+        let dir = self.walk_parent(path)?;
+        let filename = get_file_name(path).ok_or("No such file")?;
         return dir.create(filename, node);
     }
 
     pub fn unlink(&self, path: &str) -> Result<(), String> {
-        let dir = self.walk(path, true).ok_or("No such directory.")?;
-        let filename = get_file_name(path).ok_or("No such file.")?;
+        let dir = self.walk_parent(path)?;
+        let filename = get_file_name(path).ok_or("No such file")?;
         return dir.remove(filename);
     }
-}
-
-fn join_path(paths: &[&str]) -> Result<String, ()> {
-    if paths.is_empty() { return Err(()); }
-    let mut parts = Vec::new();
-    for &part in paths {
-        for p in part.split('/').filter(|s| !s.is_empty()) {
-            match p {
-                "" | "." => continue,
-                ".." => { if !parts.is_empty() { parts.pop(); } },
-                _ => { parts.push(p); }
-            }
-        }
-    }
-    return Ok(format!("/{}", parts.join("/")));
 }
 
 fn get_file_name(path: &str) -> Option<&str> {
@@ -236,7 +208,7 @@ pub fn init_filesys() -> Result<(), String> {
     vfs.write("/main.rs", &buf, 0)?;
 
     // mv
-    vfs.walk("/main.rs", false).ok_or("No such file".to_string()).and_then(|file| {
+    vfs.walk("/main.rs").and_then(|file| {
         vfs.link("/src", Arc::new(VirtDirectory::new()))?;
         vfs.link("/src/main.rs", file)?;
         vfs.unlink("/main.rs")?;
@@ -255,14 +227,24 @@ pub fn init_filesys() -> Result<(), String> {
 
     // ls
     let dir = "/dev";
-    let vdn = vfs.walk(dir, false).ok_or("No such directory")?;
-    vdn.list().iter().for_each(|entries| {  
+    let vdirn = vfs.walk(dir)?;
+    vdirn.list().iter().for_each(|entries| {  
         printlnk!("in {}:", dir);
         for entry in entries {
-            let vfn = vdn.walk(&entry).unwrap();
-            printlnk!("    {:?}: {}", vfn.meta().ftype, entry);
-            printlnk!("    fid   {}", vfn.meta().fid);
-            printlnk!("    devid {}", vfn.meta().devid);
+            let vfn = vdirn.walk(&entry).unwrap();
+            let meta = vfn.meta();
+            let ty = match meta.ftype {
+                FType::Regular =>      "Regular:  ",
+                FType::Directory =>    "Directory:",
+                FType::Device =>    "Device:   ",
+                FType::Partition => "Partition:"
+            };
+            printlnk!("    {}   {}", ty, entry);
+            printlnk!("    File ID     {}", meta.fid);
+            printlnk!("    Host Device {}", meta.hostdev);
+            if let Some(vdevn) = vfn.as_blkdev() {
+                printlnk!("    Device ID {}", vdevn.devid());
+            }
         }
     });
     return Ok(());

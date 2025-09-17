@@ -1,6 +1,7 @@
-use crate::{device::block::{BlockDevice, DevId}, filesys::vfn::{FMeta, FType, VirtFNode}, ram::PageAligned};
-use alloc::{string::String, sync::Arc, vec::Vec};
+use crate::{device::block::{BlockDevice, DevId}, filesys::vfn::{vfid, FMeta, FType, VirtFNode}, ram::PageAligned};
+use alloc::{string::String, sync::Arc};
 
+#[derive(Clone)]
 pub struct DevFile {
     dev: Arc<dyn BlockDevice>,
     meta: FMeta
@@ -8,7 +9,7 @@ pub struct DevFile {
 
 impl DevFile {
     pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
-        let meta = FMeta::default(dev.devid(), 1, FType::Device);
+        let meta = FMeta::default(vfid(), 1, FType::Device);
         let mut s = Self { dev, meta };
         s.meta.size = s.total_size();
         return s;
@@ -45,7 +46,7 @@ impl BlockDevice for DevFile {
     }
 
     fn devid(&self) -> u64 {
-        self.meta.fid
+        self.dev.devid()
     }
 }
 
@@ -67,38 +68,28 @@ impl VirtFNode for DevFile {
     }
 
     fn truncate(&self, _: u64) -> Result<(), String> {
-        return Err("This is not a file.".into());
+        return Err("This is not a file".into());
     }
 
-    fn list(&self) -> Option<Vec<String>> {
-        return None;
-    }
-
-    fn walk(&self, _: &str) -> Option<Arc<dyn VirtFNode>> {
-        return None;
-    }
-
-    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> Result<(), String> {
-        return Err("This is not a directory.".into());
-    }
-
-    fn remove(&self, _: &str) -> Result<(), String> {
-        return Err("This is not a directory.".into());
+    fn as_blkdev(&self) -> Option<Arc<dyn BlockDevice>> {
+        Some(Arc::new(self.clone()))
     }
 }
 
+#[derive(Clone)]
 pub struct PartitionDev {
     dev: Arc<dyn BlockDevice>,
+    meta: FMeta,
+    devid: u64,
     start_lba: u64,
     block_count: u64,
-    meta: FMeta
 }
 
 impl PartitionDev {
     pub fn new(dev: Arc<dyn BlockDevice>, part_no: u32, start_lba: u64, block_count: u64) -> Self {
-        let fid = DevId::new(dev.devid()).part(part_no).build();
-        let meta = FMeta::default(fid, 1, FType::Device);
-        let mut s = Self { dev, start_lba, block_count, meta };
+        let devid = DevId::new(dev.devid()).part(part_no).build();
+        let meta = FMeta::default(vfid(), 1, FType::Partition);
+        let mut s = Self { dev, meta, devid, start_lba, block_count };
         s.meta.size = s.total_size();
         return s;
     }
@@ -134,7 +125,7 @@ impl BlockDevice for PartitionDev {
     }
 
     fn devid(&self) -> u64 {
-        self.meta.fid
+        self.devid
     }
 }
 
@@ -158,22 +149,10 @@ impl VirtFNode for PartitionDev {
     }
 
     fn truncate(&self, _: u64) -> Result<(), String> {
-        return Err("This is not a file.".into());
+        return Err("This is not a file".into());
     }
 
-    fn list(&self) -> Option<Vec<String>> {
-        return None;
-    }
-
-    fn walk(&self, _: &str) -> Option<Arc<dyn VirtFNode>> {
-        return None;
-    }
-
-    fn create(&self, _: &str, _: Arc<dyn VirtFNode>) -> Result<(), String> {
-        return Err("This is not a directory.".into());
-    }
-
-    fn remove(&self, _: &str) -> Result<(), String> {
-        return Err("This is not a directory.".into());
+    fn as_blkdev(&self) -> Option<Arc<dyn BlockDevice>> {
+        Some(Arc::new(self.clone()))
     }
 }

@@ -1,6 +1,8 @@
 use core::sync::atomic::{AtomicU64, Ordering as SyncOrd};
 use alloc::{string::String, sync::Arc, vec::Vec};
 
+use crate::device::block::BlockDevice;
+
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FType {
@@ -14,7 +16,7 @@ pub enum FType {
 #[derive(Clone)]
 pub struct FMeta {
     pub fid: u64,
-    pub devid: u64,
+    pub hostdev: u64,
     pub size: u64,
     pub ftype: FType,
     pub perm: u16,
@@ -22,15 +24,18 @@ pub struct FMeta {
     pub gid: u16
 }
 
-
 static FID: AtomicU64 = AtomicU64::new(0);
+
+pub fn vfid() -> u64 {
+    return FID.fetch_add(1, SyncOrd::SeqCst);
+}
 
 impl FMeta {
     pub fn vfs_only(ftype: FType) -> Self {
-        return Self::default(FID.fetch_add(1, SyncOrd::SeqCst), 0, ftype);
+        return Self::default(vfid(), 0, ftype);
     }
 
-    pub fn default(fid: u64, devid: u64, ftype: FType) -> Self {
+    pub fn default(fid: u64, hostdev: u64, ftype: FType) -> Self {
         let perm = match ftype {
             FType::Regular => 0x644,
             FType::Directory => 0x755,
@@ -38,7 +43,7 @@ impl FMeta {
             FType::Partition => 0x640
         };
         return Self {
-            fid, devid,
+            fid, hostdev,
             size: 0, ftype, perm,
             uid: 0, gid: 0
         };
@@ -48,11 +53,12 @@ impl FMeta {
 // INTENSIONALLY FORCING INTERIOR MUTABILITY
 pub trait VirtFNode: Send + Sync {
     fn meta(&self) -> FMeta;
-    fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String>;
-    fn write(&self, buf: &[u8], offset: u64) -> Result<(), String>;
-    fn truncate(&self, size: u64) -> Result<(), String>;
-    fn list(&self) -> Option<Vec<String>>;
-    fn walk(&self, name: &str) -> Option<Arc<dyn VirtFNode>>;
-    fn create(&self, name: &str, node: Arc<dyn VirtFNode>) -> Result<(), String>;
-    fn remove(&self, name: &str) -> Result<(), String>;
+    fn read(&self, _buf: &mut [u8], _offset: u64) -> Result<(), String> { Err("This is not IOable".into()) }
+    fn write(&self, _buf: &[u8], _offset: u64) -> Result<(), String> { Err("This is not IOable".into()) }
+    fn truncate(&self, _size: u64) -> Result<(), String> { Err("This is not IOable".into()) }
+    fn list(&self) -> Result<Vec<String>, String> { Err("This is not a directory".into()) }
+    fn walk(&self, _name: &str) -> Result<Arc<dyn VirtFNode>, String> { Err("This is not a directory".into()) }
+    fn create(&self, _name: &str, _node: Arc<dyn VirtFNode>) -> Result<(), String> { Err("This is not a directory".into()) }
+    fn remove(&self, _name: &str) -> Result<(), String> { Err("This is not a directory".into()) }
+    fn as_blkdev(&self) -> Option<Arc<dyn BlockDevice>> { None }
 }
