@@ -53,9 +53,9 @@ impl FMeta {
 // INTENSIONALLY FORCING INTERIOR MUTABILITY
 pub trait VirtFNode: Send + Sync {
     fn meta(&self) -> FMeta;
-    fn read(&self, _buf: &mut [u8], _offset: u64) -> Result<(), String> { Err("This is not IOable".into()) }
-    fn write(&self, _buf: &[u8], _offset: u64) -> Result<(), String> { Err("This is not IOable".into()) }
-    fn truncate(&self, _size: u64) -> Result<(), String> { Err("This is not IOable".into()) }
+    fn read(&self, _buf: &mut [u8], _offset: u64) -> Result<(), String> { Err("This file is not IOable".into()) }
+    fn write(&self, _buf: &[u8], _offset: u64) -> Result<(), String> { Err("This file is not IOable".into()) }
+    fn truncate(&self, _size: u64) -> Result<(), String> { Err("This file is not IOable".into()) }
     fn list(&self) -> Result<Vec<String>, String> { Err("This is not a directory".into()) }
     fn walk(&self, _name: &str) -> Result<Arc<dyn VirtFNode>, String> { Err("This is not a directory".into()) }
     fn create(&self, _name: &str, _node: Arc<dyn VirtFNode>) -> Result<(), String> { Err("This is not a directory".into()) }
