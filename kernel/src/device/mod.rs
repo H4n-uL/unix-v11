@@ -125,7 +125,6 @@ impl PciDevice {
 
 fn scan_pcie_devices(base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
     let mut devices = Vec::new();
-    printlnk!("Scanning PCIe devices at {:#x}, bus {:02x}-{:02x}", base, start_bus, end_bus);
     let (start, end) = ((start_bus as u16) << 8, ((end_bus as u16 + 1) << 8).wrapping_sub(1));
 
     for devid in start..=end {

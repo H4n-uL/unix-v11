@@ -239,7 +239,7 @@ pub fn init_filesys() -> Result<(), String> {
                 FType::Device =>    "Device:   ",
                 FType::Partition => "Partition:"
             };
-            printlnk!("    {}   {}", ty, entry);
+            printlnk!("    {}  {}", ty, entry);
             printlnk!("    File ID     {}", meta.fid);
             printlnk!("    Host Device {}", meta.hostdev);
             if let Some(vdevn) = vfn.as_blkdev() {

@@ -77,8 +77,8 @@ impl MMUCfg {
 
 impl GlacierData {
     pub fn identity_map(&self) {
-        // Attr0 = Normal memory, Inner/Outer Write-Back Non-transient
-        // Attr1 = Device memory nGnRnE
+        // Attr0 = Normal RAM, Inner/Outer Write-Back Non-transient
+        // Attr1 = Device RAM nGnRnE
         let mair_el1: u64 = 0xff | (0x00 << 8);
 
         unsafe {
