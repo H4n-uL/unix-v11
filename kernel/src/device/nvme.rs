@@ -5,7 +5,7 @@ use crate::{
 };
 use super::PCI_DEVICES;
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
-use nvme_rs::{Allocator, Device};
+use nvme_rs::{Allocator, NVMeDevice};
 use spin::Mutex;
 
 pub struct NVMeAlloc;
@@ -22,19 +22,19 @@ impl Allocator for NVMeAlloc {
     fn translate(&self, addr: usize) -> usize { addr }
 }
 
-pub struct NVMeBlockDevice {
-    dev: Arc<Device<NVMeAlloc>>,
+pub struct BlockDeviceNVMe {
+    dev: Arc<NVMeDevice<NVMeAlloc>>,
     devid: u16,
     nsid: u32
 }
 
-impl NVMeBlockDevice {
-    pub fn new(dev: Arc<Device<NVMeAlloc>>, devid: u16, nsid: u32) -> Self {
+impl BlockDeviceNVMe {
+    pub fn new(dev: Arc<NVMeDevice<NVMeAlloc>>, devid: u16, nsid: u32) -> Self {
         Self { dev, devid, nsid }
     }
 }
 
-impl BlockDevice for NVMeBlockDevice {
+impl BlockDevice for BlockDeviceNVMe {
     fn block_size(&self) -> u64 {
         return self.dev.get_ns(self.nsid).map_or(0, |ns| ns.block_size());
     }
@@ -81,7 +81,7 @@ impl BlockDevice for NVMeBlockDevice {
     }
 }
 
-pub static NVME_DEV: Mutex<BTreeMap<u16, Arc<Device<NVMeAlloc>>>> = Mutex::new(BTreeMap::new());
+pub static NVME_DEV: Mutex<BTreeMap<u16, Arc<NVMeDevice<NVMeAlloc>>>> = Mutex::new(BTreeMap::new());
 
 pub fn init_nvme() {
     let mut nvme_devices = NVME_DEV.lock();
@@ -94,9 +94,9 @@ pub fn init_nvme() {
 
         let devid = pci_dev.devid;
         GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
-        let nvme_arc = Arc::new(Device::init(mmio_addr, NVMeAlloc).unwrap());
-        for ns in nvme_arc.list_namespaces() {
-            block_devices.push(Arc::new(NVMeBlockDevice::new(nvme_arc.clone(), devid, ns)));
+        let nvme_arc = Arc::new(NVMeDevice::init(mmio_addr, NVMeAlloc).unwrap());
+        for ns in nvme_arc.list_ns() {
+            block_devices.push(Arc::new(BlockDeviceNVMe::new(nvme_arc.clone(), devid, ns)));
         }
         nvme_devices.insert(devid, nvme_arc.clone());
     }
