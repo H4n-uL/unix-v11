@@ -2,7 +2,6 @@ pub mod glacier;
 pub mod physalloc;
 
 use crate::{
-    arch::move_stack,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::ramtype
 };
@@ -11,7 +10,7 @@ use spin::Mutex;
 use talc::{ErrOnOom, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
-pub const STACK_SIZE: usize = 0x100000;
+pub const STACK_SIZE: usize = 0x4000;
 pub const HEAP_SIZE: usize = 0x100000;
 
 pub struct PageAligned {
@@ -55,11 +54,6 @@ pub fn align_up(val: usize, align: usize) -> usize {
 }
 
 pub fn init_ram() {
-    let stack_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
-    ).unwrap();
-    unsafe { move_stack(&stack_ptr); }
-
     let available = PHYS_ALLOC.available();
     let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
     let heap_ptr = PHYS_ALLOC.alloc(

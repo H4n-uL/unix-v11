@@ -2,8 +2,7 @@
 
 use crate::{
     arch::mmu::flags,
-    ram::{glacier::GLACIER, physalloc::OwnedPtr},
-    SYS_INFO
+    ram::{glacier::GLACIER, physalloc::OwnedPtr}
 };
 
 pub fn set_interrupts(enabled: bool) {
@@ -61,18 +60,11 @@ pub fn stack_ptr() -> *const u8 {
     return sp as *const u8;
 }
 
+// ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
+#[inline(always)]
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
-    let stack_ptr = stack_ptr();
-    let old_stack_base = SYS_INFO.lock().stack_base;
-    let stack_size = old_stack_base.saturating_sub(stack_ptr as usize);
-
-    let new_stack_base = ptr.addr() + ptr.size();
-    let new_stack_bottom = new_stack_base.saturating_sub(stack_size) as *mut u8;
-
     unsafe {
-        core::ptr::copy(stack_ptr, new_stack_bottom, stack_size);
-        core::arch::asm!("mov sp, {}", in(reg) new_stack_bottom);
+        core::ptr::write_bytes(ptr.ptr::<u8>(), 0, ptr.size());
+        core::arch::asm!("mov sp, {}", in(reg) ptr.addr() + ptr.size());
     }
-
-    SYS_INFO.set_new_stack_base(new_stack_base);
 }
