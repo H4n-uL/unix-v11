@@ -34,6 +34,6 @@ pub fn reloc() -> ! {
     }
 
     let spark_ptr = crate::spark as usize + delta;
-    let spark: fn(usize) -> ! = unsafe { core::mem::transmute(spark_ptr) };
+    let spark: extern "C" fn(usize) -> ! = unsafe { core::mem::transmute(spark_ptr) };
     spark(old_kbase);
 }
