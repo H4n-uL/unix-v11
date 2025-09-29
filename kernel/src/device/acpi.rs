@@ -1,4 +1,5 @@
 use crate::{arch::mmu::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
+
 use core::ptr::NonNull;
 use acpi::{aml::AmlError, Handle, Handler, PciAddress, PhysicalMapping};
 

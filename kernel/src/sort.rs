@@ -1,5 +1,5 @@
-use wikisort::*;
 use core::cmp::Ordering;
+use wikisort::*;
 
 pub trait HeaplessSort<T> {
     fn sort_noheap(&mut self) where T: Ord;

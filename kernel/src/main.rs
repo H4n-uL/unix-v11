@@ -17,6 +17,7 @@ use crate::{
     ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
     sysinfo::{SysInfo, SYS_INFO}
 };
+
 use core::panic::PanicInfo;
 
 #[macro_export]
@@ -54,6 +55,12 @@ pub extern "C" fn spark(old_kbase: usize) -> ! {
     device::init_device();
     let _ = filesys::init_filesys();
     // exec_aleph();
+
+    let stack_usage = crate::SYS_INFO.lock().stack_base - crate::arch::stack_ptr() as usize;
+    printlnk!("Kernel stack usage: {} / 16384 bytes", stack_usage);
+    let ram_used = crate::PHYS_ALLOC.total() - crate::PHYS_ALLOC.available();
+    printlnk!("RAM used: {:.3} MiB", ram_used as f64 / 1048576.0);
+
     loop { arch::halt(); }
 }
 

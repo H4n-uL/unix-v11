@@ -1,7 +1,7 @@
+use crate::device::block::BlockDevice;
+
 use core::sync::atomic::{AtomicU64, Ordering as SyncOrd};
 use alloc::{string::String, sync::Arc, vec::Vec};
-
-use crate::device::block::BlockDevice;
 
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
