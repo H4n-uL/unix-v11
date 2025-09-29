@@ -3,6 +3,7 @@ use crate::{
     sort::HeaplessSort,
     sysinfo::{ramtype, RAMDescriptor, NON_RAM}
 };
+
 use spin::Mutex;
 
 #[repr(C)]
