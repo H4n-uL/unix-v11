@@ -1,9 +1,8 @@
 use crate::{
     arch::mmu::flags,
-    device::block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES},
+    device::{block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES}, PCI_DEVICES},
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
 };
-use super::PCI_DEVICES;
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
 use nvme_rs::{Allocator, NVMeDevice};
 use spin::Mutex;
@@ -11,15 +10,15 @@ use spin::Mutex;
 pub struct NVMeAlloc;
 
 impl Allocator for NVMeAlloc {
-    unsafe fn allocate(&self, size: usize) -> usize {
+    unsafe fn alloc(&self, size: usize) -> usize {
         return PHYS_ALLOC.alloc(AllocParams::new(size)).unwrap().addr();
     }
 
-    unsafe fn deallocate(&self, addr: usize, size: usize) {
+    unsafe fn free(&self, addr: usize, size: usize) {
         unsafe { PHYS_ALLOC.free_raw(addr as *mut u8, size); }
     }
 
-    fn translate(&self, addr: usize) -> usize { addr }
+    fn trans(&self, addr: usize) -> usize { addr }
 }
 
 pub struct BlockDeviceNVMe {
@@ -94,7 +93,7 @@ pub fn init_nvme() {
 
         let devid = pci_dev.devid;
         GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
-        let nvme_arc = Arc::new(NVMeDevice::init(mmio_addr, NVMeAlloc).unwrap());
+        let nvme_arc = NVMeDevice::init(mmio_addr, NVMeAlloc).unwrap();
         for ns in nvme_arc.list_ns() {
             block_devices.push(Arc::new(BlockDeviceNVMe::new(nvme_arc.clone(), devid, ns)));
         }
