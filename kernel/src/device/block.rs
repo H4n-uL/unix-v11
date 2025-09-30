@@ -24,7 +24,7 @@ impl DevId {
     pub fn new(init: u64) -> Self {
         Self(init)
     }
-    
+
     pub fn ty(mut self, dev_type: BlockDevType) -> Self {
         self.0 &= !(0xff << 56);
         self.0 |= (dev_type as u64) << 56;
