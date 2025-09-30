@@ -1,8 +1,8 @@
-mod dev; mod gpt; mod vfn;
+mod dev; mod fat; mod gpt; mod vfn;
 
 use crate::{
     device::block::BLOCK_DEVICES,
-    filesys::{dev::DevFile, gpt::UEFIPartition, vfn::{FMeta, FType, VirtFNode}},
+    filesys::{dev::DevFile, fat::FileAllocTable, gpt::UEFIPartition, vfn::{FMeta, FType, VirtFNode}},
     printlnk,
     ram::dump_bytes
 };
@@ -103,12 +103,16 @@ impl VirtFNode for VirtDirectory {
 }
 
 struct VirtualFileSystem {
-    root: Arc<VirtDirectory>
+    root: Option<Arc<VirtDirectory>>
 }
 
 impl VirtualFileSystem {
-    pub fn new() -> Self {
-        return Self { root: Arc::new(VirtDirectory::new()) };
+    const fn empty() -> Self {
+        return Self { root: None };
+    }
+
+    pub fn init(&mut self) {
+        self.root = Some(Arc::new(VirtDirectory::new()));
     }
 
     pub fn read(&self, path: &str, buf: &mut [u8], offset: u64) -> Result<(), String> {
@@ -134,7 +138,8 @@ impl VirtualFileSystem {
     }
 
     pub fn walk_parent(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
-        let root = self.root.clone() as Arc<dyn VirtFNode>;
+        if self.root.is_none() { return Err("VFS not initialised".into()); }
+        let root = self.root.as_ref().unwrap().clone() as Arc<dyn VirtFNode>;
         let partlen = path.split('/').count();
         let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
         for (i, part) in path.split('/').enumerate() {
@@ -151,7 +156,8 @@ impl VirtualFileSystem {
     }
 
     pub fn walk(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
-        let root = self.root.clone() as Arc<dyn VirtFNode>;
+        if self.root.is_none() { return Err("VFS not initialised".into()); }
+        let root = self.root.as_ref().unwrap().clone() as Arc<dyn VirtFNode>;
         let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
         for part in path.split('/') {
             let last = stack.last().unwrap_or(&root);
@@ -184,9 +190,12 @@ fn get_file_name(path: &str) -> Option<&str> {
     return Some(name);
 }
 
+static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
+
 pub fn init_filesys() -> Result<(), String> {
+    let mut vfs = VFS.lock();
+    vfs.init();
     let dev = BLOCK_DEVICES.lock().first().unwrap().clone();
-    let vfs = VirtualFileSystem::new();
 
     // mkdir /dev
     let devdir = Arc::new(VirtDirectory::new());
@@ -194,6 +203,10 @@ pub fn init_filesys() -> Result<(), String> {
     devdir.create("block0", block)?;
     for (i, part) in UEFIPartition::new(dev.clone())?.get_parts().into_iter().enumerate() {
         let partdev = Arc::new(part);
+        if let Some(fat) = FileAllocTable::new(partdev.clone()) {
+            printlnk!("Partition {}: {:?}", i, fat);
+            fat.list()?;
+        }
         devdir.create(&format!("block0p{}", i), partdev)?;
     }
     vfs.link("/dev", devdir)?;
@@ -229,7 +242,7 @@ pub fn init_filesys() -> Result<(), String> {
     // ls
     let dir = "/dev";
     let vdirn = vfs.walk(dir)?;
-    vdirn.list().iter().for_each(|entries| {  
+    vdirn.list().iter().for_each(|entries| {
         printlnk!("in {}:", dir);
         for entry in entries {
             let vfn = vdirn.walk(&entry).unwrap();
@@ -244,7 +257,7 @@ pub fn init_filesys() -> Result<(), String> {
             printlnk!("    File ID     {}", meta.fid);
             printlnk!("    Host Device {}", meta.hostdev);
             if let Some(vdevn) = vfn.as_blkdev() {
-                printlnk!("    Device ID {}", vdevn.devid());
+                printlnk!("    Device ID   {}", vdevn.devid());
             }
         }
     });
