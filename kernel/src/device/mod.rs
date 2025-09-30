@@ -9,7 +9,7 @@ use crate::{
 };
 
 use alloc::{string::String, vec::Vec};
-use ::acpi::{sdt::mcfg::Mcfg, AcpiTables};
+use ::acpi::{sdt::{madt::{Madt, MadtEntry}, mcfg::Mcfg}, AcpiTables};
 use fdt::Fdt;
 use spin::Mutex;
 
@@ -218,6 +218,28 @@ pub fn init_device() {
         if dev.is_display() { printk!(" --> Display Controller"); }
         if dev.is_bridge()  { printk!(" (PCI Bridge)"); }
         printlnk!();
+    }
+
+    if let Some(acpi) = ACPI.lock().as_ref() {
+        if let Some(madt) = acpi.find_table::<Madt>() {
+            for entry in madt.get().entries() {
+                match entry {
+                    MadtEntry::LocalApic(lapic) => {
+                        let puid = lapic.processor_id;
+                        let apicid = lapic.apic_id;
+                        let flags = lapic.flags;
+                        printlnk!("APIC CPU ID {}, APIC ID {}, Flags {:#x}", puid, apicid, flags);
+                    }
+                    MadtEntry::Gicc(gicc) => {
+                        let puid = gicc.processor_uid;
+                        let mpidr = gicc.mpidr;
+                        let flags = gicc.flags;
+                        printlnk!("GIC CPU UID {}, MPIDR {:#x}, Flags {:#x}", puid, mpidr, flags);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     nvme::init_nvme();
