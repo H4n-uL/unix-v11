@@ -60,7 +60,7 @@ impl UEFIPartition {
         let ent_num = head.partentry_num.get() as usize;
         let mut ent_buf = alloc::vec![0u8; ent_size * ent_num];
         dev.read_block(&mut ent_buf, head.partentry_lba.get())?;
-        let mut entries = Vec::with_capacity(ent_size * ent_num);
+        let mut entries = Vec::with_capacity(ent_num);
 
         for p in 0..ent_num {
             let start = p * ent_size;
