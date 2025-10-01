@@ -65,14 +65,14 @@ impl MMUCfg {
     }
 }
 
-pub struct GlacierData {
+pub struct Glacier {
     cfg: MMUCfg,
     root_table: usize,
     is_init: bool
 }
 
-unsafe impl Send for GlacierData {}
-unsafe impl Sync for GlacierData {}
+unsafe impl Send for Glacier {}
+unsafe impl Sync for Glacier {}
 
 pub fn flags_for_type(ty: u32) -> usize {
     match ty { // This is not good, but I'm too lazy
@@ -87,7 +87,7 @@ pub fn flags_for_type(ty: u32) -> usize {
     }
 }
 
-impl GlacierData {
+impl Glacier {
     const fn empty() -> Self {
         Self {
             cfg: MMUCfg {
@@ -185,12 +185,12 @@ impl GlacierData {
     }
 }
 
-pub static GLACIER: Glacier = Glacier::empty();
+pub static GLACIER: GlacierGlob = GlacierGlob::empty();
 
-pub struct Glacier(pub Mutex<GlacierData>);
-impl Glacier {
+pub struct GlacierGlob(pub Mutex<Glacier>);
+impl GlacierGlob {
     const fn empty() -> Self {
-        return Self(Mutex::new(GlacierData::empty()));
+        return Self(Mutex::new(Glacier::empty()));
     }
 
     pub fn init(&self) {
