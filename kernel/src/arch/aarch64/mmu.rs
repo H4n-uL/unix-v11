@@ -1,4 +1,4 @@
-use crate::ram::glacier::{GlacierData, MMUCfg, PageSize};
+use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
 
 #[allow(dead_code)]
 pub mod flags {
@@ -75,7 +75,7 @@ impl MMUCfg {
     }
 }
 
-impl GlacierData {
+impl Glacier {
     pub fn identity_map(&self) {
         // Attr0 = Normal RAM, Inner/Outer Write-Back Non-transient
         // Attr1 = Device RAM nGnRnE
