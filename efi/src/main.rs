@@ -11,6 +11,7 @@ mod arch;
 mod sysinfo;
 
 use crate::{arch::R_RELATIVE, sysinfo::{KernelInfo, RAMDescriptor, RelaEntry, SysInfo}};
+
 use core::panic::PanicInfo;
 use uefi::{
     boot::{
@@ -74,8 +75,8 @@ fn flint() -> Status {
             let phys_addr = (kbase + virt_addr) as *mut u8;
 
             unsafe {
-                core::ptr::copy(file_binary[offset..offset + file_size].as_ptr(), phys_addr, file_size);
-                core::ptr::write_bytes(phys_addr.add(file_size), 0, mem_size - file_size);
+                phys_addr.write_bytes(0, mem_size);
+                file_binary[offset..offset + file_size].as_ptr().copy_to(phys_addr, file_size);
             }
 
             if (virt_addr..virt_addr + mem_size).contains(&ep) {
