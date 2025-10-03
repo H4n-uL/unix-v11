@@ -52,7 +52,7 @@ impl RAMBlock {
     }
 
     pub fn into_owned_ptr(&self) -> OwnedPtr {
-        return OwnedPtr::new_bytes(self.ptr(), self.size);
+        return OwnedPtr::new_bytes(self.addr(), self.size);
     }
 }
 
@@ -64,20 +64,20 @@ pub struct OwnedPtr {
 }
 
 impl OwnedPtr {
-    fn new_bytes<T>(ptr: *const T, size: usize) -> Self {
-        Self { ptr: ptr as usize, size }
+    const fn new_bytes(ptr: usize, size: usize) -> Self {
+        Self { ptr, size }
     }
 
     const fn null() -> Self {
         Self { ptr: 0, size: 0 }
     }
 
-    fn new_typed<T>(ptr: *const T, count: usize) -> Self {
+    const fn new_typed<T>(ptr: usize, count: usize) -> Self {
         Self::new_bytes(ptr, count * size_of::<T>())
     }
 
-    fn from_slice<T>(slice: &[T]) -> Self {
-        Self::new_typed(slice.as_ptr(), slice.len())
+    fn from_slice<'a, T>(slice: &'a [T]) -> Self {
+        Self::new_typed::<T>(slice.as_ptr() as usize, slice.len())
     }
 
     pub fn into_slice<T>(&self) -> &[T] {
@@ -91,18 +91,25 @@ impl OwnedPtr {
     pub fn addr(&self) -> usize { self.ptr as usize }
     pub fn ptr<T>(&self) -> *mut T { self.ptr as *mut T }
     pub fn size(&self) -> usize { self.size }
-    pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.ptr::<()>(), self.size) }
+    pub unsafe fn clone(&self) -> Self { Self::new_bytes(self.addr(), self.size()) }
 
-    pub fn merge(&self, other: &Self) -> Option<Self> {
-        if self.addr() + self.size != other.addr() { return None; } // Not adjacent
-        return Some(Self::new_bytes(self.ptr::<()>(), self.size + other.size));
+    pub fn merge(&mut self, other: Self) -> Result<(), Self> {
+        if self.addr() + self.size() == other.addr() {
+            self.size += other.size();
+            return Ok(());
+        } else if other.addr() + other.size() == self.addr() {
+            self.ptr = other.ptr;
+            self.size += other.size();
+            return Ok(());
+        }
+        return Err(other);
     }
 
-    pub fn split(&self, offset: usize) -> Option<(Self, Self)> {
-        if offset >= self.size { return None; } // Offset out of bounds
-        let first = Self::new_bytes(self.ptr::<()>(), offset);
-        let second = Self::new_bytes((self.addr() + offset) as *const u8, self.size - offset);
-        return Some((first, second));
+    pub fn split(&mut self, offset: usize) -> Result<Self, ()> {
+        if offset >= self.size { return Err(()); } // Offset out of bounds
+        let other = Self::new_bytes(self.addr() + offset, self.size - offset);
+        self.size = offset;
+        return Ok(other);
     }
 }
 
@@ -132,33 +139,38 @@ impl AllocParams {
     pub fn as_type(mut self, ty: u32) -> Self { self.as_type = ty; self }
     pub fn reserve(mut self) -> Self { self.used = false; self }
 
-    fn aligned(mut self) -> Self {
-        self.size = align_up(self.size, self.align);
-        self.addr = self.addr.map(|a| align_up(a as _, self.align) as _);
-        self
+    pub fn build(self) -> Self {
+        Self {
+            addr: self.addr.map(|a| align_up(a as _, self.align) as _),
+            size: align_up(self.size, self.align),
+            align: self.align,
+            from_type: self.from_type,
+            as_type: self.as_type,
+            used: self.used
+        }
     }
 }
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct PhysAllocData {
+pub struct PhysAlloc {
     ptr: OwnedPtr,
     max: usize,
     is_init: bool
 }
 
-pub struct PhysAlloc(pub Mutex<PhysAllocData>);
+pub struct PhysAllocGlob(pub Mutex<PhysAlloc>);
 
 const BASE_RB_SIZE: usize = 128;
 static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
-pub static PHYS_ALLOC: PhysAlloc = PhysAlloc::empty();
+pub static PHYS_ALLOC: PhysAllocGlob = PhysAllocGlob::empty();
 
 unsafe impl Send for RAMBlock {}
 unsafe impl Sync for RAMBlock {}
-unsafe impl Send for PhysAllocData {}
-unsafe impl Sync for PhysAllocData {}
+unsafe impl Send for PhysAlloc {}
+unsafe impl Sync for PhysAlloc {}
 
-impl PhysAllocData {
+impl PhysAlloc {
     const fn empty() -> Self {
         Self {
             ptr: OwnedPtr::null(),
@@ -177,7 +189,7 @@ impl PhysAllocData {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
                 let block = RAMBlock::new(ptr, size, desc.ty, false);
-                self.add(block);
+                self.add(block, false);
             }
         }
 
@@ -193,7 +205,7 @@ impl PhysAllocData {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
                 let block = RAMBlock::new(ptr, size, desc.ty, true);
-                self.add(block);
+                self.add(block, false);
             }
         }
         self.is_init = true;
@@ -238,14 +250,14 @@ impl PhysAllocData {
     }
 
     fn find_free_ram(&mut self, args: AllocParams) -> Option<OwnedPtr> {
-        let args = args.aligned();
+        let args = args.build();
         return self.find(|block|
             block.not_used() && block.size() >= args.size && block.ty() == args.from_type
-        ).map(|block| OwnedPtr::new_bytes(block.ptr(), args.size));
+        ).map(|block| OwnedPtr::new_bytes(block.addr(), args.size));
     }
 
     fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
-        let args = args.aligned();
+        let args = args.build();
         if NON_RAM.contains(&args.from_type) || NON_RAM.contains(&args.as_type) {
             return None; // Cannot allocate from or as non-RAM types
         }
@@ -277,7 +289,7 @@ impl PhysAllocData {
         }
 
         if let Some(ainfo) = alloc_info {
-            self.add(ainfo.to);
+            self.add(ainfo.to, true);
 
             let before_block = RAMBlock::new(
                 ainfo.from.ptr(), ptr as usize - ainfo.from.addr(),
@@ -288,8 +300,8 @@ impl PhysAllocData {
                 ainfo.from.addr() + ainfo.from.size() - (ptr as usize + args.size),
                 ainfo.from.ty(), false
             );
-            self.add(before_block);
-            self.add(after_block);
+            self.add(before_block, false);
+            self.add(after_block, false);
 
             return Some(ainfo.to.into_owned_ptr());
         }
@@ -312,20 +324,20 @@ impl PhysAllocData {
             if block_cp.addr() < free_start {
                 let before_size = free_start - block_cp.addr();
                 let before_block = RAMBlock::new(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
-                self.add(before_block);
+                self.add(before_block, false);
             }
             let this_block = RAMBlock::new(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
-            self.add(this_block);
+            self.add(this_block, false);
             if free_end < block_cp.addr() + block_cp.size() {
                 let after_start = free_end as *const u8;
                 let after_size = block_cp.addr() + block_cp.size() - free_end;
                 let after_block = RAMBlock::new(after_start, after_size, block_cp.ty(), block_cp.used());
-                self.add(after_block);
+                self.add(after_block, false);
             }
         }
     }
 
-    fn add(&mut self, new_block: RAMBlock) {
+    fn add(&mut self, new_block: RAMBlock, alloc: bool) {
         if new_block.invalid() { return; }
         let (mut before, mut after) = (None, None);
         for block in self.blocks_iter_mut() {
@@ -349,7 +361,8 @@ impl PhysAllocData {
                 after_block.set_size(after_block.size() + new_block.size());
             },
             (None, None) => {
-                if self.count() >= self.max { self.expand(self.max * 2); }
+                let prereq = if alloc { Some(new_block.into_owned_ptr()) } else { None };
+                if self.count() >= self.max { self.expand(self.max * 2, prereq); }
                 let blocks = self.blocks_raw_mut();
                 let mut idx = 0;
                 for block in &mut *blocks {
@@ -367,28 +380,51 @@ impl PhysAllocData {
         }
     }
 
-    fn expand(&mut self, new_max: usize) {
+    fn expand(&mut self, new_max: usize, prereq: Option<OwnedPtr>) {
         if new_max <= self.max { return; }
 
         let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
-
         let old_blocks = unsafe { self.ptr.clone() };
-        let new_blocks = self.find_free_ram(alloc_param).unwrap();
-        let old_ptr = old_blocks.ptr::<RAMBlock>();
-        let new_ptr = new_blocks.ptr::<RAMBlock>();
+
+        let new_blocks = self.find(|block| {
+            return {
+                block.size() >= alloc_param.size && !block.used()
+                && block.ty() == alloc_param.from_type
+                && prereq.as_ref().map_or(true, |p| {
+                    let noteqblk = {
+                        block.addr() + block.size() <= p.addr()
+                        || block.addr() >= p.addr() + p.size()
+                    };
+                    let before = p.addr().saturating_sub(block.addr());
+                    let after = (block.addr() + block.size()).saturating_sub(p.addr() + p.size());
+                    return noteqblk || before >= alloc_param.size || after >= alloc_param.size;
+                })
+            };
+        }).map(|block| {
+            let addr = prereq.as_ref().map_or(block.addr(), |p| {
+                if {
+                    block.addr() + block.size() <= p.addr()
+                    || block.addr() >= p.addr() + p.size()
+                    || p.addr().saturating_sub(block.addr()) >= alloc_param.size
+                } { return block.addr(); }
+                return p.addr() + p.size();
+            });
+            OwnedPtr::new_bytes(addr, alloc_param.size)
+        }).expect("Failed to expand RAMBlocks");
+
         unsafe {
-            core::ptr::write_bytes(new_ptr, 0, new_max);
-            core::ptr::copy(old_ptr, new_ptr, self.max);
+            core::ptr::write_bytes(new_blocks.ptr::<RAMBlock>(), 0, new_max);
+            core::ptr::copy(old_blocks.ptr::<RAMBlock>(), new_blocks.ptr(), self.max);
         }
         (self.ptr, self.max) = (new_blocks, new_max);
         self.free(old_blocks);
-        self.alloc(alloc_param.at(new_ptr));
+        self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>()));
     }
 }
 
-impl PhysAlloc {
+impl PhysAllocGlob {
     const fn empty() -> Self {
-        return Self(Mutex::new(PhysAllocData::empty()));
+        return Self(Mutex::new(PhysAlloc::empty()));
     }
 
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
@@ -421,10 +457,10 @@ impl PhysAlloc {
     }
 
     pub unsafe fn free_raw(&self, ptr: *mut u8, size: usize) {
-        self.free(OwnedPtr::new_bytes(ptr, size));
+        self.free(OwnedPtr::new_bytes(ptr as usize, size));
     }
 
     pub fn expand(&self, new_max: usize) {
-        self.0.lock().expand(new_max);
+        self.0.lock().expand(new_max, None);
     }
 }
