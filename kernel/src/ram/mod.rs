@@ -6,9 +6,9 @@ use crate::{
     sysinfo::ramtype
 };
 
-use core::ops::{Deref, DerefMut};
+use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use spin::Mutex;
-use talc::{ErrOnOom, Talc, Talck};
+use talc::{OomHandler, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
@@ -46,8 +46,20 @@ impl DerefMut for PageAligned {
     }
 }
 
+struct KOoRAM;
+
+impl OomHandler for KOoRAM {
+    fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
+        let ptr = PHYS_ALLOC.alloc(
+            AllocParams::new(layout.size() * 2).as_type(ramtype::KERNEL_DATA)
+        ).ok_or(())?;
+        unsafe { talc.claim(ptr.into_slice::<u8>().into())?; }
+        return Ok(());
+    }
+}
+
 #[global_allocator]
-static ALLOCATOR: Talck<Mutex<()>, ErrOnOom> = Talc::new(ErrOnOom).lock();
+static ALLOCATOR: Talck<Mutex<()>, KOoRAM> = Talc::new(KOoRAM).lock();
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
