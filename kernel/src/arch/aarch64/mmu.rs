@@ -1,5 +1,7 @@
 use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
 
+use core::arch::asm;
+
 #[allow(dead_code)]
 pub mod flags {
     pub const VALID: usize = 0b1;
@@ -24,7 +26,7 @@ impl MMUCfg {
         let page_size = PageSize::Size4kiB;
         let va_bits = 48;
         let mut mmfr0: usize;
-        unsafe { core::arch::asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
+        unsafe { asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
         let ips = mmfr0 & 0xf;
         let pa_bits = match ips {
             0 => 32,
@@ -82,7 +84,7 @@ impl Glacier {
         let mair_el1: u64 = 0xff | (0x00 << 8);
 
         unsafe {
-            core::arch::asm!(
+            asm!(
                 "msr mair_el1, {mair}",
                 "msr tcr_el1, {tcr}",
                 "msr ttbr0_el1, {ttbr0}",

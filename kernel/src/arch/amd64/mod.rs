@@ -1,20 +1,22 @@
 /* pub mod inter; */ pub mod mmu;
 
+use core::{arch::asm, fmt::{Result, Write}};
+
 use crate::ram::physalloc::OwnedPtr;
 
 pub fn set_interrupts(enabled: bool) {
     unsafe {
         if enabled {
-            core::arch::asm!("sti");
+            asm!("sti");
         } else {
-            core::arch::asm!("cli");
+            asm!("cli");
         }
     }
 }
 
 pub fn halt() {
     set_interrupts(false);
-    unsafe { core::arch::asm!("hlt"); }
+    unsafe { asm!("hlt"); }
 }
 
 pub const R_RELATIVE: u64 = 8;
@@ -22,7 +24,7 @@ const COM1: u16 = 0x3f8;
 
 pub fn init_serial() {
     unsafe {
-        core::arch::asm!(
+        asm!(
             "mov dx, {com1_base}",
             "inc dx",       // COM1 + 1
             "mov al, 0x00",
@@ -61,7 +63,7 @@ pub fn init_serial() {
 
 pub fn serial_putchar(byte: u8) {
     unsafe {
-        core::arch::asm!(
+        asm!(
             "mov dx, {com1_base}",
             "add dx, 5", // COM1 + 5
             "2:",
@@ -83,8 +85,8 @@ pub fn serial_putchar(byte: u8) {
 
 pub struct SerialWriter;
 
-impl core::fmt::Write for SerialWriter {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+impl Write for SerialWriter {
+    fn write_str(&mut self, s: &str) -> Result {
         for byte in s.bytes() { serial_putchar(byte); }
         Ok(())
     }
@@ -93,7 +95,7 @@ impl core::fmt::Write for SerialWriter {
 #[inline(always)]
 pub fn stack_ptr() -> *const u8 {
     let rsp: usize;
-    unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
+    unsafe { asm!("mov {}, rsp", out(reg) rsp); }
     return rsp as *const u8;
 }
 
@@ -101,7 +103,7 @@ pub fn stack_ptr() -> *const u8 {
 #[inline(always)]
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
     unsafe {
-        core::ptr::write_bytes(ptr.ptr::<u8>(), 0, ptr.size());
-        core::arch::asm!("mov rsp, {}", in(reg) ptr.addr() + ptr.size());
+        ptr.ptr::<u8>().write_bytes(0, ptr.size());
+        asm!("mov rsp, {}", in(reg) ptr.addr() + ptr.size());
     }
 }

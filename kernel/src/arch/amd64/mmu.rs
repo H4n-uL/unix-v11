@@ -1,5 +1,7 @@
 use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
 
+use core::arch::asm;
+
 #[allow(dead_code)]
 pub mod flags {
     pub const VALID: usize = 0b1;
@@ -32,7 +34,7 @@ impl MMUCfg {
 impl Glacier {
     pub fn identity_map(&self) {
         unsafe {
-            core::arch::asm!(
+            asm!(
                 "mov cr3, {pml4}",
 
                 "mov rax, cr0",
