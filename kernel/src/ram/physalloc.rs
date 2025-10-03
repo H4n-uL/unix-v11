@@ -4,6 +4,7 @@ use crate::{
     sysinfo::{ramtype, RAMDescriptor, NON_RAM}
 };
 
+use core::cmp::Ordering;
 use spin::Mutex;
 
 #[repr(C)]
@@ -196,7 +197,7 @@ impl PhysAlloc {
         let new_rb = self.alloc(
             AllocParams::new(size_of::<RAMBlock>() * self.max)
         ).expect("Failed to relocate RAMBlocks");
-        unsafe { core::ptr::copy(self.ptr.ptr::<RAMBlock>(), new_rb.ptr::<RAMBlock>(), self.max); }
+        unsafe { self.ptr.ptr::<RAMBlock>().copy_to(new_rb.ptr::<RAMBlock>(), self.max); }
         self.ptr = new_rb;
 
         efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
@@ -238,9 +239,9 @@ impl PhysAlloc {
         self.blocks_raw_mut().sort_noheap_by(|a, b|
             match (a.valid(), b.valid()) {
                 ( true,  true) => a.addr().cmp(&b.addr()),
-                ( true, false) => core::cmp::Ordering::Less,
-                (false,  true) => core::cmp::Ordering::Greater,
-                (false, false) => core::cmp::Ordering::Equal
+                ( true, false) => Ordering::Less,
+                (false,  true) => Ordering::Greater,
+                (false, false) => Ordering::Equal
             }
         );
     }
@@ -413,8 +414,8 @@ impl PhysAlloc {
         }).expect("Failed to expand RAMBlocks");
 
         unsafe {
-            core::ptr::write_bytes(new_blocks.ptr::<RAMBlock>(), 0, new_max);
-            core::ptr::copy(old_blocks.ptr::<RAMBlock>(), new_blocks.ptr(), self.max);
+            new_blocks.ptr::<RAMBlock>().write_bytes(0, new_max);
+            old_blocks.ptr::<RAMBlock>().copy_to(new_blocks.ptr::<RAMBlock>(), self.max);
         }
         (self.ptr, self.max) = (new_blocks, new_max);
         self.free(old_blocks);

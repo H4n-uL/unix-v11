@@ -28,7 +28,7 @@ pub fn reloc() -> ! {
     let old_kbase = kinfo.base;
 
     // KERNEL CLONE
-    unsafe { core::ptr::copy(old_kbase as *const u8, new_kbase.ptr(), kinfo.size); }
+    unsafe { (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size); }
     // EVERY MODIFICATION OF STATIC VARIABLES ARE VOID BEYOND THIS POINT.
 
     let delta = jump_target - old_kbase;

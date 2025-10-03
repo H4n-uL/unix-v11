@@ -110,7 +110,7 @@ impl Glacier {
                 .as_type(ramtype::KERNEL_PAGE_TABLE)
         ).expect("Failed to allocate root page table");
 
-        unsafe { core::ptr::write_bytes(root_table.ptr::<u8>(), 0, table_size); }
+        unsafe { root_table.ptr::<u8>().write_bytes(0, table_size); }
         self.root_table = root_table.addr();
         self.is_init = true;
 
@@ -151,7 +151,7 @@ impl Glacier {
                 ).expect("Failed to allocate page table");
 
                 unsafe {
-                    core::ptr::write_bytes(next_table.ptr::<u8>(), 0, table_size);
+                    next_table.ptr::<u8>().write_bytes(0, table_size);
                     *entry = next_table.addr() | flags::NEXT;
                 }
                 table = next_table.ptr::<()>() as usize;

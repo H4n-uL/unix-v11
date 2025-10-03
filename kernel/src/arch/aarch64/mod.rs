@@ -5,19 +5,21 @@ use crate::{
     ram::{glacier::GLACIER, physalloc::OwnedPtr}
 };
 
+use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
+
 pub fn set_interrupts(enabled: bool) {
     unsafe {
         if enabled {
-            core::arch::asm!("msr daifclr, 0b1111");
+            asm!("msr daifclr, 0b1111");
         } else {
-            core::arch::asm!("msr daifset, 0b1111");
+            asm!("msr daifset, 0b1111");
         }
     }
 }
 
 pub fn halt() {
     set_interrupts(false);
-    unsafe { core::arch::asm!("wfi"); }
+    unsafe { asm!("wfi"); }
 }
 
 pub const R_RELATIVE: u64 = 1027;
@@ -29,25 +31,25 @@ pub fn init_serial() {
     GLACIER.map_page(0x0801_0000, 0x0801_0000, flags::D_RW);
     unsafe {
         // Disable UART
-        core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x0);
+        ((UART0_BASE + 0x30) as *mut u32).write_volatile(0x0);
         // Clear all pending interrupts
-        core::ptr::write_volatile((UART0_BASE + 0x44) as *mut u32, 0x7ff);
+        ((UART0_BASE + 0x44) as *mut u32).write_volatile(0x7ff);
         // Enable UART, TX, RX
-        core::ptr::write_volatile((UART0_BASE + 0x30) as *mut u32, 0x301); // UARTCR: UARTEN|TXE|RXE
+        ((UART0_BASE + 0x30) as *mut u32).write_volatile(0x301); // UARTCR: UARTEN|TXE|RXE
     }
 }
 
 pub fn serial_putchar(c: u8) {
     unsafe {
-        while core::ptr::read_volatile((UART0_BASE + 0x18) as *const u32) & (1 << 5) != 0 { core::hint::spin_loop(); }
-        core::ptr::write_volatile((UART0_BASE + 0x00) as *mut u32, c as u32);
+        while ((UART0_BASE + 0x18) as *const u32).read_volatile() & (1 << 5) != 0 { spin_loop(); }
+        ((UART0_BASE + 0x00) as *mut u32).write_volatile(c as u32);
     }
 }
 
 pub struct SerialWriter;
 
-impl core::fmt::Write for SerialWriter {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+impl Write for SerialWriter {
+    fn write_str(&mut self, s: &str) -> Result {
         for byte in s.bytes() { serial_putchar(byte); }
         Ok(())
     }
@@ -56,7 +58,7 @@ impl core::fmt::Write for SerialWriter {
 #[inline(always)]
 pub fn stack_ptr() -> *const u8 {
     let sp: usize;
-    unsafe { core::arch::asm!("mov {}, sp", out(reg) sp); }
+    unsafe { asm!("mov {}, sp", out(reg) sp); }
     return sp as *const u8;
 }
 
@@ -64,7 +66,7 @@ pub fn stack_ptr() -> *const u8 {
 #[inline(always)]
 pub unsafe fn move_stack(ptr: &OwnedPtr) {
     unsafe {
-        core::ptr::write_bytes(ptr.ptr::<u8>(), 0, ptr.size());
-        core::arch::asm!("mov sp, {}", in(reg) ptr.addr() + ptr.size());
+        ptr.ptr::<u8>().write_bytes(0, ptr.size());
+        asm!("mov sp, {}", in(reg) ptr.addr() + ptr.size());
     }
 }

@@ -1,6 +1,7 @@
 use crate::{arch::mmu::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
 
-use core::ptr::NonNull;
+#[allow(unused)]
+use core::{arch::asm, ptr::NonNull};
 use acpi::{aml::AmlError, Handle, Handler, PciAddress, PhysicalMapping};
 
 #[derive(Clone, Copy, Debug)]
@@ -37,7 +38,7 @@ impl Handler for KernelAcpiHandler {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let val: u8;
-            core::arch::asm!("in al, dx", in("dx") port, out("al") val);
+            asm!("in al, dx", in("dx") port, out("al") val);
             return val;
         }
         #[cfg(not(target_arch = "x86_64"))]
@@ -47,7 +48,7 @@ impl Handler for KernelAcpiHandler {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let val: u16;
-            core::arch::asm!("in ax, dx", in("dx") port, out("ax") val);
+            asm!("in ax, dx", in("dx") port, out("ax") val);
             return val;
         }
         #[cfg(not(target_arch = "x86_64"))]
@@ -57,7 +58,7 @@ impl Handler for KernelAcpiHandler {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let val: u32;
-            core::arch::asm!("in eax, dx", in("dx") port, out("eax") val);
+            asm!("in eax, dx", in("dx") port, out("eax") val);
             return val;
         }
         #[cfg(not(target_arch = "x86_64"))]
@@ -66,7 +67,7 @@ impl Handler for KernelAcpiHandler {
     fn write_io_u8(&self, port: u16, val: u8) {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("out dx, al", in("dx") port, in("al") val);
+            asm!("out dx, al", in("dx") port, in("al") val);
         }
         #[cfg(not(target_arch = "x86_64"))]
         { let _ = (port, val); }
@@ -74,7 +75,7 @@ impl Handler for KernelAcpiHandler {
     fn write_io_u16(&self, port: u16, val: u16) {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("out dx, ax", in("dx") port, in("ax") val);
+            asm!("out dx, ax", in("dx") port, in("ax") val);
         }
         #[cfg(not(target_arch = "x86_64"))]
         { let _ = (port, val); }
@@ -82,7 +83,7 @@ impl Handler for KernelAcpiHandler {
     fn write_io_u32(&self, port: u16, val: u32) {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("out dx, eax", in("dx") port, in("eax") val);
+            asm!("out dx, eax", in("dx") port, in("eax") val);
         }
         #[cfg(not(target_arch = "x86_64"))]
         { let _ = (port, val); }

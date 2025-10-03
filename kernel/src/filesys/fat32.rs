@@ -3,7 +3,7 @@ use crate::{
     filesys::vfn::{FMeta, VirtFNode}, printlnk
 };
 
-use core::fmt::Result as FmtResult;
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 use alloc::{boxed::Box, string::{String, ToString}, sync::Arc, vec::Vec};
 use spin::Mutex;
 use zerocopy::{LE, U16, U32};
@@ -42,7 +42,7 @@ struct BiosParameterBlock {
 
 impl BiosParameterBlock {
     fn from_bytes(bytes: &[u8]) -> Self {
-        assert!(bytes.len() >= core::mem::size_of::<BiosParameterBlock>());
+        assert!(bytes.len() >= size_of::<BiosParameterBlock>());
         unsafe { (bytes.as_ptr() as *const BiosParameterBlock).read() }
     }
 }
@@ -67,7 +67,7 @@ struct DirEntry {
 
 impl DirEntry {
     fn from_bytes(bytes: &[u8]) -> Self {
-        assert!(bytes.len() >= core::mem::size_of::<DirEntry>());
+        assert!(bytes.len() >= size_of::<DirEntry>());
         unsafe { (bytes.as_ptr() as *const DirEntry).read() }
     }
 }
@@ -81,8 +81,8 @@ struct Fat32Inner {
     bpb: Box<BiosParameterBlock>
 }
 
-impl core::fmt::Debug for FileAllocTable {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> FmtResult {
+impl Debug for FileAllocTable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let bpb = &self.i.lock().bpb;
         f.debug_struct("FileAllocTable")
             .field("bpb", bpb)
