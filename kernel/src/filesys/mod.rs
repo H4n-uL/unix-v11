@@ -195,7 +195,7 @@ static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
 pub fn init_filesys() -> Result<(), String> {
     let mut vfs = VFS.lock();
     vfs.init();
-    let dev = BLOCK_DEVICES.lock().first().unwrap().clone();
+    let dev = BLOCK_DEVICES.lock().first().ok_or("No block device found")?.clone();
 
     // mkdir /dev
     let devdir = Arc::new(VirtDirectory::new());
