@@ -24,7 +24,7 @@ pub struct FMeta {
     pub gid: u16
 }
 
-static FID: AtomicU64 = AtomicU64::new(0);
+static FID: AtomicU64 = AtomicU64::new(2);
 
 pub fn vfid() -> u64 {
     return FID.fetch_add(1, SyncOrd::SeqCst);
