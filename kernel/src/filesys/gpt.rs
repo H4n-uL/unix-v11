@@ -1,4 +1,4 @@
-use crate::{device::block::BlockDevice, filesys::dev::PartitionDev};
+use crate::{device::block::BlockDevice, filesys::dev::PartDev};
 
 use alloc::{format, string::String, sync::Arc, vec::Vec};
 use zerocopy::{FromBytes, LE, U16, U32, U64};
@@ -80,12 +80,12 @@ impl UEFIPartition {
         return Ok(uefipart);
     }
 
-    pub fn get_parts(&self) -> Vec<PartitionDev> {
+    pub fn get_parts(&self) -> Vec<PartDev> {
         let mut parts = Vec::new();
         for (i, entry) in self.entries.iter().enumerate() {
             let start = entry.first_lba.get();
             let end = entry.last_lba.get();
-            let part = PartitionDev::new(
+            let part = PartDev::new(
                 self.dev.clone(), i as u32,
                 start, end - start + 1
             );
