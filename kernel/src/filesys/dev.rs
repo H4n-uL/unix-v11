@@ -1,4 +1,8 @@
-use crate::{device::block::{BlockDevice, DevId}, filesys::vfn::{vfid, FMeta, FType, VirtFNode}, ram::PageAligned};
+use crate::{
+    device::block::{BlockDevice, DevId},
+    filesys::vfn::{vfid, FMeta, FType, VirtFNode},
+    ram::PageAligned
+};
 
 use alloc::{string::String, sync::Arc};
 
@@ -78,7 +82,7 @@ impl VirtFNode for DevFile {
 }
 
 #[derive(Clone)]
-pub struct PartitionDev {
+pub struct PartDev {
     dev: Arc<dyn BlockDevice>,
     meta: FMeta,
     devid: u64,
@@ -86,7 +90,7 @@ pub struct PartitionDev {
     block_count: u64,
 }
 
-impl PartitionDev {
+impl PartDev {
     pub fn new(dev: Arc<dyn BlockDevice>, part_no: u32, start_lba: u64, block_count: u64) -> Self {
         let devid = DevId::new(dev.devid()).part(part_no).build();
         let meta = FMeta::default(vfid(), 1, FType::Partition);
@@ -108,7 +112,7 @@ impl PartitionDev {
     }
 }
 
-impl BlockDevice for PartitionDev {
+impl BlockDevice for PartDev {
     fn block_size(&self) -> u64 {
         self.dev.block_size()
     }
@@ -130,7 +134,7 @@ impl BlockDevice for PartitionDev {
     }
 }
 
-impl VirtFNode for PartitionDev {
+impl VirtFNode for PartDev {
     fn meta(&self) -> FMeta {
         return self.meta.clone();
     }
