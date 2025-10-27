@@ -4,6 +4,11 @@ use crate::{
     sysinfo::{ramtype, RelaEntry}, SYS_INFO
 };
 
+use core::{mem::transmute, sync::atomic::{compiler_fence, Ordering}};
+
+static mut SPARK_PTR: usize = 0;
+static mut OLD_KBASE: usize = 0;
+
 pub fn reloc() -> ! {
     let kinfo;
     let new_kbase;
@@ -43,8 +48,11 @@ pub fn reloc() -> ! {
         }
     }
 
-    let spark_ptr = crate::spark as usize + delta;
-    let spark: extern "C" fn(usize) -> ! = unsafe { core::mem::transmute(spark_ptr) };
-    unsafe { move_stack(&stack_ptr); }
-    spark(old_kbase);
+    unsafe {
+        (&raw mut SPARK_PTR).write_volatile(crate::spark as usize + delta);
+        (&raw mut OLD_KBASE).write_volatile(old_kbase);
+        compiler_fence(Ordering::Release);
+        move_stack(&stack_ptr);
+        transmute::<usize, extern "C" fn(usize) -> !>(SPARK_PTR)(OLD_KBASE);
+    }
 }
