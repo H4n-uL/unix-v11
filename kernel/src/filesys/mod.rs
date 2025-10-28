@@ -68,12 +68,12 @@ impl VirtFNode for VirtFile {
     }
 }
 
-struct VirtDirectory {
+struct VirtDir {
     meta: FMeta,
     files: Mutex<BTreeMap<String, Arc<dyn VirtFNode>>>
 }
 
-impl VirtDirectory {
+impl VirtDir {
     pub fn new() -> Self {
         return Self {
             meta: FMeta::vfs_only(FType::Directory),
@@ -82,7 +82,7 @@ impl VirtDirectory {
     }
 }
 
-impl VirtFNode for VirtDirectory {
+impl VirtFNode for VirtDir {
     fn meta(&self) -> FMeta {
         return self.meta.clone();
     }
@@ -228,7 +228,7 @@ pub fn init_filesys() -> Result<(), String> {
     let dev = BLOCK_DEVICES.lock().first().ok_or("No block device found")?.clone();
 
     // mkdir /dev
-    let devdir = Arc::new(VirtDirectory::new());
+    let devdir = Arc::new(VirtDir::new());
     let block = Arc::new(DevFile::new(dev.clone()));
     devdir.create("block0", block)?;
     for (i, part) in UEFIPartition::new(dev.clone())?.get_parts().into_iter().enumerate() {
@@ -248,7 +248,7 @@ pub fn init_filesys() -> Result<(), String> {
 
     // mv
     vfs.walk("/main.rs").and_then(|file| {
-        vfs.link("/src", Arc::new(VirtDirectory::new()))?;
+        vfs.link("/src", Arc::new(VirtDir::new()))?;
         vfs.link("/src/main.rs", file)?;
         vfs.unlink("/main.rs")?;
         return Ok(());
