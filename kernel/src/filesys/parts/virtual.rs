@@ -1,4 +1,4 @@
-use crate::filesys::{parts::Partition, vfn::VirtFNode, VirtDirectory};
+use crate::filesys::{parts::Partition, vfn::VirtFNode, VirtDir};
 
 use alloc::sync::Arc;
 
@@ -9,7 +9,7 @@ pub struct VirtPart {
 impl VirtPart {
     pub fn new() -> Self {
         return Self {
-            root: Arc::new(VirtDirectory::new())
+            root: Arc::new(VirtDir::new())
         };
     }
 }
