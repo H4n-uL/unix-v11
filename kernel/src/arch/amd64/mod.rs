@@ -1,4 +1,4 @@
-/* pub mod inter; */ pub mod mmu;
+pub mod inter; pub mod mmu;
 
 use core::{arch::asm, fmt::{Result, Write}};
 
