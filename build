@@ -50,6 +50,7 @@ if [ $# -eq 0 ]; then
 fi
 
 ARCH=`to_lower "$1"`
+FW_DIR="firmwares"
 case $ARCH in
     help)
         usage
@@ -61,8 +62,8 @@ case $ARCH in
         QEMU_SYSTEM="qemu-system-aarch64"
         QEMU_CPU="cortex-a72"
         QEMU_MACHINE="virt,accel=tcg"
-        EFI_CODE="firmwares/OVMF-AArch64-CODE.fd"
-        EFI_VARS="firmwares/OVMF-AArch64-VARS.fd"
+        EFI_CODE="OVMF-AArch64-CODE.fd"
+        EFI_VARS="OVMF-AArch64-VARS.fd"
         ARCH_NAME="AArch64"
         DISK_ARCH="aarch64"
         ;;
@@ -73,8 +74,8 @@ case $ARCH in
         QEMU_SYSTEM="qemu-system-x86_64"
         QEMU_CPU="qemu64"
         QEMU_MACHINE="q35,accel=tcg"
-        EFI_CODE="firmwares/OVMF-AMD64-CODE.fd"
-        EFI_VARS="firmwares/OVMF-AMD64-VARS.fd"
+        EFI_CODE="OVMF-AMD64-CODE.fd"
+        EFI_VARS="OVMF-AMD64-VARS.fd"
         ARCH_NAME="AMD64"
         DISK_ARCH="amd64"
         ;;
@@ -85,9 +86,9 @@ case $ARCH in
         ;;
 esac
 
-if [ ! -f "$EFI_CODE" ] || [ ! -f "$EFI_VARS" ]; then
-    mkdir -p firmwares
-    unzip -q -o OVMF.zip -d firmwares
+if [ ! -f "$FW_DIR/$EFI_CODE" ] || [ ! -f "$FW_DIR/$EFI_VARS" ]; then
+    mkdir -p $FW_DIR
+    uncompress < OVMF.tar.Z | tar x -C $FW_DIR
 fi
 
 shift
@@ -198,8 +199,8 @@ $QEMU_SYSTEM \
     -cpu $QEMU_CPU \
     -machine $QEMU_MACHINE \
     -smp $CPU_COUNT \
-    -drive if=pflash,file=$EFI_CODE,format=raw,readonly=on \
-    -drive if=pflash,file=$EFI_VARS,format=raw \
+    -drive if=pflash,file=$FW_DIR/$EFI_CODE,format=raw,readonly=on \
+    -drive if=pflash,file=$FW_DIR/$EFI_VARS,format=raw \
     -drive file=$DISK_NAME,if=none,id=drv0,format=raw \
     -device nvme,drive=drv0,serial=unixv11nvme \
     -m ${RAM_SIZE}M \
