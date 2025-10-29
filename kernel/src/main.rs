@@ -11,7 +11,7 @@
 extern crate alloc;
 
 mod arch; mod device; mod filesys;
-mod ram; mod reloc; mod sort; mod sysinfo;
+mod ram; mod sort; mod sysinfo;
 
 use crate::{
     ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
@@ -40,7 +40,7 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
     PHYS_ALLOC.init(SYS_INFO.efi_ram_layout_mut());
     GLACIER.init();
     arch::init_serial();
-    reloc::reloc();
+    ram::reloc::reloc();
 }
 
 #[unsafe(no_mangle)]

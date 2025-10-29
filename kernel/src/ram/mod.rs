@@ -1,5 +1,6 @@
 pub mod glacier;
 pub mod physalloc;
+pub mod reloc;
 
 use crate::{
     ram::physalloc::{AllocParams, PHYS_ALLOC},
