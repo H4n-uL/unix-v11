@@ -21,7 +21,7 @@ use uefi::{
     },
     cstr16, entry, mem::memory_map::MemoryMap, println,
     proto::media::{block::BlockIO, file::{File, FileAttribute, FileInfo, FileMode}},
-    system::with_config_table, table::cfg, Identify, Status
+    system::with_config_table, table::cfg::ConfigTableEntry, Identify, Status
 };
 use xmas_elf::{program::Type, ElfFile};
 
@@ -100,9 +100,9 @@ fn flint() -> Status {
     let (acpi_ptr, dtb_ptr) = with_config_table(|config| {
         let (mut acpi_ptr, mut dtb_ptr) = (0, 0);
         for cfg in config.iter() {
-            let isacpi = cfg.guid == cfg::ACPI_GUID && acpi_ptr == 0;
-            let isacpi2 = cfg.guid == cfg::ACPI2_GUID;
-            let isdtb = cfg.guid == cfg::SMBIOS3_GUID;
+            let isacpi = cfg.guid == ConfigTableEntry::ACPI_GUID && acpi_ptr == 0;
+            let isacpi2 = cfg.guid == ConfigTableEntry::ACPI2_GUID;
+            let isdtb = cfg.guid == ConfigTableEntry::SMBIOS3_GUID;
             if isacpi && acpi_ptr == 0 || isacpi2 {
                 acpi_ptr = cfg.address as usize;
             }

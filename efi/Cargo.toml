@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-uefi = "0.35.0"
+uefi = "0.36.0"
 xmas-elf = "0.10.0"
 
 [[bin]]
