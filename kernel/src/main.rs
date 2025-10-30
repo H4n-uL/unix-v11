@@ -3,7 +3,7 @@
 //!
 //! Crafted by HaמuL in 2025
 //! Description: Kernel of UNIX Version 11
-//! Licence: Copyright Non-Assertion Declaration
+//! Licence: Non-assertion
 
 #![no_std]
 #![no_main]
@@ -11,7 +11,7 @@
 extern crate alloc;
 
 mod arch; mod device; mod filesys;
-mod ram; mod sort; mod sysinfo;
+mod ram; mod sort; mod syscall; mod sysinfo;
 
 use crate::{
     ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
