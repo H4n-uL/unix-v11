@@ -1,0 +1,120 @@
+#!/bin/sh
+
+set -e
+
+ARCH=""
+VERBOSE=false
+CLEAN=false
+
+usage() {
+    cat << EOF
+UNIX V11 Build System
+
+Usage: $0 <arch|-h> [options]
+
+Architectures:
+    AMD64    (alias: x86-64, x64)
+    AArch64  (alias: Arm64)
+    -h       Show this help
+
+Options:
+    -clean       Clean before building
+    -v           Verbose output
+
+Examples:
+    $0 amd64
+    $0 aarch64 -clean
+
+EOF
+    exit 0
+}
+
+to_lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+if [ $# -eq 0 ]; then
+    echo "Error: Architecture not specified"
+    echo "Use '$0 -h' for usage information"
+    exit 1
+fi
+
+ARCH=`to_lower "$1"`
+FW_DIR="firmwares"
+case $ARCH in
+    -h)
+        usage
+        ;;
+    aarch64|arm64)
+        EFI_TARGET="aarch64-unknown-uefi"
+        KERNEL_TARGET="aarch64-unknown-none"
+        EFI_BOOT_NAME="bootaa64.efi"
+        ;;
+    amd64|x86-64|x86_64|x64)
+        EFI_TARGET="x86_64-unknown-uefi"
+        KERNEL_TARGET="x86_64-unknown-none"
+        EFI_BOOT_NAME="bootx64.efi"
+        ;;
+    *)
+        echo "Error: Unknown architecture: $ARCH"
+        echo "Use '$0 -h' for usage information"
+        exit 1
+        ;;
+esac
+
+if [ ! -f "$FW_DIR/$EFI_CODE" ] || [ ! -f "$FW_DIR/$EFI_VARS" ]; then
+    mkdir -p $FW_DIR
+    uncompress < OVMF.tar.Z | tar x -C $FW_DIR
+fi
+
+shift
+
+while [ $# -gt 0 ]; do
+    case `to_lower "$1"` in
+        -clean)
+            CLEAN=true
+            ;;
+        -v)
+            VERBOSE=true
+            ;;
+    esac
+
+    shift
+done
+
+rm -rf dist
+
+if [ "$CLEAN" = "true" ]; then
+    if [ "$VERBOSE" = "true" ]; then
+        cargo clean
+    else
+        cargo clean -q
+    fi
+    rm -f unixv11-*.disk
+fi
+
+cd efi
+if [ "$VERBOSE" = "true" ]; then
+    cargo build -r    --target $EFI_TARGET
+else
+    cargo build -r -q --target $EFI_TARGET
+fi
+cd ..
+
+cd kernel
+if [ "$VERBOSE" = "true" ]; then
+    cargo build -r    --target $KERNEL_TARGET
+else
+    cargo build -r -q --target $KERNEL_TARGET
+fi
+cd ..
+
+mkdir -p dist/efi/boot
+
+EFI_TARGET_DIR=`echo "$EFI_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
+KERNEL_TARGET_DIR=`echo "$KERNEL_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
+
+cp target/$EFI_TARGET_DIR/release/unix-v11-efi.efi dist/efi/boot/$EFI_BOOT_NAME
+cp target/$KERNEL_TARGET_DIR/release/unix-v11-kernel dist/unix
+
+echo System ready: dist
