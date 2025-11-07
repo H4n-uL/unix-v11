@@ -1,0 +1,128 @@
+#!/bin/sh
+
+set -e
+
+ARCH=""
+DISK_SIZE=64
+RAM_SIZE=512
+CPU_COUNT=1
+VERBOSE=false
+CLEAN=false
+BUILD_ONLY=false
+
+usage() {
+    cat << EOF
+UNIX V11 All-in-One Script
+
+Usage: $0 <arch|-h> [options]
+
+Architectures:
+    AMD64    (alias: x86-64, x64)
+    AArch64  (alias: Arm64)
+    -h       Show this help
+
+Options:
+    -disk <size> Disk size in MiB [default: 64 MiB]
+    -ram <size>  RAM size in MiB [default: 512 MiB]
+    -cpu <count> CPU count [default: 1]
+    -norun       Build only, not running QEMU
+    -clean       Clean before building
+    -v           Verbose output
+
+Examples:
+    $0 amd64
+    $0 aarch64 -ram 8192 -cpu 4
+    $0 arm64 -norun
+    $0 x86-64 -disk 524288 -clean
+
+EOF
+    exit 0
+}
+
+to_lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+if [ $# -eq 0 ]; then
+    echo "Error: Architecture not specified"
+    echo "Use '$0 -h' for usage information"
+    exit 1
+fi
+
+ARCH=`to_lower "$1"`
+FW_DIR="firmwares"
+case $ARCH in
+    -h)
+        usage
+        ;;
+    aarch64|arm64)
+        DISK_ARCH="aarch64"
+        ;;
+    amd64|x86-64|x86_64|x64)
+        DISK_ARCH="amd64"
+        ;;
+    *)
+        echo "Error: Unknown architecture: $ARCH"
+        echo "Use '$0 -h' for usage information"
+        exit 1
+        ;;
+esac
+
+shift
+
+while [ $# -gt 0 ]; do
+    case `to_lower "$1"` in
+        -disk)
+            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+                echo "Error: -disk requires a size argument"
+                exit 1
+            fi
+            DISK_SIZE="$2"
+            shift
+            ;;
+        -ram)
+            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+                echo "Error: -ram requires a size argument"
+                exit 1
+            fi
+            RAM_SIZE="$2"
+            shift
+            ;;
+        -cpu)
+            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+                echo "Error: -cpu requires a count argument"
+                exit 1
+            fi
+            CPU_COUNT="$2"
+            shift
+            ;;
+        -norun)
+            BUILD_ONLY=true
+            ;;
+        -clean)
+            CLEAN=true
+            ;;
+        -v)
+            VERBOSE=true
+            ;;
+    esac
+
+    shift
+done
+
+SCRIPT_DIR=`dirname "$0"`
+
+BUILD_ARGS="$ARCH"
+if [ "$CLEAN" = "true" ]; then
+    BUILD_ARGS="$BUILD_ARGS -clean"
+fi
+if [ "$VERBOSE" = "true" ]; then
+    BUILD_ARGS="$BUILD_ARGS -v"
+fi
+
+$SCRIPT_DIR/build $BUILD_ARGS
+$SCRIPT_DIR/img unix-$DISK_ARCH.disk $DISK_SIZE
+
+if [ "$BUILD_ONLY" = "false" ]; then
+    $SCRIPT_DIR/run $ARCH -disk unix-$DISK_ARCH.disk -ram $RAM_SIZE -cpu $CPU_COUNT
+fi
