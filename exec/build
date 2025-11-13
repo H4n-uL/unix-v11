@@ -40,7 +40,6 @@ if [ $# -eq 0 ]; then
 fi
 
 ARCH=`to_lower "$1"`
-FW_DIR="firmwares"
 case $ARCH in
     -h)
         usage
@@ -61,11 +60,6 @@ case $ARCH in
         exit 1
         ;;
 esac
-
-if [ ! -f "$FW_DIR/$EFI_CODE" ] || [ ! -f "$FW_DIR/$EFI_VARS" ]; then
-    mkdir -p $FW_DIR
-    uncompress < OVMF.tar.Z | tar x -C $FW_DIR
-fi
 
 shift
 
@@ -90,7 +84,6 @@ if [ "$CLEAN" = "true" ]; then
     else
         cargo clean -q
     fi
-    rm -f unixv11-*.disk
 fi
 
 cd efi
