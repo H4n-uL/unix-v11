@@ -72,7 +72,7 @@ esac
 
 if [ ! -f "$FW_DIR/$EFI_CODE" ] || [ ! -f "$FW_DIR/$EFI_VARS" ]; then
     mkdir -p $FW_DIR
-    uncompress < OVMF.tar.Z | tar x -C $FW_DIR
+    uncompress < OVMF.tar.Z | (cd $FW_DIR && pax -r)
 fi
 
 shift
