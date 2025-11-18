@@ -1,7 +1,7 @@
 //!                       The UNIX Time-Sharing System                       !//
 //!                             Eleventh Edition                             !//
 //!
-//! Crafted by HaמuL in 2025
+//! Crafted by HaƞuL in 2025
 //! Description: Kernel of UNIX Version 11
 //! Licence: Non-assertion
 
