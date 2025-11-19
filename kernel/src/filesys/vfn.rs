@@ -58,7 +58,8 @@ pub trait VirtFNode: Send + Sync {
     fn truncate(&self, _size: u64) -> Result<(), String> { Err("This file is not IOable".into()) }
     fn list(&self) -> Result<Vec<String>, String> { Err("This is not a directory".into()) }
     fn walk(&self, _name: &str) -> Result<Arc<dyn VirtFNode>, String> { Err("This is not a directory".into()) }
-    fn create(&self, _name: &str, _node: Arc<dyn VirtFNode>) -> Result<(), String> { Err("This is not a directory".into()) }
+    fn create(&self, _name: &str, _ftype: FType) -> Result<(), String> { Err("This is not a directory".into()) }
+    fn link(&self, _name: &str, _node: Arc<dyn VirtFNode>) -> Result<(), String> { Err("This is not a directory".into()) }
     fn remove(&self, _name: &str) -> Result<(), String> { Err("This is not a directory".into()) }
     fn as_blkdev(&self) -> Option<Arc<dyn BlockDevice>> { None }
 }

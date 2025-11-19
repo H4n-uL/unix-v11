@@ -1,7 +1,12 @@
+#![allow(non_camel_case_types)]
+
 use crate::{device::block::BlockDevice, filesys::dev::PartDev};
 
 use alloc::{format, string::String, sync::Arc, vec::Vec};
 use zerocopy::{FromBytes, LE, U16, U32, U64};
+
+type u32le = U32<LE>;
+type u64le = U64<LE>;
 
 pub struct UEFIPartition {
     dev: Arc<dyn BlockDevice>,
@@ -13,19 +18,19 @@ pub struct UEFIPartition {
 #[derive(Clone, Copy, FromBytes)]
 pub struct UUIDPartitionTable {
     sign: [u8; 8], // == "EFI PART"
-    ver: U32<LE>,
-    headsize: U32<LE>,
-    crc32: U32<LE>,
-    _r0: u32, // 0
-    lba_here: U64<LE>,
-    lba_backup: U64<LE>,
-    lba_conv_first: U64<LE>,
-    lba_conv_last: U64<LE>,
+    ver: u32le,
+    headsize: u32le,
+    crc32: u32le,
+    _0: u32le,
+    lba_here: u64le,
+    lba_backup: u64le,
+    lba_conv_first: u64le,
+    lba_conv_last: u64le,
     disk_uuid: [u8; 16],
-    partentry_lba: U64<LE>,
-    partentry_num: U32<LE>,
-    partentry_len: U32<LE>,
-    partentry_crc: U32<LE>
+    partentry_lba: u64le,
+    partentry_num: u32le,
+    partentry_len: u32le,
+    partentry_crc: u32le
     // zero pad until block size
 }
 
@@ -78,6 +83,10 @@ impl UEFIPartition {
         };
 
         return Ok(uefipart);
+    }
+
+    pub fn get_disk_uuid(&self) -> [u8; 16] {
+        return self.head.disk_uuid;
     }
 
     pub fn get_parts(&self) -> Vec<PartDev> {
