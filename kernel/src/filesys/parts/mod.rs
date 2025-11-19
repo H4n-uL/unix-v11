@@ -1,10 +1,10 @@
 pub mod fat;
-pub mod r#virtual;
+pub mod vpart;
 
 use crate::filesys::vfn::VirtFNode;
 
 use alloc::sync::Arc;
 
 pub trait Partition: Send + Sync {
-    fn root(&self) -> Arc<dyn VirtFNode>;
+    fn root(self: Arc<Self>) -> Arc<dyn VirtFNode>;
 }
