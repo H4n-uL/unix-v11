@@ -80,6 +80,10 @@ impl UEFIPartition {
         return Ok(uefipart);
     }
 
+    pub fn get_disk_uuid(&self) -> [u8; 16] {
+        return self.head.disk_uuid;
+    }
+
     pub fn get_parts(&self) -> Vec<PartDev> {
         let mut parts = Vec::new();
         for (i, entry) in self.entries.iter().enumerate() {

@@ -15,7 +15,7 @@ impl VirtPart {
 }
 
 impl Partition for VirtPart {
-    fn root(&self) -> Arc<dyn VirtFNode> {
+    fn root(self: Arc<Self>) -> Arc<dyn VirtFNode> {
         return self.root.clone();
     }
 }
