@@ -10,7 +10,7 @@
 mod arch;
 mod sysinfo;
 
-use crate::{arch::R_RELATIVE, sysinfo::{KernelInfo, RAMDescriptor, RelaEntry, SysInfo}};
+use crate::{arch::R_RELATIVE, sysinfo::{KernelInfo, RelaEntry, SysInfo}};
 
 use core::panic::PanicInfo;
 use uefi::{
@@ -148,7 +148,7 @@ fn flint() -> Status {
             rela_ptr, rela_len
         },
         stack_base,
-        layout_ptr: efi_ram_layout.buffer().as_ptr() as *const RAMDescriptor,
+        layout_ptr: efi_ram_layout.buffer().as_ptr() as usize,
         layout_len: efi_ram_layout.len(),
         acpi_ptr, dtb_ptr, disk_uuid
     };
