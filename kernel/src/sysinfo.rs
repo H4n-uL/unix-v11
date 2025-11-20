@@ -3,7 +3,7 @@ use spin::{Mutex, MutexGuard};
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMDescriptor {
-    pub ty: u32,
+    pub ty: RAMType,
     pub reserved: u32,
     pub phys_start: u64,
     pub virt_start: u64,
@@ -46,45 +46,47 @@ pub struct RelaEntry {
 const PAGE_4KIB: usize = 0x1000;
 
 #[allow(unused)]
-pub mod ramtype {
-    pub const RESERVED             : u32 = 0x00;
-    pub const LOADER_CODE          : u32 = 0x01;
-    pub const LOADER_DATA          : u32 = 0x02;
-    pub const BOOT_SERVICES_CODE   : u32 = 0x03;
-    pub const BOOT_SERVICES_DATA   : u32 = 0x04;
-    pub const RUNTIME_SERVICES_CODE: u32 = 0x05;
-    pub const RUNTIME_SERVICES_DATA: u32 = 0x06;
-    pub const CONVENTIONAL         : u32 = 0x07;
-    pub const UNUSABLE             : u32 = 0x08;
-    pub const ACPI_RECLAIM         : u32 = 0x09;
-    pub const ACPI_NON_VOLATILE    : u32 = 0x0a;
-    pub const MMIO                 : u32 = 0x0b;
-    pub const MMIO_PORT_SPACE      : u32 = 0x0c;
-    pub const PAL_CODE             : u32 = 0x0d;
-    pub const PERSISTENT_MEMORY    : u32 = 0x0e;
-    pub const UNACCEPTED           : u32 = 0x0f;
-    pub const MAX                  : u32 = 0x10;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum RAMType {
+    Reserved        = 0x00,
+    LoaderCode      = 0x01,
+    LoaderData      = 0x02,
+    BootSvcCode     = 0x03,
+    BootSvcData     = 0x04,
+    RtSvcCode       = 0x05,
+    RtSvcData       = 0x06,
+    Conv            = 0x07,
+    Unusable        = 0x08,
+    ACPIReclaim     = 0x09,
+    ACPINonVolatile = 0x0a,
+    MMIO            = 0x0b,
+    MMIOPortSpace   = 0x0c,
+    PALCode         = 0x0d,
+    PersistentRAM   = 0x0e,
+    Unaccepted      = 0x0f,
+    Max             = 0x10,
 
     // ...
 
-    pub const KERNEL_DATA          : u32 = 0x44415441;
-    pub const EFI_RAM_LAYOUT       : u32 = 0x524c594f;
-    pub const KERNEL_PAGE_TABLE    : u32 = 0x929b4000;
-    pub const USER_PAGE_TABLE      : u32 = 0xba9b4000;
-    pub const KERNEL               : u32 = 0xffffffff;
+    KernelData      = 0x44415441,
+    EfiRamLayout    = 0x524c594f,
+    KernelPTable    = 0x929b4000,
+    UserPTable      = 0xba9b4000,
+    Kernel          = 0xffffffff
 }
 
-const RECLAMABLE: &[u32] = &[
-    ramtype::LOADER_CODE,
-    ramtype::LOADER_DATA,
-    ramtype::BOOT_SERVICES_CODE,
-    ramtype::BOOT_SERVICES_DATA
+const RECLAMABLE: &[RAMType] = &[
+    RAMType::LoaderCode,
+    RAMType::LoaderData,
+    RAMType::BootSvcCode,
+    RAMType::BootSvcData
 ];
 
-pub const NON_RAM: &[u32] = &[
-    ramtype::RESERVED,
-    ramtype::MMIO,
-    ramtype::MMIO_PORT_SPACE
+pub const NON_RAM: &[RAMType] = &[
+    RAMType::Reserved,
+    RAMType::MMIO,
+    RAMType::MMIOPortSpace
 ];
 
 pub struct SysInfoMutex(Mutex<SysInfo>);
@@ -129,10 +131,22 @@ impl SysInfo {
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
             let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
-            if kernel_start < desc_end && kernel_end > desc_start { desc.ty = ramtype::KERNEL; }
-            if layout_start < desc_end && layout_end > desc_start { desc.ty = ramtype::EFI_RAM_LAYOUT; }
-            #[cfg(target_arch = "x86_64")] if desc.phys_start < 0x100000 { desc.ty = ramtype::RESERVED; }
-            if RECLAMABLE.contains(&desc.ty) { desc.ty = ramtype::CONVENTIONAL; }
+
+            if kernel_start < desc_end && kernel_end > desc_start {
+                desc.ty = RAMType::Kernel;
+            }
+            if layout_start < desc_end && layout_end > desc_start {
+                desc.ty = RAMType::EfiRamLayout;
+            }
+
+            #[cfg(target_arch = "x86_64")]
+            if desc.phys_start < 0x100000 {
+                desc.ty = RAMType::Reserved;
+            }
+
+            if RECLAMABLE.contains(&desc.ty) {
+                desc.ty = RAMType::Conv;
+            }
         });
     }
 
