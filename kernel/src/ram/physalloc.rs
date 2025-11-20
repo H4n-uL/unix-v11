@@ -1,7 +1,7 @@
 use crate::{
-    ram::{align_up, PAGE_4KIB},
+    ram::{PAGE_4KIB, align_up},
     sort::HeaplessSort,
-    sysinfo::{ramtype, RAMDescriptor, NON_RAM}
+    sysinfo::{NON_RAM, RAMDescriptor, RAMType}
 };
 
 use core::cmp::Ordering;
@@ -12,22 +12,22 @@ use spin::Mutex;
 pub struct RAMBlock {
     ptr: usize,
     size: usize,
-    ty: u32,
+    ty: RAMType,
     used: bool
 }
 
 impl RAMBlock {
-    pub fn new(ptr: *const u8, size: usize, ty: u32, used: bool) -> Self {
+    pub fn new(ptr: *const u8, size: usize, ty: RAMType, used: bool) -> Self {
         return Self { ptr: ptr as usize, size, ty, used };
     }
     pub const fn new_invalid() -> Self {
-        return Self { ptr: 0, size: 0, ty: 0, used: false };
+        return Self { ptr: 0, size: 0, ty: RAMType::Reserved, used: false };
     }
 
     pub fn addr(&self) -> usize    { self.ptr }
     pub fn ptr(&self) -> *mut u8   { self.ptr as *mut u8 }
     pub fn size(&self) -> usize    { self.size }
-    pub fn ty(&self) -> u32        { self.ty }
+    pub fn ty(&self) -> RAMType    { self.ty }
     pub fn valid(&self) -> bool    { self.size > 0 }
     pub fn invalid(&self) -> bool  { self.size == 0 }
     pub fn used(&self) -> bool     { self.used }
@@ -35,7 +35,7 @@ impl RAMBlock {
 
     fn set_ptr(&mut self, ptr: *const u8) { self.ptr  = ptr as usize; }
     fn set_size(&mut self, size: usize)   { self.size = size; }
-    fn set_ty(&mut self, ty: u32)         { self.ty   = ty; }
+    fn set_ty(&mut self, ty: RAMType)     { self.ty   = ty; }
     fn set_used(&mut self, used: bool)    { self.used = used; }
     fn invalidate(&mut self)              { self.size = 0; }
 
@@ -119,8 +119,8 @@ pub struct AllocParams {
     addr: Option<*const u8>,
     size: usize,
     align: usize,
-    from_type: u32,
-    as_type: u32,
+    from_type: RAMType,
+    as_type: RAMType,
     used: bool
 }
 
@@ -128,16 +128,16 @@ impl AllocParams {
     pub fn new(size: usize) -> Self {
         Self {
             addr: None, size, align: PAGE_4KIB,
-            from_type: ramtype::CONVENTIONAL,
-            as_type: ramtype::CONVENTIONAL,
+            from_type: RAMType::Conv,
+            as_type: RAMType::Conv,
             used: true
         }
     }
 
     pub fn at<T>(mut self, addr: *mut T) -> Self { self.addr = Some(addr as *const u8); self }
     pub fn align(mut self, align: usize) -> Self { self.align = align.max(1); self }
-    pub fn from_type(mut self, ty: u32) -> Self { self.from_type = ty; self }
-    pub fn as_type(mut self, ty: u32) -> Self { self.as_type = ty; self }
+    pub fn from_type(mut self, ty: RAMType) -> Self { self.from_type = ty; self }
+    pub fn as_type(mut self, ty: RAMType) -> Self { self.as_type = ty; self }
     pub fn reserve(mut self) -> Self { self.used = false; self }
 
     pub fn build(self) -> Self {
@@ -186,7 +186,7 @@ impl PhysAlloc {
         (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
         efi_ram_layout.sort_noheap_by_key(|desc| desc.page_count);
         for desc in efi_ram_layout.iter().rev() {
-            if desc.ty == ramtype::CONVENTIONAL {
+            if desc.ty == RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
                 let block = RAMBlock::new(ptr, size, desc.ty, false);
@@ -202,7 +202,7 @@ impl PhysAlloc {
 
         efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
         for desc in efi_ram_layout {
-            if desc.ty != ramtype::CONVENTIONAL {
+            if desc.ty != RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
                 let block = RAMBlock::new(ptr, size, desc.ty, true);
@@ -327,7 +327,7 @@ impl PhysAlloc {
                 let before_block = RAMBlock::new(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
                 self.add(before_block, false);
             }
-            let this_block = RAMBlock::new(free_start as *const u8, free_size, ramtype::CONVENTIONAL, false);
+            let this_block = RAMBlock::new(free_start as *const u8, free_size, RAMType::Conv, false);
             self.add(this_block, false);
             if free_end < block_cp.addr() + block_cp.size() {
                 let after_start = free_end as *const u8;
@@ -431,7 +431,7 @@ impl PhysAllocGlob {
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
 
     pub fn available(&self) -> usize {
-        return self.0.lock().size_filter(|block| block.not_used() && block.ty() == ramtype::CONVENTIONAL);
+        return self.0.lock().size_filter(|block| block.not_used() && block.ty() == RAMType::Conv);
     }
 
     pub fn total(&self) -> usize {

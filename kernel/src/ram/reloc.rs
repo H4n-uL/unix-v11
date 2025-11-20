@@ -1,7 +1,7 @@
 use crate::{
-    arch::{mmu::flags, move_stack, R_RELATIVE},
-    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, STACK_SIZE},
-    sysinfo::{ramtype, RelaEntry}, SYS_INFO
+    arch::{R_RELATIVE, mmu::flags, move_stack},
+    ram::{STACK_SIZE, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
+    sysinfo::{RAMType, RelaEntry}, SYS_INFO
 };
 
 use core::{mem::transmute, sync::atomic::{compiler_fence, Ordering}};
@@ -17,12 +17,12 @@ pub fn reloc() -> ! {
 
     // Kernel allocation
     new_kbase = PHYS_ALLOC.alloc(
-        AllocParams::new(kinfo.size).as_type(ramtype::KERNEL)
+        AllocParams::new(kinfo.size).as_type(RAMType::Kernel)
     ).expect("Failed to allocate Hi-Half Kernel");
 
     // Stack allocation
     let stack_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(STACK_SIZE).as_type(ramtype::KERNEL_DATA)
+        AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
     SYS_INFO.set_new_stack_base(stack_ptr.addr() + stack_ptr.size());
 

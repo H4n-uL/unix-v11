@@ -2,7 +2,7 @@ pub use crate::arch::mmu::flags;
 use crate::{
     arch::mmu,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
-    sysinfo::{ramtype, SYS_INFO}
+    sysinfo::{RAMType, SYS_INFO}
 };
 
 use spin::Mutex;
@@ -74,15 +74,15 @@ pub struct Glacier {
 unsafe impl Send for Glacier {}
 unsafe impl Sync for Glacier {}
 
-pub fn flags_for_type(ty: u32) -> usize {
+pub fn flags_for_type(ty: RAMType) -> usize {
     match ty { // This is not good, but I'm too lazy
-        ramtype::CONVENTIONAL => flags::K_RWX,
-        ramtype::BOOT_SERVICES_CODE => flags::K_RWX,
-        ramtype::RUNTIME_SERVICES_CODE => flags::K_RWX,
-        ramtype::KERNEL => flags::K_RWX,
-        ramtype::KERNEL_DATA => flags::K_RWX,
-        ramtype::KERNEL_PAGE_TABLE => flags::K_RWX,
-        ramtype::MMIO => flags::D_RW,
+        RAMType::Conv => flags::K_RWX,
+        RAMType::BootSvcCode => flags::K_RWX,
+        RAMType::RtSvcCode => flags::K_RWX,
+        RAMType::Kernel => flags::K_RWX,
+        RAMType::KernelData => flags::K_RWX,
+        RAMType::KernelPTable => flags::K_RWX,
+        RAMType::MMIO => flags::D_RW,
         _ => flags::K_RWX
     }
 }
@@ -107,7 +107,7 @@ impl Glacier {
         let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
-                .as_type(ramtype::KERNEL_PAGE_TABLE)
+                .as_type(RAMType::KernelPTable)
         ).expect("Failed to allocate root page table");
 
         unsafe { root_table.ptr::<u8>().write_bytes(0, table_size); }
@@ -147,7 +147,7 @@ impl Glacier {
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
-                        .as_type(ramtype::KERNEL_PAGE_TABLE)
+                        .as_type(RAMType::KernelPTable)
                 ).expect("Failed to allocate page table");
 
                 unsafe {

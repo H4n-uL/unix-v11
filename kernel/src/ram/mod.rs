@@ -4,7 +4,7 @@ pub mod reloc;
 
 use crate::{
     ram::physalloc::{AllocParams, PHYS_ALLOC},
-    sysinfo::ramtype
+    sysinfo::RAMType
 };
 
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
@@ -52,7 +52,7 @@ struct KOoRAM;
 impl OomHandler for KOoRAM {
     fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
         let ptr = PHYS_ALLOC.alloc(
-            AllocParams::new(layout.size() * 2).as_type(ramtype::KERNEL_DATA)
+            AllocParams::new(layout.size() * 2).as_type(RAMType::KernelData)
         ).ok_or(())?;
         unsafe { talc.claim(ptr.into_slice::<u8>().into())?; }
         return Ok(());
@@ -71,7 +71,7 @@ pub fn init_ram() {
     let available = PHYS_ALLOC.available();
     let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
     let heap_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(heap_size).as_type(ramtype::KERNEL_DATA)
+        AllocParams::new(heap_size).as_type(RAMType::KernelData)
     ).unwrap();
     unsafe { ALLOCATOR.lock().claim(heap_ptr.into_slice::<u8>().into()).unwrap(); }
 }
