@@ -81,7 +81,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-rm -rf dist
+rm -rf udisk
 
 if [ "$CLEAN" = "true" ]; then
     if [ "$VERBOSE" = "true" ]; then
@@ -108,7 +108,7 @@ cd kernel
 cargo build --target $KERNEL_TARGET $BUILD_ARGS
 cd ..
 
-mkdir -p dist/efi/boot
+mkdir -p udisk/efi/boot
 
 EFI_TARGET_DIR=`echo "$EFI_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
 KERNEL_TARGET_DIR=`echo "$KERNEL_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
@@ -121,6 +121,6 @@ else
 fi
 
 
-cp target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi dist/efi/boot/$EFI_BOOT_NAME
-cp target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel dist/unix
-echo System ready: dist
+cp target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi udisk/efi/boot/$EFI_BOOT_NAME
+cp target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel udisk/unix
+echo System ready: udisk
