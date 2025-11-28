@@ -9,6 +9,7 @@ CPU_COUNT=1
 VERBOSE=false
 CLEAN=false
 BUILD_ONLY=false
+RELEASE=false
 
 usage() {
     cat << EOF
@@ -25,6 +26,7 @@ Options:
     -disk <size> Disk size in MiB [default: 64 MiB]
     -ram <size>  RAM size in MiB [default: 512 MiB]
     -cpu <count> CPU count [default: 1]
+    -r           Release build
     -norun       Build only, not running QEMU
     -clean       Clean before building
     -v           Verbose output
@@ -96,6 +98,9 @@ while [ $# -gt 0 ]; do
             CPU_COUNT="$2"
             shift
             ;;
+        -r)
+            RELEASE=true
+            ;;
         -norun)
             BUILD_ONLY=true
             ;;
@@ -118,6 +123,9 @@ if [ "$CLEAN" = "true" ]; then
 fi
 if [ "$VERBOSE" = "true" ]; then
     BUILD_ARGS="$BUILD_ARGS -v"
+fi
+if [ "$RELEASE" = "true" ]; then
+    BUILD_ARGS="$BUILD_ARGS -r"
 fi
 
 $SCRIPT_DIR/build $BUILD_ARGS
