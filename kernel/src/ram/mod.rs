@@ -3,7 +3,8 @@ pub mod physalloc;
 pub mod reloc;
 
 use crate::{
-    ram::physalloc::{AllocParams, PHYS_ALLOC},
+    arch::mmu::flags,
+    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
     sysinfo::RAMType
 };
 
@@ -14,6 +15,8 @@ use talc::{OomHandler, Talc, Talck};
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
 pub const HEAP_SIZE: usize = 0x100000;
+
+static mut KHEAP_VLOC: usize = 0;
 
 pub struct PageAligned {
     ptr: *mut u8,
@@ -52,9 +55,24 @@ struct KOoRAM;
 impl OomHandler for KOoRAM {
     fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
         let ptr = PHYS_ALLOC.alloc(
-            AllocParams::new(layout.size() * 2).as_type(RAMType::KernelData)
+            AllocParams::new(layout.size() * 2)
+                .as_type(RAMType::KernelData)
+                .align(PAGE_4KIB)
         ).ok_or(())?;
-        unsafe { talc.claim(ptr.into_slice::<u8>().into())?; }
+
+        unsafe {
+            GLACIER.map_range(
+                KHEAP_VLOC,
+                ptr.addr(),
+                ptr.size(),
+                flags::K_RWO
+            );
+            let vheap = core::slice::from_raw_parts(
+                KHEAP_VLOC as *const u8, ptr.size()
+            );
+            KHEAP_VLOC += ptr.size();
+            talc.claim(vheap.into())?;
+        }
         return Ok(());
     }
 }
@@ -71,9 +89,24 @@ pub fn init_ram() {
     let available = PHYS_ALLOC.available();
     let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
     let heap_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(heap_size).as_type(RAMType::KernelData)
+        AllocParams::new(heap_size)
+            .as_type(RAMType::KernelData)
+            .align(PAGE_4KIB)
     ).unwrap();
-    unsafe { ALLOCATOR.lock().claim(heap_ptr.into_slice::<u8>().into()).unwrap(); }
+
+    unsafe {
+        GLACIER.map_range(
+            KHEAP_VLOC,
+            heap_ptr.addr(),
+            heap_ptr.size(),
+            flags::K_RWO
+        );
+        let vheap = core::slice::from_raw_parts(
+            KHEAP_VLOC as *const u8, heap_ptr.size()
+        );
+        KHEAP_VLOC += heap_ptr.size();
+        ALLOCATOR.lock().claim(vheap.into()).unwrap();
+    }
 }
 
 pub fn dump_bytes(buf: &[u8]) {

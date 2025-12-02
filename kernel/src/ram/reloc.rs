@@ -1,10 +1,10 @@
 use crate::{
     arch::{R_RELATIVE, mmu::flags, move_stack},
-    ram::{STACK_SIZE, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
-    sysinfo::{RAMType, RelaEntry}, SYS_INFO
+    ram::{KHEAP_VLOC, PAGE_4KIB, STACK_SIZE, align_up, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
+    sysinfo::{RAMType, RelaEntry, SYS_INFO}
 };
 
-use core::{mem::transmute, sync::atomic::{compiler_fence, Ordering}};
+use core::{mem::transmute, sync::atomic::{fence, Ordering}};
 
 static mut SPARK_PTR: usize = 0;
 static mut OLD_KBASE: usize = 0;
@@ -31,12 +31,18 @@ pub fn reloc() -> ! {
     GLACIER.map_range(jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr, kinfo.text_len, flags::K_ROX);
     SYS_INFO.lock().kernel.base = new_kbase.addr();
     let old_kbase = kinfo.base;
+    let delta = jump_target - old_kbase;
 
     // KERNEL CLONE
-    unsafe { (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size); }
+    unsafe {
+        (&raw mut SPARK_PTR).write_volatile(crate::spark as *const () as usize + delta);
+        (&raw mut OLD_KBASE).write_volatile(old_kbase);
+        (&raw mut KHEAP_VLOC).write_volatile(align_up(jump_target + kinfo.size, PAGE_4KIB));
+        fence(Ordering::Release);
+        (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size);
+    }
     // EVERY MODIFICATION OF STATIC VARIABLES ARE VOID BEYOND THIS POINT.
 
-    let delta = jump_target - old_kbase;
     let rela = unsafe { core::slice::from_raw_parts((kinfo.rela_ptr + old_kbase) as *const RelaEntry, kinfo.rela_len) };
 
     // Relocation
@@ -49,9 +55,6 @@ pub fn reloc() -> ! {
     }
 
     unsafe {
-        (&raw mut SPARK_PTR).write_volatile(crate::spark as usize + delta);
-        (&raw mut OLD_KBASE).write_volatile(old_kbase);
-        compiler_fence(Ordering::Release);
         move_stack(&stack_ptr);
         transmute::<usize, extern "C" fn(usize) -> !>(SPARK_PTR)(OLD_KBASE);
     }
