@@ -1,6 +1,7 @@
 #!/bin/sh
 
 set -e
+PRJCT_ROOT=`cd \`dirname "$0"\`/.. && pwd`
 
 ARCH=""
 DISK_NAME="unix.disk"
@@ -70,9 +71,9 @@ case $ARCH in
         ;;
 esac
 
-if [ ! -f "$FW_DIR/$EFI_CODE" ] || [ ! -f "$FW_DIR/$EFI_VARS" ]; then
-    mkdir -p $FW_DIR
-    uncompress < OVMF.tar.Z | (cd $FW_DIR && pax -r)
+if [ ! -f "$PRJCT_ROOT/$FW_DIR/$EFI_CODE" ] || [ ! -f "$PRJCT_ROOT/$FW_DIR/$EFI_VARS" ]; then
+    mkdir -p $PRJCT_ROOT/$FW_DIR
+    uncompress < $PRJCT_ROOT/OVMF.tar.Z | (cd $PRJCT_ROOT/$FW_DIR && pax -r)
 fi
 
 shift
@@ -115,8 +116,8 @@ $QEMU_SYSTEM \
     -cpu $QEMU_CPU \
     -machine $QEMU_MACHINE \
     -smp $CPU_COUNT \
-    -drive if=pflash,file=$FW_DIR/$EFI_CODE,format=raw,readonly=on \
-    -drive if=pflash,file=$FW_DIR/$EFI_VARS,format=raw \
+    -drive if=pflash,file=$PRJCT_ROOT/$FW_DIR/$EFI_CODE,format=raw,readonly=on \
+    -drive if=pflash,file=$PRJCT_ROOT/$FW_DIR/$EFI_VARS,format=raw \
     -drive file=$DISK_NAME,if=none,id=drv0,format=raw \
     -device nvme,drive=drv0,serial=unixv11nvme \
     -m ${RAM_SIZE}M \

@@ -1,6 +1,7 @@
 #!/bin/sh
 
 set -e
+PRJCT_ROOT=`cd \`dirname "$0"\`/.. && pwd`
 
 ARCH=""
 VERBOSE=false
@@ -81,8 +82,6 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-rm -rf udisk
-
 if [ "$CLEAN" = "true" ]; then
     if [ "$VERBOSE" = "true" ]; then
         cargo clean
@@ -100,15 +99,15 @@ if [ "$VERBOSE" = "false" ]; then
     BUILD_ARGS="$BUILD_ARGS -q"
 fi
 
-cd efi
+cd $PRJCT_ROOT/efi
 cargo build --target $EFI_TARGET $BUILD_ARGS
-cd ..
 
-cd kernel
+cd $PRJCT_ROOT/kernel
 cargo build --target $KERNEL_TARGET $BUILD_ARGS
-cd ..
 
-mkdir -p udisk/efi/boot
+cd $PRJCT_ROOT
+rm -rf $PRJCT_ROOT/udisk
+mkdir -p $PRJCT_ROOT/udisk/efi/boot
 
 EFI_TARGET_DIR=`echo "$EFI_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
 KERNEL_TARGET_DIR=`echo "$KERNEL_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
@@ -121,6 +120,6 @@ else
 fi
 
 
-cp target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi udisk/efi/boot/$EFI_BOOT_NAME
-cp target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel udisk/unix
+cp $PRJCT_ROOT/target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi udisk/efi/boot/$EFI_BOOT_NAME
+cp $PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel udisk/unix
 echo System ready: udisk
