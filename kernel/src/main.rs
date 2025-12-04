@@ -39,6 +39,7 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
     SYS_INFO.init(sysinfo);
     PHYS_ALLOC.init(SYS_INFO.efi_ram_layout_mut());
     GLACIER.init();
+
     arch::init_serial();
     ram::reloc::reloc();
 }
@@ -49,9 +50,9 @@ pub extern "C" fn spark(old_kbase: usize) -> ! {
         let ksize = SYS_INFO.lock().kernel.size;
         PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
     }
-    // arch::exceptions::init();
+
+    // arch::inter::init();
     printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
-    ram::init_ram();
     device::init_device();
     let _ = filesys::init_filesys();
     // exec_aleph();

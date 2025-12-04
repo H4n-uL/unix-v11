@@ -1,10 +1,10 @@
 use crate::{
     arch::{R_RELATIVE, mmu::flags, move_stack},
-    ram::{KHEAP_VLOC, PAGE_4KIB, STACK_SIZE, align_up, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
+    ram::{KHEAP, PAGE_4KIB, STACK_SIZE, align_up, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
     sysinfo::{RAMType, RelaEntry, SYS_INFO}
 };
 
-use core::{mem::transmute, sync::atomic::{fence, Ordering}};
+use core::mem::transmute;
 
 static mut SPARK_PTR: usize = 0;
 static mut OLD_KBASE: usize = 0;
@@ -37,8 +37,8 @@ pub fn reloc() -> ! {
     unsafe {
         (&raw mut SPARK_PTR).write_volatile(crate::spark as *const () as usize + delta);
         (&raw mut OLD_KBASE).write_volatile(old_kbase);
-        (&raw mut KHEAP_VLOC).write_volatile(align_up(jump_target + kinfo.size, PAGE_4KIB));
-        fence(Ordering::Release);
+        // KHEAP_VLOC.store(align_up(jump_target + kinfo.size, PAGE_4KIB), AtomOrd::SeqCst);
+        KHEAP.lock().oom_handler.set_base(align_up(jump_target + kinfo.size, PAGE_4KIB));
         (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size);
     }
     // EVERY MODIFICATION OF STATIC VARIABLES ARE VOID BEYOND THIS POINT.

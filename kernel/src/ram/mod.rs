@@ -10,13 +10,10 @@ use crate::{
 
 use core::{alloc::Layout, ops::{Deref, DerefMut}};
 use spin::Mutex;
-use talc::{OomHandler, Talc, Talck};
+use talc::{OomHandler, Span, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
-pub const HEAP_SIZE: usize = 0x100000;
-
-static mut KHEAP_VLOC: usize = 0;
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf {
@@ -54,63 +51,101 @@ impl DerefMut for PhysPageBuf {
     }
 }
 
-struct KOoRAM;
+struct KheapHandler {
+    base: usize,
+    heap: Span
+}
 
-impl OomHandler for KOoRAM {
+impl KheapHandler {
+    const fn new() -> Self {
+        return Self {
+            base: 0,
+            heap: Span::empty()
+        };
+    }
+
+    const fn base(&self) -> usize {
+        return self.base;
+    }
+
+    const fn heap(&self) -> Span {
+        return self.heap;
+    }
+
+    const fn set_base(&mut self, base: usize) {
+        self.base = base;
+    }
+
+    const fn set_heap(&mut self, heap: Span) {
+        self.heap = heap;
+    }
+
+    fn size(&self) -> usize {
+        return self.heap.size();
+    }
+}
+
+impl OomHandler for KheapHandler {
     fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
-        let ptr = PHYS_ALLOC.alloc(
-            AllocParams::new(layout.size() * 2)
-                .as_type(RAMType::KernelData)
-                .align(PAGE_4KIB)
-        ).ok_or(())?;
+        let size = align_up(layout.size() * 2, PAGE_4KIB);
+        let mut rem = size;
 
-        unsafe {
-            GLACIER.map_range(
-                KHEAP_VLOC,
-                ptr.addr(),
-                ptr.size(),
-                flags::K_RWO
-            );
-            let vheap = core::slice::from_raw_parts(
-                KHEAP_VLOC as *const u8, ptr.size()
-            );
-            KHEAP_VLOC += ptr.size();
-            talc.claim(vheap.into())?;
+        while rem > 0 {
+            let mut try_sz = rem;
+            let ptr = loop {
+                match PHYS_ALLOC.alloc(
+                    AllocParams::new(try_sz)
+                        .as_type(RAMType::KernelData)
+                        .align(PAGE_4KIB)
+                ) {
+                    Some(p) => break p,
+                    None => {
+                        if try_sz > PAGE_4KIB {
+                            try_sz = (try_sz / (2 * PAGE_4KIB)) * PAGE_4KIB;
+                        } else {
+                            return Err(());
+                        }
+                    }
+                }
+            };
+
+            unsafe {
+                let khh = &mut talc.oom_handler;
+
+                GLACIER.map_range(
+                    khh.base() + khh.size(),
+                    ptr.addr(),
+                    ptr.size(),
+                    flags::K_RWO
+                );
+
+                if khh.heap.is_empty() {
+                    let heap = Span::from(core::slice::from_raw_parts(
+                        khh.base() as *const u8, ptr.size()
+                    ));
+                    khh.set_heap(heap);
+                    talc.claim(heap)?;
+                } else {
+                    let old_heap = khh.heap();
+                    let new_heap = old_heap.extend(0, ptr.size());
+                    khh.set_heap(new_heap);
+                    talc.extend(old_heap, new_heap);
+                }
+            }
+
+            rem -= ptr.size();
         }
+
         return Ok(());
     }
 }
 
 #[global_allocator]
-static ALLOCATOR: Talck<Mutex<()>, KOoRAM> = Talc::new(KOoRAM).lock();
+static KHEAP: Talck<Mutex<()>, KheapHandler> = Talc::new(KheapHandler::new()).lock();
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
     return val.div_ceil(align) * align;
-}
-
-pub fn init_ram() {
-    let available = PHYS_ALLOC.available();
-    let heap_size = ((available as f64 * 0.05) as usize).max(HEAP_SIZE);
-    let heap_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(heap_size)
-            .as_type(RAMType::KernelData)
-            .align(PAGE_4KIB)
-    ).unwrap();
-
-    unsafe {
-        GLACIER.map_range(
-            KHEAP_VLOC,
-            heap_ptr.addr(),
-            heap_ptr.size(),
-            flags::K_RWO
-        );
-        let vheap = core::slice::from_raw_parts(
-            KHEAP_VLOC as *const u8, heap_ptr.size()
-        );
-        KHEAP_VLOC += heap_ptr.size();
-        ALLOCATOR.lock().claim(vheap.into()).unwrap();
-    }
 }
 
 pub fn dump_bytes(buf: &[u8]) {
