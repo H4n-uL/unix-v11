@@ -7,18 +7,8 @@ use crate::{
 
 use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
 
-pub fn set_interrupts(enabled: bool) {
-    unsafe {
-        if enabled {
-            asm!("msr daifclr, 0b1111");
-        } else {
-            asm!("msr daifset, 0b1111");
-        }
-    }
-}
-
 pub fn halt() {
-    set_interrupts(false);
+    inter::set(false);
     unsafe { asm!("wfi"); }
 }
 

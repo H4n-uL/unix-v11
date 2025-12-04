@@ -4,18 +4,8 @@ use core::{arch::asm, fmt::{Result, Write}};
 
 use crate::ram::physalloc::OwnedPtr;
 
-pub fn set_interrupts(enabled: bool) {
-    unsafe {
-        if enabled {
-            asm!("sti");
-        } else {
-            asm!("cli");
-        }
-    }
-}
-
 pub fn halt() {
-    set_interrupts(false);
+    inter::set(false);
     unsafe { asm!("hlt"); }
 }
 
