@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 const GDT: [u8; 48] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0xff, 0xff, 0x00, 0x00, 0x00, 0x9a, 0xcf, 0x00,
@@ -21,6 +23,24 @@ impl TSS {
             _r0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
             _r1: 0, ist1: 0, ist2: 0, ist3: 0, ist4: 0, ist5: 0, ist6: 0, ist7: 0,
             _r2: 0, _r3: 0, iomap_base: size_of::<TSS>() as u16
+        }
+    }
+}
+
+pub fn get() -> bool {
+    let rflags: u64;
+    unsafe {
+        asm!("pushfq; pop {}", out(reg) rflags, options(nomem, nostack, preserves_flags));
+    }
+    return (rflags & (1 << 9)) == 0;
+}
+
+pub fn set(enabled: bool) {
+    unsafe {
+        if enabled {
+            asm!("cli", options(nomem, nostack, preserves_flags));
+        } else {
+            asm!("sti", options(nomem, nostack, preserves_flags));
         }
     }
 }
