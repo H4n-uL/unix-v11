@@ -133,7 +133,7 @@ impl OomHandler for KheapHandler {
                 }
             }
 
-            rem -= ptr.size();
+            rem = rem.saturating_sub(ptr.size());
         }
 
         return Ok(());
