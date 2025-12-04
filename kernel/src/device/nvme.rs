@@ -1,7 +1,7 @@
 use crate::{
     arch::mmu::flags,
     device::{block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES}, PCI_DEVICES},
-    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PageAligned, PAGE_4KIB}
+    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PhysPageBuf, PAGE_4KIB}
 };
 
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
@@ -43,27 +43,40 @@ impl BlockDevice for BlockDeviceNVMe {
     }
 
     fn read_block(&self, buf: &mut [u8], lba: u64) -> Result<(), String> {
-        let mut pabuf = PageAligned::new(buf.len());
-        self.ns.read(lba, &mut pabuf).map_err(|e|
-            format!("NVMe read error: {:?}", e)
-        )?;
-        buf.copy_from_slice(&pabuf[..buf.len()]);
+        // PhysPageBuf ensures both address and size alignment to 4 kiB
+        // via AllocParams settings.
+        let bs = self.block_size() as usize;
+        let mut pabuf = PhysPageBuf::new(bs);
+
+        for (i, ck) in buf.chunks_mut(bs).enumerate() {
+            self.ns.read(lba + i as u64, &mut pabuf).map_err(|e|
+                format!("NVMe read error: {:?}", e)
+            )?;
+            ck.copy_from_slice(&pabuf[..ck.len()]);
+        }
+
         return Ok(());
     }
 
     fn write_block(&self, buf: &[u8], lba: u64) -> Result<(), String> {
-        // PageAligned ensures both address and size alignment to 4 kiB
-        // via AllocParams' default settings.
-        let mut pabuf = PageAligned::new(buf.len());
-        if buf.len() % self.block_size() as usize != 0 {
-            self.ns.read(lba, &mut pabuf).map_err(|e|
-                format!("NVMe read error: {:?}", e)
+        // // PhysPageBuf ensures both address and size alignment to 4 kiB
+        // // via AllocParams settings.
+        let bs = self.block_size() as usize;
+        let mut pabuf = PhysPageBuf::new(bs);
+
+        for (i, ck) in buf.chunks(bs).enumerate() {
+            if ck.len() < bs {
+                self.ns.read(lba + i as u64, &mut pabuf).map_err(|e|
+                    format!("NVMe read error: {:?}", e)
+                )?;
+            }
+            pabuf[..ck.len()].copy_from_slice(ck);
+            self.ns.write(lba + i as u64, &pabuf).map_err(|e|
+                format!("NVMe write error: {:?}", e)
             )?;
         }
-        pabuf[..buf.len()].copy_from_slice(buf);
-        return self.ns.write(lba, &pabuf).map_err(|e|
-            format!("NVMe write error: {:?}", e)
-        );
+
+        return Ok(());
     }
 
     fn devid(&self) -> u64 {
