@@ -1,10 +1,9 @@
 use crate::{
     device::block::{BlockDevice, DevId},
-    filesys::vfn::{vfid, FMeta, FType, VirtFNode},
-    ram::PageAligned
+    filesys::vfn::{vfid, FMeta, FType, VirtFNode}
 };
 
-use alloc::{string::String, sync::Arc};
+use alloc::{string::String, sync::Arc, vec::Vec};
 
 #[derive(Clone)]
 pub struct DevFile {
@@ -24,12 +23,12 @@ impl DevFile {
         self.block_size() * self.block_count()
     }
 
-    pub fn read_in(&self, buf_len: usize, offset: u64) -> Result<PageAligned, String> {
+    pub fn read_in(&self, buf_len: usize, offset: u64) -> Result<Vec<u8>, String> {
         let bs = self.block_size();
         let (start, end) = (offset / bs, (offset + buf_len as u64).div_ceil(bs));
-        let mut pabuf = PageAligned::new(((end - start) * bs) as usize);
-        self.read_block(&mut pabuf, start)?;
-        return Ok(pabuf);
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+        self.read_block(&mut vec, start)?;
+        return Ok(vec);
     }
 }
 
@@ -103,12 +102,12 @@ impl PartDev {
         self.block_size() * self.block_count()
     }
 
-    pub fn read_in(&self, buf: &[u8], offset: u64) -> Result<PageAligned, String> {
+    pub fn read_in(&self, buf: &[u8], offset: u64) -> Result<Vec<u8>, String> {
         let bs = self.block_size();
         let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
-        let mut tempbuf = PageAligned::new(((end - start) * bs) as usize);
-        self.dev.read_block(&mut tempbuf, start)?;
-        return Ok(tempbuf);
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+        self.dev.read_block(&mut vec, start)?;
+        return Ok(vec);
     }
 }
 

@@ -18,33 +18,37 @@ pub const HEAP_SIZE: usize = 0x100000;
 
 static mut KHEAP_VLOC: usize = 0;
 
-pub struct PageAligned {
+// For DMA or other physical page-aligned buffers
+pub struct PhysPageBuf {
     ptr: *mut u8,
     size: usize
 }
 
-impl PageAligned {
+impl PhysPageBuf {
     pub fn new(size: usize) -> Self {
-        let ptr = PHYS_ALLOC.alloc(AllocParams::new(size))
-            .expect("Failed to allocate page-aligned RAM");
+        let ptr = PHYS_ALLOC.alloc(
+            AllocParams::new(size)
+                .align(PAGE_4KIB)
+                .as_type(RAMType::KernelData)
+        ).expect("Failed to allocate page-aligned RAM");
         return Self { ptr: ptr.ptr(), size: ptr.size() };
     }
 }
 
-impl Drop for PageAligned {
+impl Drop for PhysPageBuf {
     fn drop(&mut self) {
         unsafe { PHYS_ALLOC.free_raw(self.ptr, self.size); }
     }
 }
 
-impl Deref for PageAligned {
+impl Deref for PhysPageBuf {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         unsafe { core::slice::from_raw_parts(self.ptr, self.size) }
     }
 }
 
-impl DerefMut for PageAligned {
+impl DerefMut for PhysPageBuf {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { core::slice::from_raw_parts_mut(self.ptr, self.size) }
     }
