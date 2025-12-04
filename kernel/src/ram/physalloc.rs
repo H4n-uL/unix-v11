@@ -205,7 +205,7 @@ impl PhysAlloc {
             if desc.ty != RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let ptr = desc.phys_start as *const u8;
-                let block = RAMBlock::new(ptr, size, desc.ty, true);
+                let block = RAMBlock::new(ptr, size, desc.ty, false);
                 self.add(block, false);
             }
         }
