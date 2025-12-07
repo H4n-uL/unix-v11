@@ -142,7 +142,7 @@ impl AllocParams {
 
     pub fn build(self) -> Self {
         Self {
-            addr: self.addr.map(|a| align_up(a as _, self.align) as _),
+            addr: self.addr.map(|a| align_up(a as usize, self.align) as *const u8),
             size: align_up(self.size, self.align),
             align: self.align,
             from_type: self.from_type,
