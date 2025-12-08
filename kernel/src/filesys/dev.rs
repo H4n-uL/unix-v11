@@ -3,7 +3,7 @@ use crate::{
     filesys::vfn::{vfid, FMeta, FType, VirtFNode}
 };
 
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::String, sync::Arc};
 
 #[derive(Clone)]
 pub struct DevFile {
@@ -21,14 +21,6 @@ impl DevFile {
 
     pub fn total_size(&self) -> u64 {
         self.block_size() * self.block_count()
-    }
-
-    pub fn read_in(&self, buf_len: usize, offset: u64) -> Result<Vec<u8>, String> {
-        let bs = self.block_size();
-        let (start, end) = (offset / bs, (offset + buf_len as u64).div_ceil(bs));
-        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
-        self.read_block(&mut vec, start)?;
-        return Ok(vec);
     }
 }
 
@@ -60,15 +52,27 @@ impl VirtFNode for DevFile {
     }
 
     fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String> {
-        let temp_buf = self.read_in(buf.len(), offset)?;
-        buf.copy_from_slice(&temp_buf[(offset % self.block_size()) as usize..][..buf.len()]);
+        let bs = self.block_size();
+        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+
+        self.read_block(&mut vec, start)?;
+
+        buf.copy_from_slice(&vec[(offset % bs) as usize..][..buf.len()]);
         return Ok(());
     }
 
     fn write(&self, buf: &[u8], offset: u64) -> Result<(), String> {
-        let mut temp_buf = self.read_in(buf.len(), offset)?;
-        temp_buf[(offset % self.block_size()) as usize..][..buf.len()].copy_from_slice(buf);
-        return self.dev.write_block(&temp_buf, offset / self.block_size());
+        let bs = self.block_size();
+        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+        let len = vec.len();
+
+        self.read_block(&mut vec[..bs as usize], start)?;
+        self.read_block(&mut vec[(len - bs as usize)..], end - 1)?;
+
+        vec[(offset % bs) as usize..][..buf.len()].copy_from_slice(buf);
+        return self.write_block(&vec, offset / bs);
     }
 
     fn truncate(&self, _: u64) -> Result<(), String> {
@@ -101,14 +105,6 @@ impl PartDev {
     pub fn total_size(&self) -> u64 {
         self.block_size() * self.block_count()
     }
-
-    pub fn read_in(&self, buf: &[u8], offset: u64) -> Result<Vec<u8>, String> {
-        let bs = self.block_size();
-        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
-        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
-        self.dev.read_block(&mut vec, start)?;
-        return Ok(vec);
-    }
 }
 
 impl BlockDevice for PartDev {
@@ -139,17 +135,27 @@ impl VirtFNode for PartDev {
     }
 
     fn read(&self, buf: &mut [u8], offset: u64) -> Result<(), String> {
-        let offset = offset + self.start_lba * self.block_size();
-        let temp_buf = self.read_in(buf, offset)?;
-        buf.copy_from_slice(&temp_buf[(offset % self.block_size()) as usize..][..buf.len()]);
+        let bs = self.block_size();
+        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+
+        self.read_block(&mut vec, start)?;
+
+        buf.copy_from_slice(&vec[(offset % bs) as usize..][..buf.len()]);
         return Ok(());
     }
 
     fn write(&self, buf: &[u8], offset: u64) -> Result<(), String> {
-        let offset = offset + self.start_lba * self.block_size();
-        let mut temp_buf = self.read_in(buf, offset)?;
-        temp_buf[(offset % self.block_size()) as usize..][..buf.len()].copy_from_slice(buf);
-        return self.dev.write_block(&temp_buf, offset / self.block_size());
+        let bs = self.block_size();
+        let (start, end) = (offset / bs, (offset + buf.len() as u64).div_ceil(bs));
+        let mut vec = alloc::vec![0; ((end - start) * bs) as usize];
+        let len = vec.len();
+
+        self.read_block(&mut vec[..bs as usize], start)?;
+        self.read_block(&mut vec[(len - bs as usize)..], end - 1)?;
+
+        vec[(offset % bs) as usize..][..buf.len()].copy_from_slice(buf);
+        return self.write_block(&vec, offset / bs);
     }
 
     fn truncate(&self, _: u64) -> Result<(), String> {
