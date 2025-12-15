@@ -14,8 +14,13 @@ mod arch; mod device; mod filesys;
 mod ram; mod sort; mod sysinfo;
 
 use crate::{
-    ram::{glacier::GLACIER, physalloc::PHYS_ALLOC},
-    sysinfo::{SysInfo, SYS_INFO}
+    ram::{
+        STACK_SIZE,
+        glacier::GLACIER,
+        physalloc::PHYS_ALLOC,
+        reloc::OLD_KBASE
+    },
+    sysinfo::{SYS_INFO, SysInfo}
 };
 
 use core::panic::PanicInfo;
@@ -45,10 +50,10 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn spark(old_kbase: usize) -> ! {
+pub extern "C" fn spark() -> ! {
     unsafe {
         let ksize = SYS_INFO.lock().kernel.size;
-        PHYS_ALLOC.free_raw(old_kbase as *mut u8, ksize);
+        PHYS_ALLOC.free_raw(OLD_KBASE as *mut u8, ksize);
     }
 
     // arch::inter::init();
