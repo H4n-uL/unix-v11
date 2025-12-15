@@ -21,28 +21,28 @@ pub fn init_serial() {
             "out dx, al",   // Disable all interrupts
 
             "add dx, 2",    // COM1 + 3
-            "mov al, 0x80",
-            "out dx, al",   // Enable DLAB (set baud rate divisor)
+            "mov al, 0x80", // Enable DLAB (set baud rate divisor)
+            "out dx, al",
 
             "sub dx, 3",    // COM1 + 0
-            "mov al, 0x01",
-            "out dx, al",   // Set divisor to 1 (lo byte) 115200 baud
+            "mov al, 0x01", // Set divisor to 1 (lo byte) 115200 baud
+            "out dx, al",
 
             "inc dx",       // COM1 + 1
-            "mov al, 0x00",
-            "out dx, al",   //                  (hi byte)
+            "mov al, 0x00", //                  (hi byte)
+            "out dx, al",
 
             "add dx, 2",    // COM1 + 3
-            "mov al, 0x03",
-            "out dx, al",   // 8 bits, no parity, one stop bit
+            "mov al, 0x03", // 8 bits, no parity, one stop bit
+            "out dx, al",
 
             "dec dx",       // COM1 + 2
-            "mov al, 0xc7",
-            "out dx, al",   // Enable FIFO, clear them, with 14-byte threshold
+            "mov al, 0xc7", // Enable FIFO, clear them, with 14-byte threshold
+            "out dx, al",
 
             "add dx, 2",    // COM1 + 4
-            "mov al, 0x0b",
-            "out dx, al",   // IRQs enabled, RTS/DSR set
+            "mov al, 0x0b", // IRQs enabled, RTS/DSR set
+            "out dx, al",
 
             com1_base = const COM1,
             out("dx") _,
