@@ -2,7 +2,8 @@ use crate::{arch::mmu::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
 
 #[allow(unused)]
 use core::{arch::asm, ptr::NonNull};
-use acpi::{aml::AmlError, Handle, Handler, PciAddress, PhysicalMapping};
+pub use acpi::*;
+use acpi::aml::AmlError;
 
 #[derive(Clone, Copy, Debug)]
 pub struct KernelAcpiHandler;

@@ -9,7 +9,7 @@ use crate::{
 };
 
 use alloc::{string::String, vec::Vec};
-use ::acpi::{sdt::{madt::{Madt, MadtEntry}, mcfg::Mcfg}, AcpiTables};
+use acpi::{sdt::{madt::{Madt, MadtEntry}, mcfg::Mcfg}, AcpiTables};
 use fdt::Fdt;
 use spin::Mutex;
 
