@@ -10,22 +10,21 @@ use spin::Mutex;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct RAMBlock {
-    ptr: usize,
+    addr: usize,
     size: usize,
     ty: RAMType,
     used: bool
 }
 
 impl RAMBlock {
-    pub fn new(ptr: *const u8, size: usize, ty: RAMType, used: bool) -> Self {
-        return Self { ptr: ptr as usize, size, ty, used };
+    pub fn new(addr: usize, size: usize, ty: RAMType, used: bool) -> Self {
+        return Self { addr, size, ty, used };
     }
     pub const fn new_invalid() -> Self {
-        return Self { ptr: 0, size: 0, ty: RAMType::Reserved, used: false };
+        return Self { addr: 0, size: 0, ty: RAMType::Reserved, used: false };
     }
 
-    pub fn addr(&self) -> usize    { self.ptr }
-    pub fn ptr(&self) -> *mut u8   { self.ptr as *mut u8 }
+    pub fn addr(&self) -> usize    { self.addr }
     pub fn size(&self) -> usize    { self.size }
     pub fn ty(&self) -> RAMType    { self.ty }
     pub fn valid(&self) -> bool    { self.size > 0 }
@@ -33,11 +32,11 @@ impl RAMBlock {
     pub fn used(&self) -> bool     { self.used }
     pub fn not_used(&self) -> bool { !self.used }
 
-    fn set_ptr(&mut self, ptr: *const u8) { self.ptr  = ptr as usize; }
-    fn set_size(&mut self, size: usize)   { self.size = size; }
-    fn set_ty(&mut self, ty: RAMType)     { self.ty   = ty; }
-    fn set_used(&mut self, used: bool)    { self.used = used; }
-    fn invalidate(&mut self)              { self.size = 0; }
+    fn set_addr(&mut self, addr: usize) { self.addr  = addr; }
+    fn set_size(&mut self, size: usize) { self.size = size; }
+    fn set_ty(&mut self, ty: RAMType)   { self.ty   = ty; }
+    fn set_used(&mut self, used: bool)  { self.used = used; }
+    fn invalidate(&mut self)            { self.size = 0; }
 
     fn is_coalescable(&self, other: &RAMBlock) -> i8 {
         let info_eq = {
@@ -58,7 +57,7 @@ impl RAMBlock {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct OwnedPtr {
     ptr: usize,
     size: usize
@@ -116,7 +115,7 @@ impl OwnedPtr {
 
 #[derive(Clone, Copy)]
 pub struct AllocParams {
-    addr: Option<*const u8>,
+    addr: Option<usize>,
     size: usize,
     align: usize,
     from_type: RAMType,
@@ -126,29 +125,25 @@ pub struct AllocParams {
 
 impl AllocParams {
     pub fn new(size: usize) -> Self {
-        Self {
-            addr: None, size, align: PAGE_4KIB,
+        return Self {
+            addr: None, size,
+            align: PAGE_4KIB,
             from_type: RAMType::Conv,
             as_type: RAMType::Conv,
             used: true
-        }
+        };
     }
 
-    pub fn at<T>(mut self, addr: *mut T) -> Self { self.addr = Some(addr as *const u8); self }
+    pub fn at<T>(mut self, addr: *mut T) -> Self { self.addr = Some(addr as usize); self }
     pub fn align(mut self, align: usize) -> Self { self.align = align.max(1); self }
     pub fn from_type(mut self, ty: RAMType) -> Self { self.from_type = ty; self }
     pub fn as_type(mut self, ty: RAMType) -> Self { self.as_type = ty; self }
     pub fn reserve(mut self) -> Self { self.used = false; self }
 
-    pub fn build(self) -> Self {
-        Self {
-            addr: self.addr.map(|a| align_up(a as usize, self.align) as *const u8),
-            size: align_up(self.size, self.align),
-            align: self.align,
-            from_type: self.from_type,
-            as_type: self.as_type,
-            used: self.used
-        }
+    pub fn build(mut self) -> Self {
+        self.addr = self.addr.map(|a| align_up(a, self.align));
+        self.size = align_up(self.size, self.align);
+        return self;
     }
 }
 
@@ -188,24 +183,26 @@ impl PhysAlloc {
         for desc in efi_ram_layout.iter().rev() {
             if desc.ty == RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
-                let ptr = desc.phys_start as *const u8;
-                let block = RAMBlock::new(ptr, size, desc.ty, false);
+                let addr = desc.phys_start as usize;
+                let block = RAMBlock::new(addr, size, desc.ty, false);
                 self.add(block, false);
             }
         }
 
-        let new_rb = self.alloc(
-            AllocParams::new(size_of::<RAMBlock>() * self.max)
-        ).expect("Failed to relocate RAMBlocks");
-        unsafe { self.ptr.ptr::<RAMBlock>().copy_to(new_rb.ptr::<RAMBlock>(), self.max); }
-        self.ptr = new_rb;
+        if self.ptr == OwnedPtr::from_slice(rb) {
+            let new_rb = self.alloc(
+                AllocParams::new(size_of::<RAMBlock>() * self.max)
+            ).expect("Failed to relocate RAMBlocks");
+            unsafe { self.ptr.ptr::<RAMBlock>().copy_to(new_rb.ptr::<RAMBlock>(), self.max); }
+            self.ptr = new_rb;
+        }
 
         efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
         for desc in efi_ram_layout {
             if desc.ty != RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
-                let ptr = desc.phys_start as *const u8;
-                let block = RAMBlock::new(ptr, size, desc.ty, false);
+                let addr = desc.phys_start as usize;
+                let block = RAMBlock::new(addr, size, desc.ty, false);
                 self.add(block, false);
             }
         }
@@ -264,12 +261,12 @@ impl PhysAlloc {
         }
         let ptr = match args.addr {
             Some(addr) => addr,
-            None => self.find_free_ram(args)?.ptr()
+            None => self.find_free_ram(args)?.addr()
         };
 
         let filter = |block: &RAMBlock| {
             block.not_used() && args.from_type == block.ty() &&
-            ptr >= block.ptr() && ptr as usize + args.size <= block.addr() + block.size()
+            ptr >= block.addr() && ptr + args.size <= block.addr() + block.size()
         };
 
         struct AllocInfo {
@@ -293,12 +290,12 @@ impl PhysAlloc {
             self.add(ainfo.to, true);
 
             let before_block = RAMBlock::new(
-                ainfo.from.ptr(), ptr as usize - ainfo.from.addr(),
+                ainfo.from.addr(), ptr - ainfo.from.addr(),
                 ainfo.from.ty(), false
             );
             let after_block = RAMBlock::new(
-                (ptr as usize + args.size) as *const u8,
-                ainfo.from.addr() + ainfo.from.size() - (ptr as usize + args.size),
+                ptr + args.size,
+                ainfo.from.addr() + ainfo.from.size() - (ptr + args.size),
                 ainfo.from.ty(), false
             );
             self.add(before_block, false);
@@ -312,7 +309,7 @@ impl PhysAlloc {
 
     fn free(&mut self, ptr: OwnedPtr) {
         let found_block = self.find(|block|
-            block.ptr() <= ptr.ptr() && block.addr() + block.size() > ptr.addr()
+            block.addr() <= ptr.addr() && block.addr() + block.size() > ptr.addr()
         );
 
         if let Some(block) = found_block {
@@ -324,15 +321,14 @@ impl PhysAlloc {
             block.invalidate();
             if block_cp.addr() < free_start {
                 let before_size = free_start - block_cp.addr();
-                let before_block = RAMBlock::new(block_cp.ptr(), before_size, block_cp.ty(), block_cp.used());
+                let before_block = RAMBlock::new(block_cp.addr(), before_size, block_cp.ty(), block_cp.used());
                 self.add(before_block, false);
             }
-            let this_block = RAMBlock::new(free_start as *const u8, free_size, RAMType::Conv, false);
+            let this_block = RAMBlock::new(free_start, free_size, RAMType::Conv, false);
             self.add(this_block, false);
             if free_end < block_cp.addr() + block_cp.size() {
-                let after_start = free_end as *const u8;
                 let after_size = block_cp.addr() + block_cp.size() - free_end;
-                let after_block = RAMBlock::new(after_start, after_size, block_cp.ty(), block_cp.used());
+                let after_block = RAMBlock::new(free_end, after_size, block_cp.ty(), block_cp.used());
                 self.add(after_block, false);
             }
         }
@@ -358,7 +354,7 @@ impl PhysAlloc {
                 before_block.set_size(before_block.size() + new_block.size());
             },
             (None, Some(after_block)) => {
-                after_block.set_ptr(new_block.ptr());
+                after_block.set_addr(new_block.addr());
                 after_block.set_size(after_block.size() + new_block.size());
             },
             (None, None) => {
@@ -374,7 +370,7 @@ impl PhysAlloc {
 
                 for i in (1..=idx).rev() {
                     let (current, prev) = (blocks[i], blocks[i - 1]);
-                    if current.ptr() >= prev.ptr() { break; }
+                    if current.addr() >= prev.addr() { break; }
                     blocks.swap(i, i - 1);
                 }
             }
