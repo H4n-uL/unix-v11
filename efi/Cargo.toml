@@ -6,11 +6,3 @@ edition = "2024"
 [dependencies]
 uefi = "0.36.0"
 xmas-elf = "0.10.0"
-
-[[bin]]
-name = "unix-v11-efi"
-path = "src/main.rs"
-
-[lib]
-name = "unix_v11_efi"
-path = "src/main.rs"
