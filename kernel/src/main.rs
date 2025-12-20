@@ -63,7 +63,7 @@ pub extern "C" fn spark() -> ! {
     // exec_aleph();
 
     let stack_usage = crate::SYS_INFO.lock().stack_base - crate::arch::stack_ptr() as usize;
-    printlnk!("Kernel stack usage: {} / 16384 bytes", stack_usage);
+    printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
     let ram_used = crate::PHYS_ALLOC.total() - crate::PHYS_ALLOC.available();
     printlnk!("RAM used: {:.3} MiB", ram_used as f64 / 1048576.0);
 
