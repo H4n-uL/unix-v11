@@ -1,6 +1,5 @@
 pub use crate::arch::mmu::flags;
 use crate::{
-    arch::mmu,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::{RAMType, SYS_INFO}
 };
@@ -75,10 +74,10 @@ unsafe impl Send for Glacier {}
 unsafe impl Sync for Glacier {}
 
 pub fn flags_for_type(ty: RAMType) -> usize {
-    match ty { // This is not good, but I'm too lazy
+    match ty {
         RAMType::Conv => flags::K_RWX,
         RAMType::BootSvcCode => flags::K_RWX,
-        RAMType::RtSvcCode => flags::K_RWX,
+        RAMType::RtSvcCode => flags::K_ROX,
         RAMType::Kernel => flags::K_RWX,
         RAMType::KernelData => flags::K_RWX,
         RAMType::KernelPTable => flags::K_RWX,
@@ -142,7 +141,7 @@ impl Glacier {
                 break;
             }
 
-            if unsafe { *entry & mmu::flags::VALID == 0 } {
+            if unsafe { *entry & flags::VALID == 0 } {
                 let table_size = self.cfg.page_size.size();
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
@@ -161,6 +160,42 @@ impl Glacier {
         }
     }
 
+    pub fn unmap_page(&self, va: usize) {
+        if !self.is_init { return; }
+        let va = va & !(self.cfg.page_size() - 1);
+        let _ = self.unmap_rec(self.root_table, va, 0);
+    }
+
+    fn unmap_rec(&self, table: usize, va: usize, level: u8) -> bool {
+        let is_tbl_null = |tbl: usize| {
+            (0..1 << self.cfg.page_size.index_bits())
+                .all(|i| unsafe { *(tbl as *const usize).add(i) == 0 })
+        };
+
+        let index = self.cfg.get_index(level, va);
+        let entry = unsafe { (table as *mut usize).add(index) };
+
+        if level == self.cfg.levels() - 1 {
+            unsafe { *entry = 0; }
+            return is_tbl_null(table);
+        }
+
+        if unsafe { *entry & flags::VALID == 0 } {
+            return false;
+        }
+
+        let child = unsafe { *entry & self.cfg.page_size.addr_mask() };
+
+        if self.unmap_rec(child, va, level + 1) {
+            unsafe {
+                *entry = 0;
+                PHYS_ALLOC.free_raw(child as *mut u8, self.cfg.page_size.size());
+            }
+            return is_tbl_null(table);
+        }
+        return false;
+    }
+
     pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
         if !self.is_init { return; }
         let page_size = self.cfg.page_size();
@@ -173,6 +208,19 @@ impl Glacier {
         for va in (va_start..va_end).step_by(page_size) {
             let pa = pa_start + (va - va_start);
             self.map_page(va, pa, flags);
+        }
+    }
+
+    pub fn unmap_range(&self, va: usize, size: usize) {
+        if !self.is_init { return; }
+        let page_size = self.cfg.page_size();
+        let page_mask = !(page_size - 1);
+
+        let va_start = va & page_mask;
+        let va_end = (va + size + page_size - 1) & page_mask;
+
+        for va in (va_start..va_end).step_by(page_size) {
+            self.unmap_page(va);
         }
     }
 
@@ -197,12 +245,20 @@ impl GlacierGlob {
         self.0.lock().init();
     }
 
-    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
-        self.0.lock().map_page(va, pa, flags);
-    }
+    // pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
+    //     self.0.lock().map_page(va, pa, flags);
+    // }
 
     pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
         self.0.lock().map_range(va, pa, size, flags);
+    }
+
+    // pub fn unmap_page(&self, va: usize) {
+    //     self.0.lock().unmap_page(va);
+    // }
+
+    pub fn unmap_range(&self, va: usize, size: usize) {
+        self.0.lock().unmap_range(va, size);
     }
 
     pub fn root_table(&self) -> *mut usize {
