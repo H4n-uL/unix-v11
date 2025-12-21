@@ -1,8 +1,8 @@
 pub mod inter; pub mod mmu;
 
-use core::{arch::asm, fmt::{Result, Write}};
-
 use crate::ram::physalloc::OwnedPtr;
+
+use core::{arch::asm, fmt::{Result, Write}};
 
 pub fn halt() {
     inter::set(false);
