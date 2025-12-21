@@ -72,11 +72,12 @@ pub enum RAMType {
     KernelData      = 0x44415441,
     EfiRamLayout    = 0x524c594f,
     KernelPTable    = 0x929b4000,
+    Reclaimable     = 0xb6876800,
     UserPTable      = 0xba9b4000,
     Kernel          = 0xffffffff
 }
 
-const RECLAMABLE: &[RAMType] = &[
+pub const RECLAMABLE: &[RAMType] = &[
     RAMType::LoaderCode,
     RAMType::LoaderData,
     RAMType::BootSvcCode,
@@ -145,7 +146,7 @@ impl SysInfo {
             }
 
             if RECLAMABLE.contains(&desc.ty) {
-                desc.ty = RAMType::Conv;
+                desc.ty = RAMType::Reclaimable;
             }
         });
     }
