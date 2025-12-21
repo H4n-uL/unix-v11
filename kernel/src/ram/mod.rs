@@ -51,7 +51,7 @@ impl DerefMut for PhysPageBuf {
     }
 }
 
-struct KheapHandler {
+pub struct KheapHandler {
     base: usize,
     heap: Span
 }
@@ -118,6 +118,10 @@ impl OomHandler for KheapHandler {
                     ptr.size(),
                     flags::K_RWO
                 );
+                GLACIER.unmap_range(
+                    ptr.addr(),
+                    ptr.size()
+                );
 
                 if khh.heap.is_empty() {
                     let heap = Span::from(core::slice::from_raw_parts(
@@ -141,7 +145,7 @@ impl OomHandler for KheapHandler {
 }
 
 #[global_allocator]
-static KHEAP: Talck<Mutex<()>, KheapHandler> = Talc::new(KheapHandler::new()).lock();
+pub static KHEAP: Talck<Mutex<()>, KheapHandler> = Talc::new(KheapHandler::new()).lock();
 
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
