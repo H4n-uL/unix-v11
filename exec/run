@@ -73,7 +73,7 @@ esac
 
 if [ ! -f "$PRJCT_ROOT/$FW_DIR/$EFI_CODE" ] || [ ! -f "$PRJCT_ROOT/$FW_DIR/$EFI_VARS" ]; then
     mkdir -p $PRJCT_ROOT/$FW_DIR
-    uncompress < $PRJCT_ROOT/OVMF.tar.Z | (cd $PRJCT_ROOT/$FW_DIR && pax -r)
+    uncompress < $PRJCT_ROOT/OVMF.pax.Z | (cd $PRJCT_ROOT/$FW_DIR && pax -r)
 fi
 
 shift
