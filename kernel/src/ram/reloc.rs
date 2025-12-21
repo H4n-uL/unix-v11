@@ -75,7 +75,10 @@ pub fn reloc() -> ! {
 
     // JUMP
     unsafe {
-        move_stack(&stack_ptr); // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
-        transmute::<usize, extern "C" fn() -> !>((&raw const SPARK_PTR).read_volatile())();
+        // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
+        move_stack(&stack_ptr);
+        transmute::<usize, extern "C" fn() -> !>(
+            (&raw const SPARK_PTR).read_volatile()
+        )();
     }
 }
