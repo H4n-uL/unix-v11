@@ -38,7 +38,7 @@ impl RAMBlock {
     fn set_used(&mut self, used: bool)  { self.used = used; }
     fn invalidate(&mut self)            { self.size = 0; }
 
-    fn is_coalescable(&self, other: &RAMBlock) -> i8 {
+    fn is_mergable(&self, other: &RAMBlock) -> i8 {
         let info_eq = {
             self.valid() && other.valid() &&
             self.ty == other.ty &&
@@ -209,6 +209,24 @@ impl PhysAlloc {
         self.is_init = true;
     }
 
+    fn reclaim(&mut self) {
+        loop {
+            let idx = self.blocks_raw().iter().position(|blk| {
+                blk.valid() && blk.ty() == RAMType::Reclaimable
+            });
+
+            if idx.is_none() { break; }
+
+            let block = &mut self.blocks_raw_mut()[idx.unwrap()];
+            let new_blk = RAMBlock::new(
+                block.addr(), block.size(),
+                RAMType::Conv, false
+            );
+            block.invalidate();
+            self.add(new_blk, false);
+        }
+    }
+
     fn blocks_raw(&self) -> &[RAMBlock] {
         return unsafe { core::slice::from_raw_parts(self.ptr.ptr(), self.max) };
     }
@@ -338,7 +356,7 @@ impl PhysAlloc {
         if new_block.invalid() { return; }
         let (mut before, mut after) = (None, None);
         for block in self.blocks_iter_mut() {
-            match new_block.is_coalescable(&block) {
+            match new_block.is_mergable(&block) {
                 -1 => { after = Some(block); },
                 1 => { before = Some(block); },
                 _ => continue
@@ -425,6 +443,7 @@ impl PhysAllocGlob {
     }
 
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
+    pub fn reclaim(&self) { self.0.lock().reclaim(); }
 
     pub fn available(&self) -> usize {
         return self.0.lock().size_filter(|block| block.not_used() && block.ty() == RAMType::Conv);

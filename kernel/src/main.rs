@@ -58,6 +58,7 @@ pub extern "C" fn spark() -> ! {
 
     // arch::inter::init();
     printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
+    PHYS_ALLOC.reclaim();
     device::init_device();
     let _ = filesys::init_filesys();
     // exec_aleph();
