@@ -20,7 +20,7 @@ use crate::{
         physalloc::PHYS_ALLOC,
         reloc::OLD_KBASE
     },
-    sysinfo::{SYS_INFO, SysInfo}
+    sysinfo::{RAMType, SYS_INFO, SysInfo}
 };
 
 use core::panic::PanicInfo;
@@ -63,10 +63,13 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = crate::SYS_INFO.lock().stack_base - crate::arch::stack_ptr() as usize;
+    let stack_usage = SYS_INFO.lock().stack_base - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
-    let ram_used = crate::PHYS_ALLOC.total() - crate::PHYS_ALLOC.available();
-    printlnk!("RAM used: {:.3} MiB", ram_used as f64 / 1048576.0);
+
+    let nonconv = PHYS_ALLOC.filtsize(|b| b.ty() != RAMType::Conv);
+    let ram_used = PHYS_ALLOC.total() - PHYS_ALLOC.available() - nonconv;
+    printlnk!("RAM used: {:.6} MB", ram_used as f64 / 1000000.0);
+    printlnk!("Non-conventional RAM: {:.6} MB", nonconv as f64 / 1000000.0);
 
     loop { arch::halt(); }
 }

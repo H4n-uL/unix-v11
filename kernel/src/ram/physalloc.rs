@@ -245,7 +245,12 @@ impl PhysAlloc {
 
     fn count(&self) -> usize { return self.blocks_iter().count(); }
 
-    fn size_filter(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+    pub fn filtsize(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+        return self.blocks_iter().filter(|&block| filter(block) && !NON_RAM.contains(&block.ty()))
+            .map(|block| block.size()).sum();
+    }
+
+    pub fn filtsize_raw(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
         return self.blocks_iter().filter(|&block| filter(block))
             .map(|block| block.size()).sum();
     }
@@ -445,12 +450,20 @@ impl PhysAllocGlob {
     pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
     pub fn reclaim(&self) { self.0.lock().reclaim(); }
 
+    pub fn filtsize(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+        return self.0.lock().filtsize(filter);
+    }
+
+    pub fn filtsize_raw(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
+        return self.0.lock().filtsize_raw(filter);
+    }
+
     pub fn available(&self) -> usize {
-        return self.0.lock().size_filter(|block| block.not_used() && block.ty() == RAMType::Conv);
+        return self.0.lock().filtsize(|block| block.not_used() && block.ty() == RAMType::Conv);
     }
 
     pub fn total(&self) -> usize {
-        return self.0.lock().size_filter(|block| !NON_RAM.contains(&block.ty()));
+        return self.0.lock().filtsize(|_| true);
     }
 
     pub fn sort(&self) { self.0.lock().sort(); }
