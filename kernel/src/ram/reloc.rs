@@ -1,10 +1,10 @@
 use crate::{
-    arch::{R_RELATIVE, rvm::flags, move_stack},
+    arch::{R_RELATIVE, move_stack, rvm::flags},
+    kargs::{KBASE, KINFO, RAMType, RelaEntry, STACK_BASE},
     ram::{
         KHEAP, PAGE_4KIB, STACK_SIZE, align_up,
         glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}
-    },
-    sysinfo::{RAMType, RelaEntry, KARGS}
+    }
 };
 
 use core::mem::transmute;
@@ -13,10 +13,9 @@ pub static SPARK_PTR: usize = 0;
 pub static OLD_KBASE: usize = 0;
 
 pub fn reloc() -> ! {
-    let kinfo;
+    let kinfo = *KINFO.read();
     let new_kbase;
     let jump_target;
-    kinfo = KARGS.lock().kernel;
 
     // Kernel allocation
     new_kbase = PHYS_ALLOC.alloc(
@@ -27,7 +26,7 @@ pub fn reloc() -> ! {
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
-    KARGS.set_new_stack_base(stack_ptr.addr() + stack_ptr.size());
+    STACK_BASE.store(stack_ptr.addr() + stack_ptr.size(), core::sync::atomic::Ordering::SeqCst);
 
     jump_target = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
 
@@ -43,8 +42,8 @@ pub fn reloc() -> ! {
 
 
     // Kernel base update as physical address
-    let old_kbase = KARGS.lock().kbase;
-    KARGS.lock().kbase = new_kbase.addr();
+    let old_kbase = KBASE.load(core::sync::atomic::Ordering::SeqCst);
+    KBASE.store(new_kbase.addr(), core::sync::atomic::Ordering::SeqCst);
     let delta = jump_target - old_kbase;
 
     // KERNEL CLONE
