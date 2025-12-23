@@ -3,9 +3,9 @@ mod acpi; pub mod block; mod nvme; mod vga;
 use crate::{
     arch::rvm::flags,
     device::acpi::KernelAcpiHandler,
+    kargs::SYSINFO,
     printk, printlnk,
-    ram::{PAGE_4KIB, glacier::GLACIER},
-    sysinfo::KARGS
+    ram::{PAGE_4KIB, glacier::GLACIER}
 };
 
 use alloc::{string::String, vec::Vec};
@@ -185,7 +185,7 @@ pub fn scan_pci() {
 }
 
 pub fn init_acpi() {
-    let ptr = KARGS.lock().sys.acpi_ptr;
+    let ptr = SYSINFO.read().acpi_ptr;
     *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, ptr) } {
         Ok(tables) => Some(tables),
         Err(_) => None
@@ -193,7 +193,7 @@ pub fn init_acpi() {
 }
 
 pub fn init_device_tree() {
-    let ptr = KARGS.lock().sys.dtb_ptr;
+    let ptr = SYSINFO.read().dtb_ptr;
     *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(ptr as *const u8) } {
         Ok(devtree) => Some(devtree),
         Err(_) => None

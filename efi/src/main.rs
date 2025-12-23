@@ -8,9 +8,9 @@
 #![no_main]
 
 mod arch;
-mod sysinfo;
+mod kargs;
 
-use crate::{arch::R_RELATIVE, sysinfo::{Kargs, KernelInfo, RelaEntry, SysInfo}};
+use crate::{arch::R_RELATIVE, kargs::{Kargs, KernelInfo, RelaEntry, SysInfo}};
 
 use core::panic::PanicInfo;
 use uefi::{

@@ -4,8 +4,11 @@ pub mod reloc;
 
 use crate::{
     arch::rvm::flags,
-    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
-    sysinfo::RAMType
+    kargs::RAMType,
+    ram::{
+        glacier::GLACIER,
+        physalloc::{AllocParams, PHYS_ALLOC}
+    }
 };
 
 use core::{alloc::Layout, ops::{Deref, DerefMut}};

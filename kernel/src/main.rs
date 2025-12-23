@@ -11,7 +11,7 @@
 extern crate alloc;
 
 mod arch; mod device; mod filesys;
-mod ram; mod sort; mod sysinfo;
+mod kargs; mod ram; mod sort;
 
 use crate::{
     ram::{
@@ -20,7 +20,7 @@ use crate::{
         physalloc::PHYS_ALLOC,
         reloc::OLD_KBASE
     },
-    sysinfo::{KARGS, Kargs, RAMType}
+    kargs::{KINFO, Kargs, RAMType, STACK_BASE, efi_ram_layout_mut, set_kargs}
 };
 
 use core::panic::PanicInfo;
@@ -41,8 +41,9 @@ macro_rules! printlnk {
 
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
-    KARGS.init(kargs);
-    PHYS_ALLOC.init(KARGS.efi_ram_layout_mut());
+    set_kargs(kargs);
+    // KARGS.init(kargs);
+    PHYS_ALLOC.init(efi_ram_layout_mut());
     GLACIER.init();
 
     arch::init_serial();
@@ -52,7 +53,7 @@ pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
     unsafe {
-        let ksize = KARGS.lock().kernel.size;
+        let ksize = KINFO.read().size;
         PHYS_ALLOC.free_raw(OLD_KBASE as *mut u8, ksize);
     }
 
@@ -63,7 +64,7 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = KARGS.lock().stack_base - crate::arch::stack_ptr() as usize;
+    let stack_usage = STACK_BASE.load(core::sync::atomic::Ordering::SeqCst) - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
     let nonconv = PHYS_ALLOC.filtsize(|b| b.ty() != RAMType::Conv);
