@@ -4,7 +4,7 @@ use crate::{
         KHEAP, PAGE_4KIB, STACK_SIZE, align_up,
         glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}
     },
-    sysinfo::{RAMType, RelaEntry, SYS_INFO}
+    sysinfo::{RAMType, RelaEntry, KARGS}
 };
 
 use core::mem::transmute;
@@ -16,7 +16,7 @@ pub fn reloc() -> ! {
     let kinfo;
     let new_kbase;
     let jump_target;
-    kinfo = SYS_INFO.lock().kernel;
+    kinfo = KARGS.lock().kernel;
 
     // Kernel allocation
     new_kbase = PHYS_ALLOC.alloc(
@@ -27,7 +27,7 @@ pub fn reloc() -> ! {
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
-    SYS_INFO.set_new_stack_base(stack_ptr.addr() + stack_ptr.size());
+    KARGS.set_new_stack_base(stack_ptr.addr() + stack_ptr.size());
 
     jump_target = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
 
@@ -43,8 +43,8 @@ pub fn reloc() -> ! {
 
 
     // Kernel base update as physical address
-    SYS_INFO.lock().kernel.base = new_kbase.addr();
-    let old_kbase = kinfo.base;
+    let old_kbase = KARGS.lock().kbase;
+    KARGS.lock().kbase = new_kbase.addr();
     let delta = jump_target - old_kbase;
 
     // KERNEL CLONE

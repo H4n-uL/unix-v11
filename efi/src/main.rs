@@ -10,7 +10,7 @@
 mod arch;
 mod sysinfo;
 
-use crate::{arch::R_RELATIVE, sysinfo::{KernelInfo, RelaEntry, SysInfo}};
+use crate::{arch::R_RELATIVE, sysinfo::{Kargs, KernelInfo, RelaEntry, SysInfo}};
 
 use core::panic::PanicInfo;
 use uefi::{
@@ -138,19 +138,22 @@ fn flint() -> Status {
         }
     }
 
-    let ignite: extern "efiapi" fn(SysInfo) -> ! = unsafe { core::mem::transmute(ep + kbase) };
+    let ignite: extern "efiapi" fn(Kargs) -> ! = unsafe { core::mem::transmute(ep + kbase) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
     let stack_base = arch::stack_ptr();
-    let sysinfo = SysInfo {
+    let sysinfo = Kargs {
         kernel: KernelInfo {
-            base: kbase, size: ksize,
-            ep, text_ptr, text_len,
+            size: ksize, ep,
+            text_ptr, text_len,
             rela_ptr, rela_len
         },
-        stack_base,
-        layout_ptr: efi_ram_layout.buffer().as_ptr() as usize,
-        layout_len: efi_ram_layout.len(),
-        acpi_ptr, dtb_ptr, disk_uuid
+        sys: SysInfo {
+            layout_ptr: efi_ram_layout.buffer().as_ptr() as usize,
+            layout_len: efi_ram_layout.len(),
+            acpi_ptr, dtb_ptr, disk_uuid
+        },
+        kbase,
+        stack_base
     };
     ignite(sysinfo);
 }
