@@ -1,8 +1,15 @@
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct SysInfo {
+pub struct Kargs {
     pub kernel: KernelInfo,
+    pub sys: SysInfo,
+    pub kbase: usize,
     pub stack_base: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SysInfo {
     pub layout_ptr: usize,
     pub layout_len: usize,
     pub acpi_ptr: usize,
@@ -13,7 +20,6 @@ pub struct SysInfo {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct KernelInfo {
-    pub base: usize,
     pub size: usize,
     pub ep: usize,
     pub text_ptr: usize,

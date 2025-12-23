@@ -2,21 +2,16 @@ use spin::{Mutex, MutexGuard};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct RAMDescriptor {
-    pub ty: RAMType,
-    pub reserved: u32,
-    pub phys_start: u64,
-    pub virt_start: u64,
-    pub page_count: u64,
-    pub attr: u64,
-    pub padding: u64
+pub struct Kargs {
+    pub kernel: KernelInfo,
+    pub sys: SysInfo,
+    pub kbase: usize,
+    pub stack_base: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct SysInfo {
-    pub kernel: KernelInfo,
-    pub stack_base: usize,
     pub layout_ptr: usize,
     pub layout_len: usize,
     pub acpi_ptr: usize,
@@ -27,7 +22,6 @@ pub struct SysInfo {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct KernelInfo {
-    pub base: usize,
     pub size: usize,
     pub ep: usize,
     pub text_ptr: usize,
@@ -41,6 +35,18 @@ pub struct RelaEntry {
     pub offset: u64,
     pub info: u64,
     pub addend: u64
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RAMDescriptor {
+    pub ty: RAMType,
+    pub reserved: u32,
+    pub phys_start: u64,
+    pub virt_start: u64,
+    pub page_count: u64,
+    pub attr: u64,
+    pub padding: u64
 }
 
 const PAGE_4KIB: usize = 0x1000;
@@ -90,9 +96,11 @@ pub const NON_RAM: &[RAMType] = &[
     RAMType::MMIOPortSpace
 ];
 
-pub struct SysInfoMutex(Mutex<SysInfo>);
-pub static SYS_INFO: SysInfoMutex = SysInfoMutex::new();
+pub struct KargMutex(Mutex<Kargs>);
+pub static KARGS: KargMutex = KargMutex::new();
 
+unsafe impl Send for Kargs {}
+unsafe impl Sync for Kargs {}
 unsafe impl Send for SysInfo {}
 unsafe impl Sync for SysInfo {}
 unsafe impl Send for KernelInfo {}
@@ -101,8 +109,8 @@ unsafe impl Sync for KernelInfo {}
 impl KernelInfo {
     pub const fn empty() -> Self {
         Self {
-            base: 0, size: 0,
-            ep: 0, text_ptr: 0, text_len: 0,
+            size: 0, ep: 0,
+            text_ptr: 0, text_len: 0,
             rela_ptr: 0, rela_len: 0
         }
     }
@@ -111,8 +119,6 @@ impl KernelInfo {
 impl SysInfo {
     pub const fn empty() -> Self {
         Self {
-            kernel: KernelInfo::empty(),
-            stack_base: 0,
             layout_ptr: 0,
             layout_len: 0,
             acpi_ptr: 0,
@@ -120,14 +126,25 @@ impl SysInfo {
             disk_uuid: [0; 16]
         }
     }
+}
+
+impl Kargs {
+    pub const fn empty() -> Self {
+        Self {
+            kernel: KernelInfo::empty(),
+            sys: SysInfo::empty(),
+            kbase: 0,
+            stack_base: 0,
+        }
+    }
 
     pub fn init(&mut self, param: Self) {
         *self = param;
 
-        let kernel_start = self.kernel.base as u64;
-        let kernel_end = (self.kernel.base + self.kernel.size) as u64;
-        let layout_start = self.layout_ptr as u64;
-        let layout_end = unsafe { (self.layout_ptr as *const RAMDescriptor).add(self.layout_len) } as u64;
+        let kernel_start = self.kbase as u64;
+        let kernel_end = (self.kbase + self.kernel.size) as u64;
+        let layout_start = self.sys.layout_ptr as u64;
+        let layout_end = unsafe { (self.sys.layout_ptr as *const RAMDescriptor).add(self.sys.layout_len) } as u64;
 
         self.efi_ram_layout_mut().iter_mut().for_each(|desc| {
             let desc_start = desc.phys_start;
@@ -152,11 +169,11 @@ impl SysInfo {
     }
 
     pub fn efi_ram_layout<'a>(&self) -> &'a [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts(self.layout_ptr as *const RAMDescriptor, self.layout_len) };
+        return unsafe { core::slice::from_raw_parts(self.sys.layout_ptr as *const RAMDescriptor, self.sys.layout_len) };
     }
 
     pub fn efi_ram_layout_mut<'a>(&mut self) -> &'a mut [RAMDescriptor] {
-        return unsafe { core::slice::from_raw_parts_mut(self.layout_ptr as *mut RAMDescriptor, self.layout_len) };
+        return unsafe { core::slice::from_raw_parts_mut(self.sys.layout_ptr as *mut RAMDescriptor, self.sys.layout_len) };
     }
 
     pub fn set_new_stack_base(&mut self, stack_base: usize) {
@@ -164,16 +181,16 @@ impl SysInfo {
     }
 }
 
-impl SysInfoMutex {
+impl KargMutex {
     pub const fn new() -> Self {
-        Self(Mutex::new(SysInfo::empty()))
+        Self(Mutex::new(Kargs::empty()))
     }
 
-    pub fn init(&self, param: SysInfo) {
+    pub fn init(&self, param: Kargs) {
         self.0.lock().init(param);
     }
 
-    pub fn lock(&'_ self) -> MutexGuard<'_, SysInfo> {
+    pub fn lock(&'_ self) -> MutexGuard<'_, Kargs> {
         return self.0.lock();
     }
 
