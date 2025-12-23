@@ -1,5 +1,5 @@
 use crate::{
-    arch::mmu::flags,
+    arch::rvm::flags,
     device::{block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES}, PCI_DEVICES},
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PhysPageBuf, PAGE_4KIB}
 };

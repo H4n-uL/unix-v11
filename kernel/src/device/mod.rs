@@ -1,7 +1,7 @@
 mod acpi; pub mod block; mod nvme; mod vga;
 
 use crate::{
-    arch::mmu::flags,
+    arch::rvm::flags,
     device::acpi::KernelAcpiHandler,
     printk, printlnk,
     ram::{glacier::GLACIER, PAGE_4KIB},
