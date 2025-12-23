@@ -1,5 +1,5 @@
-pub use crate::arch::mmu::flags;
 use crate::{
+    arch::rvm::flags,
     ram::physalloc::{AllocParams, PHYS_ALLOC},
     sysinfo::{RAMType, SYS_INFO}
 };

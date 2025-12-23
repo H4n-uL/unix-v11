@@ -1,7 +1,7 @@
-pub mod inter; pub mod mmu;
+pub mod inter; pub mod rvm;
 
 use crate::{
-    arch::mmu::flags,
+    arch::rvm::flags,
     ram::{glacier::GLACIER, physalloc::OwnedPtr}
 };
 

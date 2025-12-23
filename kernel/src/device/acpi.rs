@@ -1,4 +1,4 @@
-use crate::{arch::mmu::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
+use crate::{arch::rvm::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
 
 #[allow(unused)]
 use core::{arch::asm, ptr::NonNull};
