@@ -245,9 +245,9 @@ impl GlacierGlob {
         self.0.lock().init();
     }
 
-    // pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
-    //     self.0.lock().map_page(va, pa, flags);
-    // }
+    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
+        self.0.lock().map_page(va, pa, flags);
+    }
 
     pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
         self.0.lock().map_range(va, pa, size, flags);
