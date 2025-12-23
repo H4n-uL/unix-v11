@@ -20,7 +20,7 @@ use crate::{
         physalloc::PHYS_ALLOC,
         reloc::OLD_KBASE
     },
-    sysinfo::{RAMType, SYS_INFO, SysInfo}
+    sysinfo::{KARGS, Kargs, RAMType}
 };
 
 use core::panic::PanicInfo;
@@ -40,9 +40,9 @@ macro_rules! printlnk {
 }
 
 #[unsafe(no_mangle)]
-pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
-    SYS_INFO.init(sysinfo);
-    PHYS_ALLOC.init(SYS_INFO.efi_ram_layout_mut());
+pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
+    KARGS.init(kargs);
+    PHYS_ALLOC.init(KARGS.efi_ram_layout_mut());
     GLACIER.init();
 
     arch::init_serial();
@@ -52,7 +52,7 @@ pub extern "efiapi" fn ignite(sysinfo: SysInfo) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
     unsafe {
-        let ksize = SYS_INFO.lock().kernel.size;
+        let ksize = KARGS.lock().kernel.size;
         PHYS_ALLOC.free_raw(OLD_KBASE as *mut u8, ksize);
     }
 
@@ -63,7 +63,7 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = SYS_INFO.lock().stack_base - crate::arch::stack_ptr() as usize;
+    let stack_usage = KARGS.lock().stack_base - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
     let nonconv = PHYS_ALLOC.filtsize(|b| b.ty() != RAMType::Conv);
