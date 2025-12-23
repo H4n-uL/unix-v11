@@ -1,5 +1,5 @@
 use crate::{
-    arch::{R_RELATIVE, mmu::flags, move_stack},
+    arch::{R_RELATIVE, rvm::flags, move_stack},
     ram::{
         KHEAP, PAGE_4KIB, STACK_SIZE, align_up,
         glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}

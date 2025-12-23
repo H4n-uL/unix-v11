@@ -3,7 +3,7 @@ pub mod physalloc;
 pub mod reloc;
 
 use crate::{
-    arch::mmu::flags,
+    arch::rvm::flags,
     ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}},
     sysinfo::RAMType
 };

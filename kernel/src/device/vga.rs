@@ -1,5 +1,5 @@
 use crate::{
-    arch::mmu::flags,
+    arch::rvm::flags,
     device::{PciDevice, PCI_DEVICES},
     printk, printlnk,
     ram::{glacier::GLACIER, PAGE_4KIB}

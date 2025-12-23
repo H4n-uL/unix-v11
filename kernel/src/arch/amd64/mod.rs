@@ -1,4 +1,4 @@
-pub mod inter; pub mod mmu;
+pub mod inter; pub mod rvm;
 
 use crate::ram::physalloc::OwnedPtr;
 
