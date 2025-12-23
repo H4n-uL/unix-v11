@@ -1,0 +1,168 @@
+use core::sync::atomic::AtomicUsize;
+use spin::RwLock;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Kargs {
+    pub kernel: KernelInfo,
+    pub sys: SysInfo,
+    pub kbase: usize,
+    pub stack_base: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct KernelInfo {
+    pub size: usize,
+    pub ep: usize,
+    pub text_ptr: usize,
+    pub text_len: usize,
+    pub rela_ptr: usize,
+    pub rela_len: usize
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SysInfo {
+    pub layout_ptr: usize,
+    pub layout_len: usize,
+    pub acpi_ptr: usize,
+    pub dtb_ptr: usize,
+    pub disk_uuid: [u8; 16]
+}
+
+#[repr(C)]
+pub struct RelaEntry {
+    pub offset: u64,
+    pub info: u64,
+    pub addend: u64
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RAMDescriptor {
+    pub ty: RAMType,
+    pub reserved: u32,
+    pub phys_start: u64,
+    pub virt_start: u64,
+    pub page_count: u64,
+    pub attr: u64,
+    pub padding: u64
+}
+
+const PAGE_4KIB: usize = 0x1000;
+
+#[allow(unused)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum RAMType {
+    Reserved        = 0x00,
+    LoaderCode      = 0x01,
+    LoaderData      = 0x02,
+    BootSvcCode     = 0x03,
+    BootSvcData     = 0x04,
+    RtSvcCode       = 0x05,
+    RtSvcData       = 0x06,
+    Conv            = 0x07,
+    Unusable        = 0x08,
+    ACPIReclaim     = 0x09,
+    ACPINonVolatile = 0x0a,
+    MMIO            = 0x0b,
+    MMIOPortSpace   = 0x0c,
+    PALCode         = 0x0d,
+    PersistentRAM   = 0x0e,
+    Unaccepted      = 0x0f,
+    Max             = 0x10,
+
+    // ...
+
+    KernelData      = 0x44415441,
+    EfiRamLayout    = 0x524c594f,
+    KernelPTable    = 0x929b4000,
+    Reclaimable     = 0xb6876800,
+    UserPTable      = 0xba9b4000,
+    Kernel          = 0xffffffff
+}
+
+pub const RECLAMABLE: &[RAMType] = &[
+    RAMType::LoaderCode,
+    RAMType::LoaderData,
+    RAMType::BootSvcCode,
+    RAMType::BootSvcData
+];
+
+pub const NON_RAM: &[RAMType] = &[
+    RAMType::Reserved,
+    RAMType::MMIO,
+    RAMType::MMIOPortSpace
+];
+
+pub static KINFO: RwLock<KernelInfo> = RwLock::new(KernelInfo::empty());
+pub static SYSINFO: RwLock<SysInfo> = RwLock::new(SysInfo::empty());
+pub static KBASE: AtomicUsize = AtomicUsize::new(0);
+pub static STACK_BASE: AtomicUsize = AtomicUsize::new(0);
+
+impl KernelInfo {
+    pub const fn empty() -> Self {
+        Self {
+            size: 0, ep: 0,
+            text_ptr: 0, text_len: 0,
+            rela_ptr: 0, rela_len: 0
+        }
+    }
+}
+
+impl SysInfo {
+    pub const fn empty() -> Self {
+        Self {
+            layout_ptr: 0,
+            layout_len: 0,
+            acpi_ptr: 0,
+            dtb_ptr: 0,
+            disk_uuid: [0; 16]
+        }
+    }
+}
+
+pub fn efi_ram_layout<'a>() -> &'a [RAMDescriptor] {
+    let sys = SYSINFO.read();
+    return unsafe { core::slice::from_raw_parts(sys.layout_ptr as *const RAMDescriptor, sys.layout_len) };
+}
+
+pub fn efi_ram_layout_mut<'a>() -> &'a mut [RAMDescriptor] {
+    let sys = SYSINFO.read();
+    return unsafe { core::slice::from_raw_parts_mut(sys.layout_ptr as *mut RAMDescriptor, sys.layout_len) };
+}
+
+pub fn set_kargs(kargs: Kargs) {
+    KINFO.write().clone_from(&kargs.kernel);
+    SYSINFO.write().clone_from(&kargs.sys);
+    KBASE.store(kargs.kbase, core::sync::atomic::Ordering::SeqCst);
+    STACK_BASE.store(kargs.stack_base, core::sync::atomic::Ordering::SeqCst);
+
+    let kernel_start = kargs.kbase as u64;
+    let kernel_end = (kargs.kbase + kargs.kernel.size) as u64;
+    let layout_start = kargs.sys.layout_ptr as u64;
+    let layout_end = unsafe { (kargs.sys.layout_ptr as *const RAMDescriptor).add(kargs.sys.layout_len) } as u64;
+
+    efi_ram_layout_mut().iter_mut().for_each(|desc| {
+        let desc_start = desc.phys_start;
+        let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
+
+        if kernel_start < desc_end && kernel_end > desc_start {
+            desc.ty = RAMType::Kernel;
+        }
+        if layout_start < desc_end && layout_end > desc_start {
+            desc.ty = RAMType::EfiRamLayout;
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        if desc.phys_start < 0x100000 {
+            desc.ty = RAMType::Reserved;
+        }
+
+        if RECLAMABLE.contains(&desc.ty) {
+            desc.ty = RAMType::Reclaimable;
+        }
+    });
+}

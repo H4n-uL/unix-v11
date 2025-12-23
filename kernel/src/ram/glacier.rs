@@ -1,7 +1,7 @@
 use crate::{
     arch::rvm::flags,
-    ram::physalloc::{AllocParams, PHYS_ALLOC},
-    sysinfo::{RAMType, KARGS}
+    kargs::{RAMType, efi_ram_layout},
+    ram::physalloc::{AllocParams, PHYS_ALLOC}
 };
 
 use spin::Mutex;
@@ -113,7 +113,7 @@ impl Glacier {
         self.root_table = root_table.addr();
         self.is_init = true;
 
-        for desc in KARGS.efi_ram_layout() {
+        for desc in efi_ram_layout() {
             let block_ty = desc.ty;
             let addr = desc.phys_start as usize;
             let size = desc.page_count as usize * 0x1000;

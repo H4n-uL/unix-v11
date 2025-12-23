@@ -1,7 +1,7 @@
 use crate::{
+    kargs::{NON_RAM, RAMDescriptor, RAMType},
     ram::{PAGE_4KIB, align_up},
-    sort::HeaplessSort,
-    sysinfo::{NON_RAM, RAMDescriptor, RAMType}
+    sort::HeaplessSort
 };
 
 use core::cmp::Ordering;
