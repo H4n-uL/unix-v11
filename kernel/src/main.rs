@@ -67,8 +67,11 @@ pub extern "C" fn spark() -> ! {
     let stack_usage = STACK_BASE.load(AtomOrd::SeqCst) - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
-    let ram_used = PHYS_ALLOC.total() - PHYS_ALLOC.available();
+    let ram_used = PHYS_ALLOC.filtsize(|b| b.used());
     printlnk!("RAM used: {:.6} MB", ram_used as f64 / 1000000.0);
+
+    let ram_consumed = PHYS_ALLOC.filtsize(|b| b.ty() != RAMType::Conv || b.used());
+    printlnk!("RAM consumed: {:.6} MB", ram_consumed as f64 / 1000000.0);
 
     let ksize = PHYS_ALLOC.filtsize(|b| b.ty() == RAMType::Kernel);
     printlnk!("Loaded kimg size: {:.3} kB", ksize as f64 / 1000.0);
