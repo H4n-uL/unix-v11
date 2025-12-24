@@ -1,4 +1,4 @@
-mod dev; mod parts; mod gpt; mod vfn;
+mod dev; mod parts; mod gpt; pub mod vfn;
 
 use crate::{
     device::block::BLOCK_DEVICES,

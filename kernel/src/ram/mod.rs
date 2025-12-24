@@ -115,13 +115,13 @@ impl OomHandler for KheapHandler {
             unsafe {
                 let khh = &mut talc.oom_handler;
 
-                GLACIER.map_range(
+                GLACIER.write().map_range(
                     khh.base() + khh.size(),
                     ptr.addr(),
                     ptr.size(),
                     flags::K_RWO
                 );
-                GLACIER.unmap_range(
+                GLACIER.write().unmap_range(
                     ptr.addr(),
                     ptr.size()
                 );
