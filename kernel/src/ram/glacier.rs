@@ -238,6 +238,37 @@ impl Glacier {
     }
 }
 
+impl Drop for Glacier {
+    fn drop(&mut self) {
+        if !self.is_init { return; }
+        self._drop(self.root_table, 0);
+    }
+}
+
+impl Glacier {
+    fn _drop(&self, table: usize, level: u8) {
+        let mut entries = 1 << self.cfg.psz.index_bits();
+        if level == 0 {
+            entries >>= 1;
+        }
+
+        for i in 0..entries {
+            let entry = unsafe { *((table as *const usize).add(i)) };
+
+            if entry & flags::VALID != 0 {
+                if level < self.cfg.levels() - 1 {
+                    let child = entry & self.cfg.psz.addr_mask();
+                    self._drop(child, level + 1);
+                }
+            }
+        }
+
+        unsafe {
+            PHYS_ALLOC.free_raw(table as *mut u8, self.cfg.psz.size());
+        }
+    }
+}
+
 pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
 
 pub fn init_glacier() {
