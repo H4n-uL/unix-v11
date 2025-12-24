@@ -1,4 +1,4 @@
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
 
 #[repr(C)]
@@ -137,8 +137,8 @@ pub fn efi_ram_layout_mut<'a>() -> &'a mut [RAMDescriptor] {
 pub fn set_kargs(kargs: Kargs) {
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
-    KBASE.store(kargs.kbase, core::sync::atomic::Ordering::SeqCst);
-    STACK_BASE.store(kargs.stack_base, core::sync::atomic::Ordering::SeqCst);
+    KBASE.store(kargs.kbase, AtomOrd::SeqCst);
+    STACK_BASE.store(kargs.stack_base, AtomOrd::SeqCst);
 
     let kernel_start = kargs.kbase as u64;
     let kernel_end = (kargs.kbase + kargs.kernel.size) as u64;

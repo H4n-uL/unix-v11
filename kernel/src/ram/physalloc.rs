@@ -1,10 +1,10 @@
 use crate::{
-    kargs::{NON_RAM, RAMDescriptor, RAMType},
+    kargs::{NON_RAM, RAMType, efi_ram_layout_mut},
     ram::{PAGE_4KIB, align_up},
     sort::HeaplessSort
 };
 
-use core::cmp::Ordering;
+// use core::cmp::Ordering;
 use spin::Mutex;
 
 #[repr(C)]
@@ -175,7 +175,9 @@ impl PhysAlloc {
         }
     }
 
-    fn init(&mut self, efi_ram_layout: &mut [RAMDescriptor]) {
+    fn init(&mut self) {
+        let efi_ram_layout = efi_ram_layout_mut();
+
         let rb = &RB_EMBEDDED;
         if self.is_init { return; }
         (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
@@ -255,16 +257,16 @@ impl PhysAlloc {
             .map(|block| block.size()).sum();
     }
 
-    fn sort(&mut self) {
-        self.blocks_raw_mut().sort_noheap_by(|a, b|
-            match (a.valid(), b.valid()) {
-                ( true,  true) => a.addr().cmp(&b.addr()),
-                ( true, false) => Ordering::Less,
-                (false,  true) => Ordering::Greater,
-                (false, false) => Ordering::Equal
-            }
-        );
-    }
+    // fn sort(&mut self) {
+    //     self.blocks_raw_mut().sort_noheap_by(|a, b|
+    //         match (a.valid(), b.valid()) {
+    //             ( true,  true) => a.addr().cmp(&b.addr()),
+    //             ( true, false) => Ordering::Less,
+    //             (false,  true) => Ordering::Greater,
+    //             (false, false) => Ordering::Equal
+    //         }
+    //     );
+    // }
 
     fn find(&mut self, mut f: impl FnMut(&RAMBlock) -> bool) -> Option<&mut RAMBlock> {
         return self.blocks_iter_mut().find(|block| f(block));
@@ -447,7 +449,7 @@ impl PhysAllocGlob {
         return Self(Mutex::new(PhysAlloc::empty()));
     }
 
-    pub fn init(&self, efi_ram_layout: &mut [RAMDescriptor]) { self.0.lock().init(efi_ram_layout); }
+    pub fn init(&self) { self.0.lock().init(); }
     pub fn reclaim(&self) { self.0.lock().reclaim(); }
 
     pub fn filtsize(&self, filter: impl Fn(&RAMBlock) -> bool) -> usize {
@@ -466,7 +468,7 @@ impl PhysAllocGlob {
         return self.0.lock().filtsize(|_| true);
     }
 
-    pub fn sort(&self) { self.0.lock().sort(); }
+    // pub fn sort(&self) { self.0.lock().sort(); }
 
     pub fn with_blocks<F, R>(&self, f: F) -> R
     where F: FnOnce(&dyn Iterator<Item = &RAMBlock>) -> R {

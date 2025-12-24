@@ -72,7 +72,7 @@ impl Vga {
         }
         edid_addr &= !0xf; // 16 byte alignment
 
-        GLACIER.map_range(edid_addr, edid_addr, PAGE_4KIB, flags::D_RW);
+        GLACIER.write().map_range(edid_addr, edid_addr, PAGE_4KIB, flags::D_RW);
         let edid_regs = unsafe {
             core::slice::from_raw_parts(edid_addr as *mut u8, PAGE_4KIB)
         };
@@ -87,7 +87,7 @@ impl Vga {
         let pitch = width * 4;
 
         let map_size = width as usize * height as usize * pitch as usize;
-        GLACIER.map_range(fb_addr, fb_addr, map_size, flags::D_RW);
+        GLACIER.write().map_range(fb_addr, fb_addr, map_size, flags::D_RW);
         return Some(Vga {
             framebuffer: fb_addr as *mut u32,
             edid: edid_addr as *mut u8,

@@ -16,9 +16,9 @@ pub const R_RELATIVE: u64 = 1027;
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
-    GLACIER.map_page(0x0900_0000, 0x0900_0000, flags::D_RW);
-    GLACIER.map_page(0x0800_0000, 0x0800_0000, flags::D_RW);
-    GLACIER.map_page(0x0801_0000, 0x0801_0000, flags::D_RW);
+    GLACIER.write().map_page(0x0900_0000, 0x0900_0000, flags::D_RW);
+    GLACIER.write().map_page(0x0800_0000, 0x0800_0000, flags::D_RW);
+    GLACIER.write().map_page(0x0801_0000, 0x0801_0000, flags::D_RW);
     unsafe {
         // Disable UART
         ((UART0_BASE + 0x30) as *mut u32).write_volatile(0x0);

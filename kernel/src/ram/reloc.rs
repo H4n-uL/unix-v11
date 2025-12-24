@@ -7,7 +7,7 @@ use crate::{
     }
 };
 
-use core::mem::transmute;
+use core::{mem::transmute, sync::atomic::Ordering as AtomOrd};
 
 pub static SPARK_PTR: usize = 0;
 pub static OLD_KBASE: usize = 0;
@@ -26,24 +26,24 @@ pub fn reloc() -> ! {
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
-    STACK_BASE.store(stack_ptr.addr() + stack_ptr.size(), core::sync::atomic::Ordering::SeqCst);
+    STACK_BASE.store(stack_ptr.addr() + stack_ptr.size(), AtomOrd::SeqCst);
 
-    jump_target = !((1 << (GLACIER.cfg().va_bits - 1)) - 1);
+    jump_target = !((1 << (GLACIER.read().cfg().va_bits - 1)) - 1);
 
     // Kernel mapping
-    GLACIER.map_range(
+    GLACIER.write().map_range(
         jump_target, new_kbase.addr(),
         kinfo.size, flags::K_RWO
     );
-    GLACIER.map_range(
+    GLACIER.write().map_range(
         jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr,
         kinfo.text_len, flags::K_ROX
     );
 
 
     // Kernel base update as physical address
-    let old_kbase = KBASE.load(core::sync::atomic::Ordering::SeqCst);
-    KBASE.store(new_kbase.addr(), core::sync::atomic::Ordering::SeqCst);
+    let old_kbase = KBASE.load(AtomOrd::SeqCst);
+    KBASE.store(new_kbase.addr(), AtomOrd::SeqCst);
     let delta = jump_target - old_kbase;
 
     // KERNEL CLONE

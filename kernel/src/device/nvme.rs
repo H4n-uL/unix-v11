@@ -99,7 +99,7 @@ pub fn init_nvme() {
         } else { base & !0b11 };
 
         let devid = pci_dev.devid;
-        GLACIER.map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
+        GLACIER.write().map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
         if let Ok(nvme) = NVMeDev::new(mmio_addr, NVMeAlloc) {
             for ns in nvme.ns_list() {
             block_devices.push(Arc::new(BlockDeviceNVMe::new(ns.clone(), devid)));
