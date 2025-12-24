@@ -1,4 +1,4 @@
-use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
+use crate::ram::glacier::{Glacier, PageSize, RvmCfg};
 
 use core::arch::asm;
 
@@ -21,10 +21,10 @@ pub mod flags {
     pub const U_RWX: usize = 0b111;
 }
 
-impl MMUCfg {
+impl RvmCfg {
     pub fn detect() -> Self {
         return Self {
-            page_size: PageSize::Size4kiB,
+            psz: PageSize::Size4kiB,
             va_bits: 48,
             pa_bits: 52
         };
@@ -51,6 +51,26 @@ impl Glacier {
                 "or eax, 0x00000900", // NXE / LME
                 "wrmsr",
 
+                pml4 = in(reg) self.root_table()
+            );
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        let ptr: usize;
+        unsafe {
+            asm!(
+                "mov {}, cr3",
+                out(reg) ptr
+            );
+        }
+        return ptr == self.root_table() as usize;
+    }
+
+    pub fn activate(&self) {
+        unsafe {
+            asm!(
+                "mov cr3, {pml4}",
                 pml4 = in(reg) self.root_table()
             );
         }

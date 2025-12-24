@@ -14,16 +14,16 @@ mod arch; mod device; mod filesys;
 mod kargs; mod ram; mod sort;
 
 use crate::{
+    kargs::{KINFO, Kargs, RAMType, STACK_BASE, set_kargs},
     ram::{
         STACK_SIZE,
-        glacier::GLACIER,
+        glacier::init_glacier,
         physalloc::PHYS_ALLOC,
         reloc::OLD_KBASE
-    },
-    kargs::{KINFO, Kargs, RAMType, STACK_BASE, efi_ram_layout_mut, set_kargs}
+    }
 };
 
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, sync::atomic::Ordering as AtomOrd};
 
 #[macro_export]
 macro_rules! printk {
@@ -43,8 +43,8 @@ macro_rules! printlnk {
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
     set_kargs(kargs);
     // KARGS.init(kargs);
-    PHYS_ALLOC.init(efi_ram_layout_mut());
-    GLACIER.init();
+    PHYS_ALLOC.init();
+    init_glacier();
 
     arch::init_serial();
     ram::reloc::reloc();
@@ -64,13 +64,14 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = STACK_BASE.load(core::sync::atomic::Ordering::SeqCst) - crate::arch::stack_ptr() as usize;
+    let stack_usage = STACK_BASE.load(AtomOrd::SeqCst) - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
-    let nonconv = PHYS_ALLOC.filtsize(|b| b.ty() != RAMType::Conv);
-    let ram_used = PHYS_ALLOC.total() - PHYS_ALLOC.available() - nonconv;
+    let ram_used = PHYS_ALLOC.total() - PHYS_ALLOC.available();
     printlnk!("RAM used: {:.6} MB", ram_used as f64 / 1000000.0);
-    printlnk!("Non-conventional RAM: {:.6} MB", nonconv as f64 / 1000000.0);
+
+    let ksize = PHYS_ALLOC.filtsize(|b| b.ty() == RAMType::Kernel);
+    printlnk!("Loaded kimg size: {:.3} kB", ksize as f64 / 1000.0);
 
     loop { arch::halt(); }
 }

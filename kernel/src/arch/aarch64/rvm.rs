@@ -1,4 +1,4 @@
-use crate::ram::glacier::{Glacier, MMUCfg, PageSize};
+use crate::ram::glacier::{Glacier, PageSize, RvmCfg};
 
 use core::arch::asm;
 
@@ -21,9 +21,9 @@ pub mod flags {
     pub const U_RWX: usize = 0b11101000011;
 }
 
-impl MMUCfg {
+impl RvmCfg {
     pub fn detect() -> Self {
-        let page_size = PageSize::Size4kiB;
+        let psz = PageSize::Size4kiB;
         let va_bits = 48;
         let mut mmfr0: usize;
         unsafe { asm!("mrs {}, ID_AA64MMFR0_EL1", out(reg) mmfr0); }
@@ -39,13 +39,13 @@ impl MMUCfg {
             _ => 48
         };
 
-        return Self { page_size, va_bits, pa_bits };
+        return Self { psz, va_bits, pa_bits };
     }
 
     fn tcr_el1(&self) -> usize {
         let tnsz = usize::BITS as usize - self.va_bits as usize;
 
-        let tg = match self.page_size {
+        let tg = match self.psz {
             PageSize::Size4kiB => 0b00,
             PageSize::Size16kiB => 0b10,
             PageSize::Size64kiB => 0b01
@@ -103,6 +103,28 @@ impl Glacier {
                 "isb",
                 mair = in(reg) mair_el1,
                 tcr = in(reg) self.cfg().tcr_el1(),
+                ttbr0 = in(reg) self.root_table()
+            );
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        let ptr: usize;
+        unsafe {
+            asm!(
+                "mrs {}, ttbr0_el1",
+                out(reg) ptr
+            );
+        }
+        return ptr == self.root_table() as usize;
+    }
+
+    pub fn activate(&self) {
+        unsafe {
+            asm!(
+                "msr ttbr0_el1, {ttbr0}",
+                "msr ttbr1_el1, {ttbr0}",
+                "isb",
                 ttbr0 = in(reg) self.root_table()
             );
         }

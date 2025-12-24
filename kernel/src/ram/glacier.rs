@@ -4,11 +4,11 @@ use crate::{
     ram::physalloc::{AllocParams, PHYS_ALLOC}
 };
 
-use spin::Mutex;
+use spin::RwLock;
 
 #[derive(Clone, Copy, Debug)]
-pub struct MMUCfg {
-    pub page_size: PageSize,
+pub struct RvmCfg {
+    pub psz: PageSize,
     pub va_bits: u8,
     pub pa_bits: u8
 }
@@ -39,33 +39,28 @@ impl PageSize {
     }
 }
 
-impl MMUCfg {
+impl RvmCfg {
     pub fn levels(&self) -> u8 {
-        let page_shift = self.page_size.shift();
-        let index_bits = self.page_size.index_bits();
+        let page_shift = self.psz.shift();
+        let index_bits = self.psz.index_bits();
         let addr_bits = self.va_bits - page_shift;
 
         return (addr_bits + index_bits - 1) / index_bits;
     }
 
     pub fn get_index(&self, level: u8, va: usize) -> usize {
-        let ps = self.page_size;
-        let page_shift = ps.shift();
-        let index_bits = ps.index_bits();
+        let page_shift = self.psz.shift();
+        let index_bits = self.psz.index_bits();
         let levels = self.levels();
         if level >= levels { unreachable!(); }
 
         let shift = page_shift + (levels - level - 1) * index_bits;
         return (va >> shift) & ((1 << index_bits) - 1);
     }
-
-    pub fn page_size(&self) -> usize {
-        return self.page_size.size();
-    }
 }
 
 pub struct Glacier {
-    cfg: MMUCfg,
+    cfg: RvmCfg,
     root_table: usize,
     is_init: bool
 }
@@ -87,10 +82,10 @@ pub fn flags_for_type(ty: RAMType) -> usize {
 }
 
 impl Glacier {
-    const fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
-            cfg: MMUCfg {
-                page_size: PageSize::Size4kiB,
+            cfg: RvmCfg {
+                psz: PageSize::Size4kiB,
                 va_bits: 0,
                 pa_bits: 0
             },
@@ -99,10 +94,29 @@ impl Glacier {
         }
     }
 
-    pub fn init(&mut self) {
+    pub fn new() -> Self {
+        let mut new = Self::empty();
+
+        unsafe {
+            new.init();
+
+            let page_size = new.cfg.psz.size();
+            let krvm_root = GLACIER.read().root_table;
+
+            let psize_half = page_size >> 1;
+            let hihalf = krvm_root + psize_half;
+
+            (new.root_table as *mut u8)
+                .copy_from(hihalf as *const u8, psize_half);
+        }
+
+        return new;
+    }
+
+    unsafe fn init(&mut self) {
         if self.is_init { return; }
-        self.cfg = MMUCfg::detect();
-        let table_size = self.cfg.page_size.size();
+        self.cfg = RvmCfg::detect();
+        let table_size = self.cfg.psz.size();
         let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
@@ -112,20 +126,11 @@ impl Glacier {
         unsafe { root_table.ptr::<u8>().write_bytes(0, table_size); }
         self.root_table = root_table.addr();
         self.is_init = true;
-
-        for desc in efi_ram_layout() {
-            let block_ty = desc.ty;
-            let addr = desc.phys_start as usize;
-            let size = desc.page_count as usize * 0x1000;
-
-            self.map_range(addr, addr, size, flags_for_type(block_ty));
-        }
-        self.identity_map();
     }
 
-    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
+    pub fn map_page(&mut self, va: usize, pa: usize, flags: usize) {
         if !self.is_init { return; }
-        let page_mask = !(self.cfg.page_size() - 1);
+        let page_mask = !(self.cfg.psz.size() - 1);
         let va = va & page_mask;
         let pa = pa & page_mask;
 
@@ -142,7 +147,7 @@ impl Glacier {
             }
 
             if unsafe { *entry & flags::VALID == 0 } {
-                let table_size = self.cfg.page_size.size();
+                let table_size = self.cfg.psz.size();
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
@@ -155,20 +160,20 @@ impl Glacier {
                 }
                 table = next_table.ptr::<()>() as usize;
             } else {
-                table = unsafe { *entry & self.cfg.page_size.addr_mask() };
+                table = unsafe { *entry & self.cfg.psz.addr_mask() };
             }
         }
     }
 
-    pub fn unmap_page(&self, va: usize) {
+    pub fn unmap_page(&mut self, va: usize) {
         if !self.is_init { return; }
-        let va = va & !(self.cfg.page_size() - 1);
+        let va = va & !(self.cfg.psz.size() - 1);
         let _ = self.unmap_rec(self.root_table, va, 0);
     }
 
     fn unmap_rec(&self, table: usize, va: usize, level: u8) -> bool {
         let is_tbl_null = |tbl: usize| {
-            (0..1 << self.cfg.page_size.index_bits())
+            (0..1 << self.cfg.psz.index_bits())
                 .all(|i| unsafe { *(tbl as *const usize).add(i) == 0 })
         };
 
@@ -184,21 +189,21 @@ impl Glacier {
             return false;
         }
 
-        let child = unsafe { *entry & self.cfg.page_size.addr_mask() };
+        let child = unsafe { *entry & self.cfg.psz.addr_mask() };
 
         if self.unmap_rec(child, va, level + 1) {
             unsafe {
                 *entry = 0;
-                PHYS_ALLOC.free_raw(child as *mut u8, self.cfg.page_size.size());
+                PHYS_ALLOC.free_raw(child as *mut u8, self.cfg.psz.size());
             }
             return is_tbl_null(table);
         }
         return false;
     }
 
-    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
+    pub fn map_range(&mut self, va: usize, pa: usize, size: usize, flags: usize) {
         if !self.is_init { return; }
-        let page_size = self.cfg.page_size();
+        let page_size = self.cfg.psz.size();
         let page_mask = !(page_size - 1);
 
         let pa_start = pa & page_mask;
@@ -211,9 +216,9 @@ impl Glacier {
         }
     }
 
-    pub fn unmap_range(&self, va: usize, size: usize) {
+    pub fn unmap_range(&mut self, va: usize, size: usize) {
         if !self.is_init { return; }
-        let page_size = self.cfg.page_size();
+        let page_size = self.cfg.psz.size();
         let page_mask = !(page_size - 1);
 
         let va_start = va & page_mask;
@@ -228,44 +233,24 @@ impl Glacier {
         return self.root_table as *mut usize;
     }
 
-    pub fn cfg(&self) -> MMUCfg {
+    pub fn cfg(&self) -> RvmCfg {
         return self.cfg;
     }
 }
 
-pub static GLACIER: GlacierGlob = GlacierGlob::empty();
+pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
 
-pub struct GlacierGlob(pub Mutex<Glacier>);
-impl GlacierGlob {
-    const fn empty() -> Self {
-        return Self(Mutex::new(Glacier::empty()));
+pub fn init_glacier() {
+    let mut glacier = GLACIER.write();
+
+    unsafe { glacier.init(); }
+
+    for desc in efi_ram_layout() {
+        let block_ty = desc.ty;
+        let addr = desc.phys_start as usize;
+        let size = desc.page_count as usize * 0x1000;
+
+        glacier.map_range(addr, addr, size, flags_for_type(block_ty));
     }
-
-    pub fn init(&self) {
-        self.0.lock().init();
-    }
-
-    pub fn map_page(&self, va: usize, pa: usize, flags: usize) {
-        self.0.lock().map_page(va, pa, flags);
-    }
-
-    pub fn map_range(&self, va: usize, pa: usize, size: usize, flags: usize) {
-        self.0.lock().map_range(va, pa, size, flags);
-    }
-
-    // pub fn unmap_page(&self, va: usize) {
-    //     self.0.lock().unmap_page(va);
-    // }
-
-    pub fn unmap_range(&self, va: usize, size: usize) {
-        self.0.lock().unmap_range(va, size);
-    }
-
-    pub fn root_table(&self) -> *mut usize {
-        return self.0.lock().root_table();
-    }
-
-    pub fn cfg(&self) -> MMUCfg {
-        return self.0.lock().cfg();
-    }
+    glacier.identity_map();
 }
