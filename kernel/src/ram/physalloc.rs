@@ -1,5 +1,5 @@
 use crate::{
-    kargs::{NON_RAM, RAMType, efi_ram_layout_mut},
+    kargs::{NON_RAM, RAMDescriptor, RAMType, RECLAMABLE, efi_ram_layout, efi_ram_layout_mut},
     ram::{PAGE_4KIB, align_up},
     sort::HeaplessSort
 };
@@ -204,7 +204,18 @@ impl PhysAlloc {
             if desc.ty != RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let addr = desc.phys_start as usize;
-                let block = RAMBlock::new(addr, size, desc.ty, false);
+                let mut ty = desc.ty;
+
+                #[cfg(target_arch = "x86_64")]
+                if desc.phys_start < 0x100000 {
+                    desc.ty = RAMType::Reserved;
+                }
+
+                if RECLAMABLE.contains(&desc.ty) {
+                    ty = RAMType::Reclaimable;
+                }
+
+                let block = RAMBlock::new(addr, size, ty, false);
                 self.add(block, false);
             }
         }
@@ -227,6 +238,16 @@ impl PhysAlloc {
             block.invalidate();
             self.add(new_blk, false);
         }
+
+        let efi_ram_layout = efi_ram_layout();
+        let layout_ptr = efi_ram_layout.as_ptr() as usize;
+        let layout_len = efi_ram_layout.len() * size_of::<RAMDescriptor>();
+
+        self.alloc(
+            AllocParams::new(layout_len)
+                .at(layout_ptr as *mut u8)
+                .as_type(RAMType::EfiRamLayout)
+        );
     }
 
     fn blocks_raw(&self) -> &[RAMBlock] {
