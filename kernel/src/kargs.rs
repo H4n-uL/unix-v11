@@ -139,30 +139,4 @@ pub fn set_kargs(kargs: Kargs) {
     SYSINFO.write().clone_from(&kargs.sys);
     KBASE.store(kargs.kbase, AtomOrd::SeqCst);
     STACK_BASE.store(kargs.stack_base, AtomOrd::SeqCst);
-
-    let kernel_start = kargs.kbase as u64;
-    let kernel_end = (kargs.kbase + kargs.kernel.size) as u64;
-    let layout_start = kargs.sys.layout_ptr as u64;
-    let layout_end = unsafe { (kargs.sys.layout_ptr as *const RAMDescriptor).add(kargs.sys.layout_len) } as u64;
-
-    efi_ram_layout_mut().iter_mut().for_each(|desc| {
-        let desc_start = desc.phys_start;
-        let desc_end = desc.phys_start + desc.page_count * PAGE_4KIB as u64;
-
-        if kernel_start < desc_end && kernel_end > desc_start {
-            desc.ty = RAMType::Kernel;
-        }
-        if layout_start < desc_end && layout_end > desc_start {
-            desc.ty = RAMType::EfiRamLayout;
-        }
-
-        #[cfg(target_arch = "x86_64")]
-        if desc.phys_start < 0x100000 {
-            desc.ty = RAMType::Reserved;
-        }
-
-        if RECLAMABLE.contains(&desc.ty) {
-            desc.ty = RAMType::Reclaimable;
-        }
-    });
 }

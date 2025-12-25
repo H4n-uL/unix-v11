@@ -14,12 +14,11 @@ mod arch; mod device; mod filesys;
 mod kargs; mod ram; mod sort;
 
 use crate::{
-    kargs::{KINFO, Kargs, RAMType, STACK_BASE, set_kargs},
+    kargs::{Kargs, RAMType, STACK_BASE, set_kargs},
     ram::{
         STACK_SIZE,
         glacier::init_glacier,
-        physalloc::PHYS_ALLOC,
-        reloc::OLD_KBASE
+        physalloc::PHYS_ALLOC
     }
 };
 
@@ -52,11 +51,6 @@ pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
-    unsafe {
-        let ksize = KINFO.read().size;
-        PHYS_ALLOC.free_raw(OLD_KBASE as *mut u8, ksize);
-    }
-
     // arch::inter::init();
     printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
     PHYS_ALLOC.reclaim();

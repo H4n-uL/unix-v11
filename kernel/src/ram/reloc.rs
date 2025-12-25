@@ -7,10 +7,12 @@ use crate::{
     }
 };
 
-use core::{mem::transmute, sync::atomic::Ordering as AtomOrd};
+use core::{
+    mem::transmute,
+    sync::atomic::{AtomicUsize, Ordering as AtomOrd}
+};
 
-pub static SPARK_PTR: usize = 0;
-pub static OLD_KBASE: usize = 0;
+pub static SPARK_PTR: AtomicUsize = AtomicUsize::new(0);
 
 pub fn reloc() -> ! {
     let kinfo = *KINFO.read();
@@ -48,8 +50,7 @@ pub fn reloc() -> ! {
 
     // KERNEL CLONE
     unsafe {
-        (&raw const SPARK_PTR as *mut usize).write_volatile(crate::spark as *const () as usize + delta);
-        (&raw const OLD_KBASE as *mut usize).write_volatile(old_kbase);
+        SPARK_PTR.store(crate::spark as usize + delta, AtomOrd::SeqCst);
         KHEAP.lock().oom_handler.set_base(align_up(jump_target + kinfo.size, PAGE_4KIB));
 
         (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size);
@@ -77,7 +78,7 @@ pub fn reloc() -> ! {
         // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
         move_stack(&stack_ptr);
         transmute::<usize, extern "C" fn() -> !>(
-            (&raw const SPARK_PTR).read_volatile()
+            SPARK_PTR.load(AtomOrd::SeqCst)
         )();
     }
 }
