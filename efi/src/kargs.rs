@@ -30,7 +30,7 @@ pub struct KernelInfo {
 
 #[repr(C)]
 pub struct RelaEntry {
-    pub offset: u64,
-    pub info: u64,
-    pub addend: u64
+    pub offset: usize,
+    pub info: usize,
+    pub addend: isize
 }

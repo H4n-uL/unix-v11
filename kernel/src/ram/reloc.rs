@@ -50,7 +50,7 @@ pub fn reloc() -> ! {
 
     // KERNEL CLONE
     unsafe {
-        SPARK_PTR.store(crate::spark as usize + delta, AtomOrd::SeqCst);
+        SPARK_PTR.store(crate::spark as *const () as usize + delta, AtomOrd::SeqCst);
         KHEAP.lock().oom_handler.set_base(align_up(jump_target + kinfo.size, PAGE_4KIB));
 
         (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size);
@@ -68,8 +68,8 @@ pub fn reloc() -> ! {
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
         if ty == R_RELATIVE {
-            let addr = (new_kbase.addr() + entry.offset as usize) as *mut u64;
-            unsafe { *addr += delta as u64; }
+            let addr = (new_kbase.addr() + entry.offset) as *mut usize;
+            unsafe { *addr += delta; }
         }
     }
 

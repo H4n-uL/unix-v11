@@ -9,7 +9,7 @@ pub fn halt() {
     unsafe { asm!("hlt"); }
 }
 
-pub const R_RELATIVE: u64 = 8;
+pub const R_RELATIVE: usize = 8;
 const COM1: u16 = 0x3f8;
 
 pub fn init_serial() {
