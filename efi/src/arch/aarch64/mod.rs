@@ -15,7 +15,7 @@ pub fn halt() {
     unsafe { asm!("wfi"); }
 }
 
-pub const R_RELATIVE: u64 = 1027;
+pub const R_RELATIVE: usize = 1027;
 
 #[inline(always)]
 pub fn stack_ptr() -> usize {

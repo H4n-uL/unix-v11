@@ -92,8 +92,8 @@ fn flint() -> Status {
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
         if ty == R_RELATIVE {
-            let reloc_addr = (kbase + entry.offset as usize) as *mut u64;
-            unsafe { *reloc_addr = kbase as u64 + entry.addend; }
+            let reloc_addr = (kbase + entry.offset) as *mut usize;
+            unsafe { *reloc_addr = kbase.wrapping_add_signed(entry.addend); }
         }
     }
 
