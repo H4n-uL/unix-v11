@@ -59,8 +59,8 @@ impl BlockDevice for BlockDeviceNVMe {
     }
 
     fn write_block(&self, buf: &[u8], lba: u64) -> Result<(), String> {
-        // // PhysPageBuf ensures both address and size alignment to 4 kiB
-        // // via AllocParams settings.
+        // PhysPageBuf ensures both address and size alignment to 4 kiB
+        // via AllocParams settings.
         let bs = self.block_size() as usize;
         let mut pabuf = PhysPageBuf::new(bs);
 
