@@ -395,6 +395,10 @@ impl PhysAlloc {
             (Some(before_block), Some(after_block)) => {
                 before_block.set_size(before_block.size() + new_block.size() + after_block.size());
                 after_block.invalidate();
+                if self.count() <= self.max >> 2 {
+                    let new_size = (self.max >> 1).max(BASE_RB_SIZE);
+                    self.shrink(new_size);
+                }
             },
             (Some(before_block), None) => {
                 before_block.set_size(before_block.size() + new_block.size());
@@ -405,7 +409,11 @@ impl PhysAlloc {
             },
             (None, None) => {
                 let prereq = if alloc { Some(new_block.into_owned_ptr()) } else { None };
-                if self.count() >= self.max { self.expand(self.max * 2, prereq); }
+                if self.count() >= self.max {
+                    let new_size = (self.max << 1).max(self.max + 2);
+                    self.expand(new_size, prereq);
+                }
+
                 let blocks = self.blocks_raw_mut();
                 let mut idx = 0;
                 for block in &mut *blocks {
@@ -462,6 +470,41 @@ impl PhysAlloc {
         (self.ptr, self.max) = (new_blocks, new_max);
         self.free(old_blocks);
         self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>()));
+    }
+
+    fn shrink(&mut self, new_max: usize) {
+        if new_max >= self.max || new_max < self.count() {
+            return;
+        }
+
+        let blocks_raw = self.blocks_raw_mut();
+        let Some((kept, freed)) = blocks_raw.split_at_mut_checked(new_max) else {
+            return;
+        };
+
+        let mut slots = kept.iter_mut().filter(|block| block.invalid());
+        for block in freed.iter_mut().rev() {
+            if block.valid() {
+                if let Some(slot) = slots.next() {
+                    *slot = *block;
+                    block.invalidate();
+                } else {
+                    return;
+                }
+            }
+        }
+
+        let kept_addr = kept.as_ptr() as usize;
+        let kept_size = align_up(kept.len() * size_of::<RAMBlock>(), PAGE_4KIB);
+        let freed_addr = align_up(kept_addr + kept_size, PAGE_4KIB);
+        let freed_size = self.ptr.size() - kept_size;
+
+        let freed_ptr = OwnedPtr::new_bytes(freed_addr, freed_size);
+
+        self.max = new_max;
+        self.ptr = OwnedPtr::new_bytes(self.ptr.addr(), kept_size);
+
+        self.free(freed_ptr);
     }
 }
 
