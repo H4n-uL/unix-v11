@@ -12,7 +12,7 @@ impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        GLACIER.write().map_range(phys_addr, phys_addr, size, flags::D_RW);
+        GLACIER.write().map_range(phys_addr, phys_addr, size, flags::K_RWO);
 
         return unsafe { PhysicalMapping {
             physical_start: phys_addr,
