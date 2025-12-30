@@ -1,5 +1,8 @@
 use crate::{
-    kargs::{NON_RAM, RAMDescriptor, RAMType, RECLAMABLE, efi_ram_layout, efi_ram_layout_mut},
+    kargs::{
+        NON_RAM, RAMDescriptor, RAMType, RECLAMABLE,
+        efi_ram_layout, efi_ram_layout_mut
+    },
     ram::{PAGE_4KIB, align_up},
     sort::HeaplessSort
 };
@@ -558,9 +561,5 @@ impl PhysAllocGlob {
 
     pub unsafe fn free_raw(&self, ptr: *mut u8, size: usize) {
         self.free(OwnedPtr::new_bytes(ptr as usize, size));
-    }
-
-    pub fn expand(&self, new_max: usize) {
-        self.0.lock().expand(new_max, None);
     }
 }
