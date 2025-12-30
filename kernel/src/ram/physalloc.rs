@@ -499,6 +499,8 @@ impl PhysAlloc {
         let freed_addr = align_up(kept_addr + kept_size, PAGE_4KIB);
         let freed_size = self.ptr.size() - kept_size;
 
+        if freed_size == 0 { return; }
+
         let freed_ptr = OwnedPtr::new_bytes(freed_addr, freed_size);
 
         self.max = new_max;
