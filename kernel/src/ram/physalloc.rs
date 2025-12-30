@@ -158,7 +158,7 @@ pub struct PhysAlloc {
 pub struct PhysAllocGlob(pub Mutex<PhysAlloc>);
 
 const BASE_RB_SIZE: usize = 128;
-static RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
+static mut RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
 pub static PHYS_ALLOC: PhysAllocGlob = PhysAllocGlob::empty();
 
 unsafe impl Send for RAMBlock {}
@@ -178,7 +178,10 @@ impl PhysAlloc {
     fn init(&mut self) {
         let efi_ram_layout = efi_ram_layout_mut();
 
-        let rb = &RB_EMBEDDED;
+        let rb = unsafe {
+            let rb = &raw const RB_EMBEDDED;
+            core::slice::from_raw_parts_mut(rb as *mut RAMBlock, (*rb).len())
+        };
         if self.is_init { return; }
         (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
         efi_ram_layout.sort_noheap_by_key(|desc| desc.page_count);
