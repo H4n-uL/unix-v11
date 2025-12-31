@@ -50,7 +50,7 @@ impl FMeta {
     }
 }
 
-// INTENSIONALLY FORCING INTERIOR MUTABILITY
+// INTENTIONALLY FORCING INTERIOR MUTABILITY
 pub trait VirtFNode: Send + Sync {
     fn meta(&self) -> FMeta;
     fn read(&self, _buf: &mut [u8], _offset: u64) -> Result<(), String> { Err("This file is not IOable".into()) }
