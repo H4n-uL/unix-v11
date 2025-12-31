@@ -86,7 +86,7 @@ impl Vga {
         let height_blanking = timing_desc[6] as u32 | ((timing_desc[7] as u32 & 0x0f) << 8);
         let pitch = width * 4;
 
-        let map_size = width as usize * height as usize * pitch as usize;
+        let map_size = height as usize * pitch as usize;
         GLACIER.write().map_range(fb_addr, fb_addr, map_size, flags::D_RW);
         return Some(Vga {
             framebuffer: fb_addr as *mut u32,
