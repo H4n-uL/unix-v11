@@ -236,7 +236,7 @@ pub struct ExceptionFrame {
 #[unsafe(no_mangle)]
 extern "C" fn exc_handler(exc_type: u64, frame: &mut ExceptionFrame) {
     crate::printlnk!("Exception type: {}", exc_type);
-    crate::printlnk!("Exception frame: {:#?}", frame);
+    crate::printlnk!("Exception frame: {:#x?}", frame);
 
     match exc_type {
         0  => { /* sync el1t */ }
@@ -255,7 +255,7 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExceptionFrame) {
         13 => { /* irq  el0  */ }
         14 => { /* fiq  el0  */ }
         15 => { /* serr el0  */ }
-        _ => unreachable!(),
+        _ => unreachable!()
     }
 }
 

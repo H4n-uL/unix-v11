@@ -4,7 +4,7 @@ pub struct Kargs {
     pub kernel: KernelInfo,
     pub sys: SysInfo,
     pub kbase: usize,
-    pub stack_base: usize,
+    pub stack_base: usize
 }
 
 #[repr(C)]
