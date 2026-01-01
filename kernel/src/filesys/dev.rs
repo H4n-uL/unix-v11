@@ -90,7 +90,7 @@ pub struct PartDev {
     meta: FMeta,
     devid: u64,
     start_lba: u64,
-    block_count: u64,
+    block_count: u64
 }
 
 impl PartDev {
