@@ -11,18 +11,18 @@ const GDT: [u8; 48] = [
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
-pub struct TSS {
-    _r0: u32, rsp0: u64, rsp1: u64, rsp2: u64,
-    _r1: u64, ist1: u64, ist2: u64, ist3: u64, ist4: u64, ist5: u64, ist6: u64, ist7: u64,
-    _r2: u64, _r3: u16, iomap_base: u16
+pub struct TaskStatSeg {
+    _0: u32, rsp0: u64, rsp1: u64, rsp2: u64,
+    _1: u64, ist1: u64, ist2: u64, ist3: u64, ist4: u64, ist5: u64, ist6: u64, ist7: u64,
+    _2: u64, _3: u16, iomap_base: u16
 }
 
-impl TSS {
+impl TaskStatSeg {
     pub const fn new() -> Self {
-        TSS {
-            _r0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
-            _r1: 0, ist1: 0, ist2: 0, ist3: 0, ist4: 0, ist5: 0, ist6: 0, ist7: 0,
-            _r2: 0, _r3: 0, iomap_base: size_of::<TSS>() as u16
+        return Self {
+            _0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
+            _1: 0, ist1: 0, ist2: 0, ist3: 0, ist4: 0, ist5: 0, ist6: 0, ist7: 0,
+            _2: 0, _3: 0, iomap_base: size_of::<Self>() as u16
         }
     }
 }
