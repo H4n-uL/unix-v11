@@ -81,9 +81,9 @@ shift
 while [ $# -gt 0 ]; do
     case `to_lower "$1"` in
         -disk)
-            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
                 echo "Error: -disk requires a path argument"
-                if [ "$(echo "$2" | cut -c1)" = "-" ]; then
+                if [ `echo "$2" | cut -c1` = "-" ]; then
                     echo "If the disk name starts with a dash, please consider \`./\` prefix."
                 fi
                 exit 1
@@ -92,7 +92,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -ram)
-            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
                 echo "Error: -ram requires a size argument"
                 exit 1
             fi
@@ -100,7 +100,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -cpu)
-            if [ -z "$2" ] || [ "$(echo "$2" | cut -c1)" = "-" ]; then
+            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
                 echo "Error: -cpu requires a count argument"
                 exit 1
             fi
