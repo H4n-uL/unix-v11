@@ -217,7 +217,7 @@ global_asm!(
         "ldp x0, x1, [sp, #0]",
         "add sp, sp, #816",
 
-        "eret",
+        "eret"
 );
 
 #[repr(C)]
