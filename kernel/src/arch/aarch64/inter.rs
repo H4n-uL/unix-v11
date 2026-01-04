@@ -22,105 +22,26 @@ unsafe extern "C" {
     unsafe fn exc_vts();
 }
 
+macro_rules! exc_stub {
+    ($n:tt) => {
+        concat!(
+            "sub sp, sp, #816\n",
+            "stp x0, x1, [sp, #0]\n",
+            "mov x0, #", stringify!($n), "\n",
+            "b exc_entry\n",
+            ".align 7\n"
+        )
+    };
+}
+
 global_asm!(
     ".align 11",
     ".global exc_vts",
     "exc_vts:",
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #0",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #1",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #2",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #3",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #4",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #5",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #6",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #7",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #8",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #9",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #10",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #11",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #12",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #13",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #14",
-        "b exc_entry",
-        ".align 7",
-
-        "sub sp, sp, #816",
-        "stp x0, x1, [sp, #0]",
-        "mov x0, #15",
-        "b exc_entry",
-        ".align 7",
+    exc_stub!(0),  exc_stub!(1),  exc_stub!(2),  exc_stub!(3),
+    exc_stub!(4),  exc_stub!(5),  exc_stub!(6),  exc_stub!(7),
+    exc_stub!(8),  exc_stub!(9),  exc_stub!(10), exc_stub!(11),
+    exc_stub!(12), exc_stub!(13), exc_stub!(14), exc_stub!(15),
 
     "exc_entry:",
         "stp x2, x3, [sp, #16]",
