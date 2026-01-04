@@ -51,7 +51,7 @@ pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
-    // arch::inter::init();
+    arch::inter::init();
     printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
     PHYS_ALLOC.reclaim();
     device::init_device();
