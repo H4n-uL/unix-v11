@@ -4,7 +4,7 @@ pub mod reloc;
 
 use crate::{
     arch::rvm::flags,
-    kargs::RAMType,
+    kargs::{RAMType, ap_vid},
     ram::{
         glacier::GLACIER,
         physalloc::{AllocParams, PHYS_ALLOC}
@@ -17,7 +17,6 @@ use talc::{OomHandler, Span, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
-pub const STACK_TOP: usize = 0usize.wrapping_sub(PAGE_4KIB);
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf {
@@ -177,4 +176,8 @@ pub fn dump_bytes(buf: &[u8]) {
         offset += line.len();
     }
     crate::printlnk!("{:08x}", offset);
+}
+
+pub fn stack_top() -> usize {
+    return 0usize.wrapping_sub(ap_vid() * (STACK_SIZE << 1)) - STACK_SIZE;
 }

@@ -1,3 +1,5 @@
+use crate::ram::STACK_SIZE;
+
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
 
@@ -97,6 +99,7 @@ pub const NON_RAM: &[RAMType] = &[
 pub static KINFO: RwLock<KernelInfo> = RwLock::new(KernelInfo::empty());
 pub static SYSINFO: RwLock<SysInfo> = RwLock::new(SysInfo::empty());
 pub static KBASE: AtomicUsize = AtomicUsize::new(0);
+pub static APID: AtomicUsize = AtomicUsize::new(0);
 
 impl KernelInfo {
     pub const fn empty() -> Self {
@@ -134,4 +137,12 @@ pub fn set_kargs(kargs: Kargs) {
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
     KBASE.store(kargs.kbase, AtomOrd::SeqCst);
+}
+
+pub fn ap_vid() -> usize {
+    let sp = crate::arch::stack_ptr() as usize;
+    if sp >> (usize::BITS - 1) == 0 { // if sp is lo-half
+        return 0; // can be assumed as BSP
+    }
+    return 0usize.wrapping_sub(sp) / (STACK_SIZE << 1);
 }

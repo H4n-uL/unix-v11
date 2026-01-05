@@ -1,8 +1,12 @@
 use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{KBASE, KINFO, RAMType, RelaEntry},
+    kargs::{APID, KBASE, KINFO, RAMType, RelaEntry},
     ram::{
-        KHEAP, PAGE_4KIB, STACK_SIZE, STACK_TOP, align_up, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}
+        KHEAP,
+        PAGE_4KIB, STACK_SIZE,
+        align_up,
+        glacier::GLACIER,
+        physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
 
@@ -27,7 +31,11 @@ pub fn reloc() -> ! {
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
-    let stack_va = STACK_TOP - stack_ptr.size();
+
+    // Per-CPU stack mapping
+    let apid = APID.fetch_add(1, AtomOrd::SeqCst);
+    let stack_va = 0usize.wrapping_sub((stack_ptr.size() << 1) * (apid + 1));
+    crate::printlnk!("Relocating CPU {} stack to {:#x}", apid, stack_va);
     GLACIER.write().map_range(
         stack_va, stack_ptr.addr(),
         STACK_SIZE, flags::K_RWO
@@ -44,7 +52,6 @@ pub fn reloc() -> ! {
         jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr,
         kinfo.text_len, flags::K_ROX
     );
-
 
     // Kernel base update as physical address
     let old_kbase = KBASE.load(AtomOrd::SeqCst);
