@@ -289,7 +289,7 @@ pub enum FatType {
 
 impl FileAllocTable {
     pub fn new(part: Arc<dyn BlockDevice>) -> Option<Arc<Self>> {
-        let mut buf = [0u8; 512];
+        let mut buf = alloc::vec![0u8; 512];
         part.read_block(&mut buf, 0).ok()?;
         let bptr = buf.as_ptr();
 
