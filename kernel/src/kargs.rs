@@ -6,8 +6,7 @@ use spin::RwLock;
 pub struct Kargs {
     pub kernel: KernelInfo,
     pub sys: SysInfo,
-    pub kbase: usize,
-    pub stack_base: usize
+    pub kbase: usize
 }
 
 #[repr(C)]
@@ -49,8 +48,6 @@ pub struct RAMDescriptor {
     pub attr: u64,
     pub padding: u64
 }
-
-const PAGE_4KIB: usize = 0x1000;
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,7 +97,6 @@ pub const NON_RAM: &[RAMType] = &[
 pub static KINFO: RwLock<KernelInfo> = RwLock::new(KernelInfo::empty());
 pub static SYSINFO: RwLock<SysInfo> = RwLock::new(SysInfo::empty());
 pub static KBASE: AtomicUsize = AtomicUsize::new(0);
-pub static STACK_BASE: AtomicUsize = AtomicUsize::new(0);
 
 impl KernelInfo {
     pub const fn empty() -> Self {
@@ -138,5 +134,4 @@ pub fn set_kargs(kargs: Kargs) {
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
     KBASE.store(kargs.kbase, AtomOrd::SeqCst);
-    STACK_BASE.store(kargs.stack_base, AtomOrd::SeqCst);
 }

@@ -17,6 +17,7 @@ use talc::{OomHandler, Span, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
+pub const STACK_TOP: usize = 0usize.wrapping_sub(PAGE_4KIB);
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf {
