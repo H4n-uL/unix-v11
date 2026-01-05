@@ -140,7 +140,6 @@ fn flint() -> Status {
 
     let ignite: extern "efiapi" fn(Kargs) -> ! = unsafe { core::mem::transmute(ep + kbase) };
     let efi_ram_layout = unsafe { exit_boot_services(Some(MemoryType::LOADER_DATA)) };
-    let stack_base = arch::stack_ptr();
     let sysinfo = Kargs {
         kernel: KernelInfo {
             size: ksize, ep,
@@ -152,8 +151,7 @@ fn flint() -> Status {
             layout_len: efi_ram_layout.len(),
             acpi_ptr, dtb_ptr, disk_uuid
         },
-        kbase,
-        stack_base
+        kbase
     };
     ignite(sysinfo);
 }

@@ -1,7 +1,5 @@
 pub mod inter; pub mod rvm;
 
-use crate::ram::physalloc::OwnedPtr;
-
 use core::{arch::asm, fmt::{Result, Write}};
 
 pub fn halt() {
@@ -91,9 +89,9 @@ pub fn stack_ptr() -> *const u8 {
 
 // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
 #[inline(always)]
-pub unsafe fn move_stack(ptr: &OwnedPtr) {
+pub unsafe fn move_stack(addr: usize, size: usize) {
     unsafe {
-        ptr.ptr::<u8>().write_bytes(0, ptr.size());
-        asm!("mov rsp, {}", in(reg) ptr.addr() + ptr.size());
+        (addr as *mut u8).write_bytes(0, size);
+        asm!("mov rsp, {}", in(reg) addr + size);
     }
 }

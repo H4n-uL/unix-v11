@@ -14,15 +14,15 @@ mod arch; mod device; mod filesys;
 mod kargs; mod ram; mod sort;
 
 use crate::{
-    kargs::{Kargs, RAMType, STACK_BASE, set_kargs},
+    kargs::{Kargs, RAMType, set_kargs},
     ram::{
-        STACK_SIZE,
+        STACK_SIZE, STACK_TOP,
         glacier::init_glacier,
         physalloc::PHYS_ALLOC
     }
 };
 
-use core::{panic::PanicInfo, sync::atomic::Ordering as AtomOrd};
+use core::panic::PanicInfo;
 
 #[macro_export]
 macro_rules! printk {
@@ -58,7 +58,7 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = STACK_BASE.load(AtomOrd::SeqCst) - crate::arch::stack_ptr() as usize;
+    let stack_usage = STACK_TOP - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
     let ram_used = PHYS_ALLOC.filtsize(|b| b.used());

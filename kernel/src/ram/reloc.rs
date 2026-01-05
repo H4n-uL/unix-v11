@@ -1,9 +1,8 @@
 use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{KBASE, KINFO, RAMType, RelaEntry, STACK_BASE},
+    kargs::{KBASE, KINFO, RAMType, RelaEntry},
     ram::{
-        KHEAP, PAGE_4KIB, STACK_SIZE, align_up,
-        glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}
+        KHEAP, PAGE_4KIB, STACK_SIZE, STACK_TOP, align_up, glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
 
@@ -28,7 +27,11 @@ pub fn reloc() -> ! {
     let stack_ptr = PHYS_ALLOC.alloc(
         AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
     ).unwrap();
-    STACK_BASE.store(stack_ptr.addr() + stack_ptr.size(), AtomOrd::SeqCst);
+    let stack_va = STACK_TOP - stack_ptr.size();
+    GLACIER.write().map_range(
+        stack_va, stack_ptr.addr(),
+        STACK_SIZE, flags::K_RWO
+    );
 
     jump_target = !((1 << (GLACIER.read().cfg().va_bits - 1)) - 1);
 
@@ -76,7 +79,7 @@ pub fn reloc() -> ! {
     // JUMP
     unsafe {
         // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
-        move_stack(&stack_ptr);
+        move_stack(stack_va, stack_ptr.size());
         transmute::<usize, extern "C" fn() -> !>(
             SPARK_PTR.load(AtomOrd::SeqCst)
         )();
