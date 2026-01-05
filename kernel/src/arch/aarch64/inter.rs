@@ -1,23 +1,5 @@
 use core::arch::{asm, global_asm};
 
-pub fn get() -> bool {
-    let daif: u64;
-    unsafe {
-        asm!("mrs {}, daif", out(reg) daif, options(nomem, nostack, preserves_flags));
-    }
-    return (daif & 0b1111) != 0;
-}
-
-pub fn set(enabled: bool) {
-    unsafe {
-        if enabled {
-            asm!("msr daifset, #0b1111", options(nomem, nostack, preserves_flags));
-        } else {
-            asm!("msr daifclr, #0b1111", options(nomem, nostack, preserves_flags));
-        }
-    }
-}
-
 unsafe extern "C" {
     unsafe fn exc_vts();
 }
@@ -177,6 +159,24 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExceptionFrame) {
         14 => { /* fiq  el0  */ }
         15 => { /* serr el0  */ }
         _ => unreachable!()
+    }
+}
+
+pub fn get() -> bool {
+    let daif: u64;
+    unsafe {
+        asm!("mrs {}, daif", out(reg) daif, options(nomem, nostack, preserves_flags));
+    }
+    return (daif & 0b1111) != 0;
+}
+
+pub fn set(enabled: bool) {
+    unsafe {
+        if enabled {
+            asm!("msr daifclr, #0b1111", options(nomem, nostack));
+        } else {
+            asm!("msr daifset, #0b1111", options(nomem, nostack));
+        }
     }
 }
 
