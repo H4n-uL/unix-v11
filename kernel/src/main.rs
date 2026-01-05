@@ -14,11 +14,11 @@ mod arch; mod device; mod filesys;
 mod kargs; mod ram; mod sort;
 
 use crate::{
-    kargs::{Kargs, RAMType, set_kargs},
+    kargs::{Kargs, RAMType, ap_vid, set_kargs},
     ram::{
-        STACK_SIZE, STACK_TOP,
+        STACK_SIZE,
         glacier::init_glacier,
-        physalloc::PHYS_ALLOC
+        physalloc::PHYS_ALLOC, stack_top
     }
 };
 
@@ -58,8 +58,10 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
     // exec_aleph();
 
-    let stack_usage = STACK_TOP - crate::arch::stack_ptr() as usize;
+    let stack_usage = stack_top() - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
+
+    printlnk!("ID of this AP: {}", ap_vid());
 
     let ram_used = PHYS_ALLOC.filtsize(|b| b.used());
     printlnk!("RAM used: {:.6} MB", ram_used as f64 / 1000000.0);
