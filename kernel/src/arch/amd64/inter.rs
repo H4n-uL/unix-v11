@@ -17,7 +17,6 @@ struct GdtPtr {
     base: u64
 }
 
-
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct TaskStatSeg {

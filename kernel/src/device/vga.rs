@@ -114,7 +114,6 @@ impl Vga {
     pub fn get_pixel(&self, x: u32, y: u32) -> Colour {
         if x >= self.width() || y >= self.height() { return Colour::BLACK; }
 
-
         let offset = (y * self.width() + x) as usize;
         let addr = unsafe { self.framebuffer.add(offset) };
         return unsafe { (*addr).into() };
