@@ -196,7 +196,7 @@ impl VirtFNode for FatFile {
 
         return Ok(());
     }
-    
+
     fn list(&self) -> Result<Vec<String>, String> {
         let mut entries = Vec::new();
         self.for_each_ent(|ent, _fid| {
