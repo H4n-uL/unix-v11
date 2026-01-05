@@ -19,23 +19,23 @@ Usage: $0 <arch|-h> [options]
 
 Architectures:
     AMD64    (alias: x86-64, x64)
-    AArch64  (alias: Arm64)
+    AArch64  (alias: Arm64, Armv8, Armv8a, Armv8-A)
     -h       Show this help
 
 Options:
-    -disk <size> Disk size in MiB [default: 64 MiB]
-    -ram <size>  RAM size in MiB [default: 512 MiB]
-    -cpu <count> CPU count [default: 1]
-    -r           Release build
-    -norun       Build only, not running QEMU
-    -clean       Clean before building
-    -v           Verbose output
+    -c         Clean before building
+    -r         Release build
+    -v         Verbose output
+    -n         Build only, not running QEMU
+    -d <size>  Disk size in MiB [default: 64 MiB]
+    -p <count> CPU count [default: 1]
+    -R <size>  RAM size in MiB [default: 512 MiB]
 
 Examples:
     $0 amd64
-    $0 aarch64 -ram 8192 -cpu 4
-    $0 arm64 -norun
-    $0 x86-64 -disk 524288 -clean
+    $0 aarch64 -R 8192 -p 4 -rv
+    $0 arm64 -n
+    $0 x86-64 -d 524288 -c
 
 EOF
     exit 0
@@ -45,73 +45,61 @@ to_lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-if [ $# -eq 0 ]; then
-    echo "Error: Architecture not specified"
+is_uint() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+die() {
+    echo "Error: $1"
     echo "Use '$0 -h' for usage information"
     exit 1
+}
+
+if [ $# -eq 0 ]; then
+    die "Architecture not specified"
 fi
 
 ARCH=`to_lower "$1"`
-FW_DIR="firmwares"
 case $ARCH in
     -h)
         usage
         ;;
-    aarch64|arm64)
+    aarch64|arm64|armv8|armv8a|armv8-a)
         DISK_ARCH="aarch64"
         ;;
     amd64|x86-64|x86_64|x64)
         DISK_ARCH="amd64"
         ;;
     *)
-        echo "Error: Unknown architecture: $ARCH"
-        echo "Use '$0 -h' for usage information"
-        exit 1
+        die "Unknown architecture: $ARCH"
         ;;
 esac
 
 shift
 
 while [ $# -gt 0 ]; do
-    case `to_lower "$1"` in
-        -disk)
-            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -disk requires a size argument"
-                exit 1
+    case "$1" in
+        -d|-p|-R)
+            if [ -z "$2" ] || ! is_uint "$2"; then
+                die "$1 requires an uint argument"
             fi
-            DISK_SIZE="$2"
+            case "$1" in
+                -d) DISK_SIZE="$2" ;;
+                -p) CPU_COUNT="$2" ;;
+                -R) RAM_SIZE="$2" ;;
+            esac
             shift
             ;;
-        -ram)
-            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -ram requires a size argument"
-                exit 1
-            fi
-            RAM_SIZE="$2"
-            shift
-            ;;
-        -cpu)
-            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -cpu requires a count argument"
-                exit 1
-            fi
-            CPU_COUNT="$2"
-            shift
-            ;;
-        -r)
-            RELEASE=true
-            ;;
-        -norun)
-            BUILD_ONLY=true
-            ;;
-        -clean)
-            CLEAN=true
-            ;;
-        -v)
-            VERBOSE=true
+        -*)
+            case "$1" in -*r*) RELEASE=true ;; esac
+            case "$1" in -*n*) BUILD_ONLY=true ;; esac
+            case "$1" in -*c*) CLEAN=true ;; esac
+            case "$1" in -*v*) VERBOSE=true ;; esac
             ;;
     esac
-
     shift
 done
 
@@ -119,18 +107,18 @@ SCRIPT_DIR=`dirname "$0"`
 
 BUILD_ARGS="$ARCH"
 if [ "$CLEAN" = "true" ]; then
-    BUILD_ARGS="$BUILD_ARGS -clean"
-fi
-if [ "$VERBOSE" = "true" ]; then
-    BUILD_ARGS="$BUILD_ARGS -v"
+    BUILD_ARGS="$BUILD_ARGS -c"
 fi
 if [ "$RELEASE" = "true" ]; then
     BUILD_ARGS="$BUILD_ARGS -r"
 fi
+if [ "$VERBOSE" = "true" ]; then
+    BUILD_ARGS="$BUILD_ARGS -v"
+fi
 
-$SCRIPT_DIR/build $BUILD_ARGS
-$SCRIPT_DIR/img unix-$DISK_ARCH.disk $DISK_SIZE
+"$SCRIPT_DIR/build" $BUILD_ARGS
+"$SCRIPT_DIR/img" -o unix-$DISK_ARCH.disk -s $DISK_SIZE
 
 if [ "$BUILD_ONLY" = "false" ]; then
-    $SCRIPT_DIR/run $ARCH -disk unix-$DISK_ARCH.disk -ram $RAM_SIZE -cpu $CPU_COUNT
+    "$SCRIPT_DIR/run" $ARCH -i unix-$DISK_ARCH.disk -r $RAM_SIZE -p $CPU_COUNT
 fi

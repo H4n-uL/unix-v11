@@ -15,18 +15,18 @@ UNIX V11 Build System
 Usage: $0 <arch|-h> [options]
 
 Architectures:
-    AMD64    (alias: x86-64, x64)
-    AArch64  (alias: Arm64)
-    -h       Show this help
+    AMD64   (alias: x86-64, x64)
+    AArch64 (alias: Arm64, Armv8, Armv8a, Armv8-A)
+    -h      Show this help
 
 Options:
-    -r           Release build
-    -clean       Clean before building
-    -v           Verbose output
+    -r      Release build
+    -c      Clean before building
+    -v      Verbose output
 
 Examples:
-    $0 amd64
-    $0 aarch64 -clean
+    $0 amd64 -r -v
+    $0 aarch64 -cv
 
 EOF
     exit 0
@@ -36,10 +36,14 @@ to_lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-if [ $# -eq 0 ]; then
-    echo "Error: Architecture not specified"
+die() {
+    echo "Error: $1"
     echo "Use '$0 -h' for usage information"
     exit 1
+}
+
+if [ $# -eq 0 ]; then
+    die "Architecture not specified"
 fi
 
 ARCH=`to_lower "$1"`
@@ -47,7 +51,7 @@ case $ARCH in
     -h)
         usage
         ;;
-    aarch64|arm64)
+    aarch64|arm64|armv8|armv8a|armv8-a)
         EFI_TARGET="aarch64-unknown-uefi"
         KERNEL_TARGET="aarch64-unknown-none"
         EFI_BOOT_NAME="bootaa64.efi"
@@ -58,27 +62,22 @@ case $ARCH in
         EFI_BOOT_NAME="bootx64.efi"
         ;;
     *)
-        echo "Error: Unknown architecture: $ARCH"
-        echo "Use '$0 -h' for usage information"
-        exit 1
+        die "Unknown architecture: $ARCH"
         ;;
 esac
 
 shift
 
 while [ $# -gt 0 ]; do
-    case `to_lower "$1"` in
-        -r)
-            RELEASE=true
-            ;;
-        -clean)
-            CLEAN=true
-            ;;
-        -v)
-            VERBOSE=true
-            ;;
+    case "$1" in
+        -*r*) RELEASE=true ;;
     esac
-
+    case "$1" in
+        -*c*) CLEAN=true ;;
+    esac
+    case "$1" in
+        -*v*) VERBOSE=true ;;
+    esac
     shift
 done
 
@@ -118,7 +117,6 @@ if [ "$RELEASE" = "true" ]; then
 else
     BUILD_DIR="debug"
 fi
-
 
 cp $PRJCT_ROOT/target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi udisk/efi/boot/$EFI_BOOT_NAME
 cp $PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel udisk/unix

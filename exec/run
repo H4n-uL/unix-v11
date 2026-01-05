@@ -16,19 +16,19 @@ Usage: $0 <arch> [options]
 
 Architectures:
     AMD64    (alias: x86-64, x64)
-    AArch64  (alias: Arm64)
+    AArch64  (alias: Arm64, Armv8, Armv8a, Armv8-A)
     -h       Show this help
 
 Options:
-    -disk <path> Disk image location [default: unix.disk]
-    -ram <size>  RAM size in MiB [default: 512 MiB]
-    -cpu <count> CPU count [default: 1]
+    -i <path>  Disk image location [default: unix.disk]
+    -p <count> CPU count [default: 1]
+    -r <size>  RAM size in MiB [default: 512 MiB]
 
 Examples:
     $0 amd64
-    $0 aarch64 -ram 8192 -cpu 4
-    $0 arm64 -cpu 8 system.img
-    $0 x86-64 -disk unix-amd64.disk
+    $0 aarch64 -r 8192 -p 4
+    $0 arm64 -p 8 -i system.img
+    $0 x86-64 -i unix-amd64.disk
 
 EOF
     exit 0
@@ -38,10 +38,21 @@ to_lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-if [ $# -eq 0 ]; then
-    echo "Error: Architecture not specified"
+is_uint() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+die() {
+    echo "Error: $1"
     echo "Use '$0 -h' for usage information"
     exit 1
+}
+
+if [ $# -eq 0 ]; then
+    die "Architecture not specified"
 fi
 
 ARCH=`to_lower "$1"`
@@ -50,7 +61,7 @@ case $ARCH in
     -h)
         usage
         ;;
-    aarch64|arm64)
+    aarch64|arm64|armv8|armv8a|armv8-a)
         QEMU_SYSTEM="qemu-system-aarch64"
         QEMU_CPU="cortex-a72"
         QEMU_MACHINE="virt,accel=tcg"
@@ -65,9 +76,7 @@ case $ARCH in
         EFI_VARS="OVMF-AMD64-VARS.fd"
         ;;
     *)
-        echo "Error: Unknown architecture: $ARCH"
-        echo "Use '$0 -h' for usage information"
-        exit 1
+        die "Unknown architecture: $ARCH"
         ;;
 esac
 
@@ -79,36 +88,27 @@ fi
 shift
 
 while [ $# -gt 0 ]; do
-    case `to_lower "$1"` in
-        -disk)
+    case "$1" in
+        -i)
             if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -disk requires a path argument"
-                if [ `echo "$2" | cut -c1` = "-" ]; then
-                    echo "If the disk name starts with a dash, please consider \`./\` prefix."
-                fi
-                exit 1
+                die_msg="-i requires a path argument"
+                [ -n "$2" ] && die_msg="$die_msg\nIf you want to use a path with a leading dash, please consider adding \`./\` prefix."
+                die "$die_msg"
             fi
             DISK_NAME="$2"
             shift
             ;;
-        -ram)
-            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -ram requires a size argument"
-                exit 1
+        -p|-r)
+            if [ -z "$2" ] || ! is_uint "$2"; then
+                die "$1 requires an uint argument"
             fi
-            RAM_SIZE="$2"
-            shift
-            ;;
-        -cpu)
-            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
-                echo "Error: -cpu requires a count argument"
-                exit 1
-            fi
-            CPU_COUNT="$2"
+            case "$1" in
+                -p) CPU_COUNT="$2" ;;
+                -r) RAM_SIZE="$2" ;;
+            esac
             shift
             ;;
     esac
-
     shift
 done
 

@@ -10,34 +10,64 @@ usage() {
     cat << EOF
 UNIX V11 Imaging System
 
-Usage: $0 <disk name> <disk size>
+Usage: $0 [options]
 
-Disk name:
-    Name of disk image [default: unix.disk]
-    \`-h\` will be considered as help flag, please use ./-h instead.
-
-Disk size:
-    Disk size in MiB [default: 64 MiB]
+Options:
+    -o <name> Name of disk image [default: unix.disk]
+    -s <size> Disk size in MiB [default: 64 MiB]
+    -h        Show this help
 
 Examples:
     $0
-    $0 hanabi.img 256
-    $0 dmr\&klt.disk 524288
+    $0 -s 512
+    $0 -o hanabi.img
+    $0 -s 524288 -o dmr\&klt.disk
 
 EOF
     exit 0
 }
 
-if [ $# -gt 0 ]; then
-    DISK_NAME=$1
-    if [ $# -gt 1 ]; then
-        DISK_SIZE=$2
-    fi
-fi
+to_lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
 
-if [ $DISK_NAME = "-h" ]; then
-    usage
-fi
+is_uint() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+die() {
+    echo "Error: $1"
+    echo "Use '$0 -h' for usage information"
+    exit 1
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o)
+            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
+                die_msg="-o requires a path argument"
+                [ -n "$2" ] && die_msg="$die_msg\nIf you want to use a path with a leading dash, please consider adding \`./\` prefix."
+                die "$die_msg"
+            fi
+            DISK_NAME="$2"
+            shift
+            ;;
+        -s)
+            if [ -z "$2" ] || ! is_uint "$2"; then
+                die "-s requires an uint argument"
+            fi
+            DISK_SIZE="$2"
+            shift
+            ;;
+        -h)
+            usage
+            ;;
+    esac
+    shift
+done
 
 dd if=/dev/zero of=$DISK_NAME bs=1M count=$DISK_SIZE status=none 2>/dev/null || \
 dd if=/dev/zero of=$DISK_NAME bs=1m count=$DISK_SIZE status=none
