@@ -144,5 +144,5 @@ pub fn ap_vid() -> usize {
     if sp >> (usize::BITS - 1) == 0 { // if sp is lo-half
         return 0; // can be assumed as BSP
     }
-    return 0usize.wrapping_sub(sp) / (STACK_SIZE << 1);
+    return (0usize.wrapping_sub(sp) / (STACK_SIZE << 1)) - 1;
 }
