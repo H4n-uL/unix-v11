@@ -243,8 +243,6 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
         128 => { /* syscall */ }
         _  => { /* reserved or IRQ */ }
     }
-
-    crate::printlnk!("ret");
 }
 
 pub fn get() -> bool {
