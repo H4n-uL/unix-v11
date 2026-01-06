@@ -1,4 +1,4 @@
-use crate::ram::{GEAM_BASE, PER_CPU_DATA};
+use crate::ram::{GLEAM_BASE, PER_CPU_DATA};
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
@@ -144,5 +144,5 @@ pub fn ap_vid() -> usize {
     if sp >> (usize::BITS - 1) == 0 { // if sp is lo-half
         return 0; // can be assumed as BSP
     }
-    return (GEAM_BASE - sp) / PER_CPU_DATA;
+    return (GLEAM_BASE - sp) / PER_CPU_DATA;
 }

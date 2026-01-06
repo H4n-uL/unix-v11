@@ -2,7 +2,7 @@ use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
     kargs::{APID, KBASE, KINFO, RAMType, RelaEntry},
     ram::{
-        GEAM_BASE, KHEAP,
+        GLEAM_BASE, KHEAP,
         PAGE_4KIB, PER_CPU_DATA, STACK_SIZE,
         align_up,
         glacier::GLACIER,
@@ -34,7 +34,7 @@ pub fn reloc() -> ! {
 
     // Per-CPU stack mapping
     let apid = APID.fetch_add(1, AtomOrd::SeqCst);
-    let stack_va = GEAM_BASE - (PER_CPU_DATA * apid) - STACK_SIZE;
+    let stack_va = GLEAM_BASE - (PER_CPU_DATA * apid) - STACK_SIZE;
     GLACIER.write().map_range(
         stack_va, stack_ptr.addr(),
         STACK_SIZE, flags::K_RWO
