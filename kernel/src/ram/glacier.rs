@@ -4,6 +4,7 @@ use crate::{
     ram::physalloc::{AllocParams, PHYS_ALLOC}
 };
 
+use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
 
 #[derive(Clone, Copy, Debug)]
@@ -259,6 +260,7 @@ impl Glacier {
 }
 
 pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
+pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
 
 pub fn flags_for_type(ty: RAMType) -> usize {
     match ty {
@@ -273,10 +275,14 @@ pub fn flags_for_type(ty: RAMType) -> usize {
     }
 }
 
-pub fn init_glacier() {
+pub fn init() {
     let mut glacier = GLACIER.write();
 
     unsafe { glacier.init(); }
+    HIHALF.store(
+        !((1 << (glacier.cfg().va_bits - 1)) - 1),
+        AtomOrd::Relaxed
+    );
 
     for desc in efi_ram_layout() {
         let block_ty = desc.ty;
