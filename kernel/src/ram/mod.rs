@@ -25,13 +25,13 @@ pub struct PhysPageBuf {
 }
 
 impl PhysPageBuf {
-    pub fn new(size: usize) -> Self {
+    pub fn new(size: usize) -> Option<Self> {
         let ptr = PHYS_ALLOC.alloc(
             AllocParams::new(size)
                 .align(PAGE_4KIB)
                 .as_type(RAMType::KernelData)
-        ).expect("Failed to allocate page-aligned RAM");
-        return Self { ptr: ptr.ptr(), size: ptr.size() };
+        )?;
+        return Some(Self { ptr: ptr.ptr(), size: ptr.size() });
     }
 }
 
