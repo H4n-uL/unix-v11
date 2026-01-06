@@ -34,7 +34,7 @@ pub fn reloc() -> ! {
 
     // Per-CPU stack mapping
     let apid = APID.fetch_add(1, AtomOrd::SeqCst);
-    let stack_va = 0usize.wrapping_sub((stack_ptr.size() << 1) * (apid + 1));
+    let stack_va = 0usize.wrapping_sub((stack_ptr.size() << 1) * (apid + 2));
     GLACIER.write().map_range(
         stack_va, stack_ptr.addr(),
         STACK_SIZE, flags::K_RWO

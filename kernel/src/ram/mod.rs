@@ -179,5 +179,5 @@ pub fn dump_bytes(buf: &[u8]) {
 }
 
 pub fn stack_top() -> usize {
-    return 0usize.wrapping_sub(ap_vid() * (STACK_SIZE << 1)) - STACK_SIZE;
+    return 0usize.wrapping_sub((ap_vid() + 1) * (STACK_SIZE << 1)) - STACK_SIZE;
 }
