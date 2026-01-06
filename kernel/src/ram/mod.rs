@@ -18,9 +18,11 @@ use talc::{OomHandler, Span, Talc, Talck};
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
 pub const PER_CPU_DATA: usize = 0x10000;
+const _: () = assert!(PER_CPU_DATA % PAGE_4KIB == 0, "PER_CPU_DATA must be page-aligned");
 
 // Base addr of Global Emergency Access Map
 pub const GEAM_BASE: usize = 0usize.wrapping_sub(PER_CPU_DATA);
+const _: () = assert!(GEAM_BASE % PAGE_4KIB == 0, "GEAM_BASE must be page-aligned");
 
 // Top of virtual RAM
 // +------------------+ - 0x1_0000_0000_0000_0000
@@ -203,5 +205,5 @@ pub fn dump_bytes(buf: &[u8]) {
 }
 
 pub fn stack_top() -> usize {
-    return 0usize.wrapping_sub((ap_vid() + 1) * PER_CPU_DATA);
+    return GEAM_BASE - (ap_vid() * PER_CPU_DATA);
 }
