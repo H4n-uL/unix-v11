@@ -193,7 +193,7 @@ impl PhysAlloc {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let addr = desc.phys_start as usize;
                 let block = RAMBlock::new(addr, size, desc.ty, false);
-                self.add(block, false);
+                self.add(block);
             }
         }
 
@@ -222,7 +222,7 @@ impl PhysAlloc {
                 }
 
                 let block = RAMBlock::new(addr, size, ty, false);
-                self.add(block, false);
+                self.add(block);
             }
         }
         self.is_init = true;
@@ -242,7 +242,7 @@ impl PhysAlloc {
                 RAMType::Conv, false
             );
             block.invalidate();
-            self.add(new_blk, false);
+            self.add(new_blk);
         }
 
         let efi_ram_layout = efi_ram_layout();
@@ -339,7 +339,7 @@ impl PhysAlloc {
         }
 
         if let Some(ainfo) = alloc_info {
-            self.add(ainfo.to, true);
+            self.add(ainfo.to);
 
             let before_block = RAMBlock::new(
                 ainfo.from.addr(), ptr - ainfo.from.addr(),
@@ -350,8 +350,8 @@ impl PhysAlloc {
                 ainfo.from.addr() + ainfo.from.size() - (ptr + args.size),
                 ainfo.from.ty(), false
             );
-            self.add(before_block, false);
-            self.add(after_block, false);
+            self.add(before_block);
+            self.add(after_block);
 
             return Some(ainfo.to.into_owned_ptr());
         }
@@ -374,19 +374,19 @@ impl PhysAlloc {
             if block_cp.addr() < free_start {
                 let before_size = free_start - block_cp.addr();
                 let before_block = RAMBlock::new(block_cp.addr(), before_size, block_cp.ty(), block_cp.used());
-                self.add(before_block, false);
+                self.add(before_block);
             }
             let this_block = RAMBlock::new(free_start, free_size, RAMType::Conv, false);
-            self.add(this_block, false);
+            self.add(this_block);
             if free_end < block_cp.addr() + block_cp.size() {
                 let after_size = block_cp.addr() + block_cp.size() - free_end;
                 let after_block = RAMBlock::new(free_end, after_size, block_cp.ty(), block_cp.used());
-                self.add(after_block, false);
+                self.add(after_block);
             }
         }
     }
 
-    fn add(&mut self, new_block: RAMBlock, alloc: bool) {
+    fn add(&mut self, new_block: RAMBlock) {
         if new_block.invalid() { return; }
         let (mut before, mut after) = (None, None);
         for block in self.blocks_iter_mut() {
@@ -414,7 +414,7 @@ impl PhysAlloc {
                 after_block.set_size(after_block.size() + new_block.size());
             },
             (None, None) => {
-                let prereq = if alloc { Some(new_block.into_owned_ptr()) } else { None };
+                let prereq = new_block.into_owned_ptr();
                 if self.count() >= self.max {
                     let new_size = (self.max << 1).max(self.max + 2);
                     self.expand(new_size, prereq);
@@ -437,36 +437,41 @@ impl PhysAlloc {
         }
     }
 
-    fn expand(&mut self, new_max: usize, prereq: Option<OwnedPtr>) {
+    fn expand(&mut self, new_max: usize, prereq: OwnedPtr) {
         if new_max <= self.max { return; }
 
         let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
         let old_blocks = unsafe { self.ptr.clone() };
 
+        let p = prereq; // pre-requested ptr(hereinafter P)
         let new_blocks = self.find(|block| {
             return {
-                block.size() >= alloc_param.size && !block.used()
-                && block.ty() == alloc_param.from_type
-                && prereq.as_ref().map_or(true, |p| {
-                    let noteqblk = {
-                        block.addr() + block.size() <= p.addr()
-                        || block.addr() >= p.addr() + p.size()
-                    };
-                    let before = p.addr().saturating_sub(block.addr());
-                    let after = (block.addr() + block.size()).saturating_sub(p.addr() + p.size());
-                    return noteqblk || before >= alloc_param.size || after >= alloc_param.size;
-                })
+                block.size() >= alloc_param.size // block is large enough
+                && !block.used()                 // block is free
+                && block.ty() == alloc_param.from_type // block is Conv
+                && {
+                    block.addr() + block.size() <= p.addr() // block is before P
+                    || block.addr() >= p.addr() + p.size()  // block is after P
+                    || p.addr().saturating_sub(block.addr()) >= alloc_param.size
+                    || (block.addr() + block.size()).saturating_sub(p.addr() + p.size()) >= alloc_param.size
+                    // has enough space before or after P
+                }
             };
         }).map(|block| {
-            let addr = prereq.as_ref().map_or(block.addr(), |p| {
-                if {
-                    block.addr() + block.size() <= p.addr()
-                    || block.addr() >= p.addr() + p.size()
-                    || p.addr().saturating_sub(block.addr()) >= alloc_param.size
-                } { return block.addr(); }
-                return p.addr() + p.size();
-            });
-            OwnedPtr::new_bytes(addr, alloc_param.size)
+            let addr;
+            if {
+                block.addr() + block.size() <= p.addr() // block is before P
+                || block.addr() >= p.addr() + p.size()  // block is after P
+                || p.addr().saturating_sub(block.addr()) >= alloc_param.size
+                // has enough space before P
+            } {
+                addr = block.addr();
+            } else {
+                // has enough space after P
+                addr = p.addr() + p.size();
+            }
+
+            return OwnedPtr::new_bytes(addr, alloc_param.size);
         }).expect("Failed to expand RAMBlocks");
 
         unsafe {
