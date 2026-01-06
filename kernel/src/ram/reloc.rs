@@ -1,11 +1,9 @@
 use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{APID, KBASE, KINFO, RAMType, RelaEntry},
+    kargs::{AP_VID, KBASE, KINFO, RAMType, RelaEntry},
     ram::{
-        GLEAM_BASE, KHEAP,
-        PAGE_4KIB, PER_CPU_DATA, STACK_SIZE,
-        align_up,
-        glacier::GLACIER,
+        GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
+        glacier::{GLACIER, HIHALF},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
@@ -19,11 +17,10 @@ pub static SPARK_PTR: AtomicUsize = AtomicUsize::new(0);
 
 pub fn reloc() -> ! {
     let kinfo = *KINFO.read();
-    let new_kbase;
-    let jump_target;
+    let jump_target = HIHALF.load(AtomOrd::Relaxed);
 
     // Kernel allocation
-    new_kbase = PHYS_ALLOC.alloc(
+    let new_kbase = PHYS_ALLOC.alloc(
         AllocParams::new(kinfo.size).as_type(RAMType::Kernel)
     ).expect("Failed to allocate Hi-Half Kernel");
 
@@ -33,14 +30,11 @@ pub fn reloc() -> ! {
     ).unwrap();
 
     // Per-CPU stack mapping
-    let apid = APID.fetch_add(1, AtomOrd::SeqCst);
-    let stack_va = GLEAM_BASE - (PER_CPU_DATA * apid) - STACK_SIZE;
+    let stack_va = GLEAM_BASE - (PER_CPU_DATA * AP_VID.assign()) - STACK_SIZE;
     GLACIER.write().map_range(
         stack_va, stack_ptr.addr(),
         STACK_SIZE, flags::K_RWO
     );
-
-    jump_target = !((1 << (GLACIER.read().cfg().va_bits - 1)) - 1);
 
     // Kernel mapping
     GLACIER.write().map_range(
@@ -60,8 +54,6 @@ pub fn reloc() -> ! {
     // KERNEL CLONE
     unsafe {
         SPARK_PTR.store(crate::spark as *const () as usize + delta, AtomOrd::SeqCst);
-        KHEAP.lock().oom_handler.set_base(align_up(jump_target + kinfo.size, PAGE_4KIB));
-
         (old_kbase as *const u8).copy_to(new_kbase.ptr(), kinfo.size);
     }
     // ANY MODIFICATION OF STATIC VARIABLES IS VOID BEYOND THIS POINT.

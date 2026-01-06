@@ -1,6 +1,7 @@
 use crate::ram::{GLEAM_BASE, PER_CPU_DATA};
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
+use alloc::vec::Vec;
 use spin::RwLock;
 
 #[repr(C)]
@@ -51,6 +52,44 @@ pub struct RAMDescriptor {
     pub padding: u64
 }
 
+pub struct ApVidList {
+    bitmap: RwLock<Vec<usize>>
+}
+
+impl ApVidList {
+    pub const fn new() -> Self {
+        return Self {
+            bitmap: RwLock::new(Vec::new())
+        };
+    }
+
+    pub fn assign(&self) -> usize {
+        let mut bm = self.bitmap.write();
+        
+        for (i, word) in bm.iter_mut().enumerate() {
+            if *word != usize::MAX {
+                let bit = (!*word).trailing_zeros() as usize;
+                *word |= 1 << bit;
+                let vid = i * usize::BITS as usize + bit;
+                return vid;
+            }
+        }
+
+        bm.push(1);
+        return (bm.len() - 1) * usize::BITS as usize;
+    }
+
+    pub fn release(&self, vid: usize) {
+        let mut bm = self.bitmap.write();
+        if (vid / usize::BITS as usize) < bm.len() {
+            bm[vid / usize::BITS as usize] &= !(1 << (vid % usize::BITS as usize));
+        }
+        if bm.last() == Some(&0) {
+            bm.pop();
+        }
+    }
+}
+
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
@@ -99,7 +138,7 @@ pub const NON_RAM: &[RAMType] = &[
 pub static KINFO: RwLock<KernelInfo> = RwLock::new(KernelInfo::empty());
 pub static SYSINFO: RwLock<SysInfo> = RwLock::new(SysInfo::empty());
 pub static KBASE: AtomicUsize = AtomicUsize::new(0);
-pub static APID: AtomicUsize = AtomicUsize::new(0);
+pub static AP_VID: ApVidList = ApVidList::new();
 
 impl KernelInfo {
     pub const fn empty() -> Self {
@@ -136,7 +175,7 @@ pub fn efi_ram_layout_mut<'a>() -> &'a mut [RAMDescriptor] {
 pub fn set_kargs(kargs: Kargs) {
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
-    KBASE.store(kargs.kbase, AtomOrd::SeqCst);
+    KBASE.store(kargs.kbase, AtomOrd::Relaxed);
 }
 
 pub fn ap_vid() -> usize {
