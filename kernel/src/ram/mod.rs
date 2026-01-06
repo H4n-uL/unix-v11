@@ -17,6 +17,30 @@ use talc::{OomHandler, Span, Talc, Talck};
 
 pub const PAGE_4KIB: usize = 0x1000;
 pub const STACK_SIZE: usize = 0x4000;
+pub const PER_CPU_DATA: usize = 0x10000;
+
+// Base addr of Global Emergency Access Map
+pub const GEAM_BASE: usize = 0usize.wrapping_sub(PER_CPU_DATA);
+
+// Top of virtual RAM
+// +------------------+ - 0x1_0000_0000_0000_0000
+// |       GEAM       | 64 kiB: global emergency access map
+// +------------------+ -   0xffff_ffff_ffff_0000
+// |  per-cpu data 0  | 64 kiB: per-cpu data for cpu 0
+// +------------------+ -   0xffff_ffff_fffe_0000
+// |  per-cpu data 1  | 64 kiB: per-cpu data for cpu 1
+// +------------------+ -   0xffff_ffff_fffd_0000
+// |       ...        | etc.
+// +------------------+
+
+// per-cpu data
+// +------------------+ - 0x1_0000
+// |      stack       | 16 kiB: kernel stack
+// +------------------+ -   0xc000
+// |    guard page    | 4 kiB: unmapped guard page
+// +------------------+ -   0xb000
+// |     cpu info     | 44 kiB: per-cpu mappings and structures
+// +------------------+ -      0x0
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf {
@@ -179,5 +203,5 @@ pub fn dump_bytes(buf: &[u8]) {
 }
 
 pub fn stack_top() -> usize {
-    return 0usize.wrapping_sub((ap_vid() + 1) * (STACK_SIZE << 1)) - STACK_SIZE;
+    return 0usize.wrapping_sub((ap_vid() + 1) * PER_CPU_DATA);
 }
