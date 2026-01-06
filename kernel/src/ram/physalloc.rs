@@ -443,7 +443,7 @@ impl PhysAlloc {
         let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
         let old_blocks = unsafe { self.ptr.clone() };
 
-        let p = prereq; // pre-requested ptr(hereinafter P)
+        let p = prereq; // pre-requested ptr(henceforth P)
         let new_blocks = self.find(|block| {
             return {
                 block.size() >= alloc_param.size // block is large enough
