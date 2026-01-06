@@ -2,7 +2,7 @@ pub mod inter; pub mod rvm;
 
 use crate::{
     arch::rvm::flags,
-    ram::glacier::GLACIER
+    ram::{PAGE_4KIB, glacier::GLACIER}
 };
 
 use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
@@ -13,26 +13,28 @@ pub fn halt() {
 }
 
 pub const R_RELATIVE: usize = 1027;
+const SERIAL_IO: usize = 0usize.wrapping_sub(PAGE_4KIB);
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 pub fn init_serial() {
-    GLACIER.write().map_page(0x0900_0000, 0x0900_0000, flags::D_RW);
-    GLACIER.write().map_page(0x0800_0000, 0x0800_0000, flags::D_RW);
-    GLACIER.write().map_page(0x0801_0000, 0x0801_0000, flags::D_RW);
+    GLACIER.write().map_page(
+        SERIAL_IO, UART0_BASE, flags::D_RW
+    );
+
     unsafe {
         // Disable UART
-        ((UART0_BASE + 0x30) as *mut u32).write_volatile(0x0);
+        ((SERIAL_IO + 0x30) as *mut u32).write_volatile(0x0);
         // Clear all pending interrupts
-        ((UART0_BASE + 0x44) as *mut u32).write_volatile(0x7ff);
+        ((SERIAL_IO + 0x44) as *mut u32).write_volatile(0x7ff);
         // Enable UART, TX, RX
-        ((UART0_BASE + 0x30) as *mut u32).write_volatile(0x301); // UARTCR: UARTEN|TXE|RXE
+        ((SERIAL_IO + 0x30) as *mut u32).write_volatile(0x301); // UARTCR: UARTEN|TXE|RXE
     }
 }
 
 pub fn serial_putchar(c: u8) {
     unsafe {
-        while ((UART0_BASE + 0x18) as *const u32).read_volatile() & (1 << 5) != 0 { spin_loop(); }
-        ((UART0_BASE + 0x00) as *mut u32).write_volatile(c as u32);
+        while ((SERIAL_IO + 0x18) as *const u32).read_volatile() & (1 << 5) != 0 { spin_loop(); }
+        ((SERIAL_IO + 0x00) as *mut u32).write_volatile(c as u32);
     }
 }
 
