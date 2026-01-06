@@ -68,19 +68,6 @@ pub struct Glacier {
 unsafe impl Send for Glacier {}
 unsafe impl Sync for Glacier {}
 
-pub fn flags_for_type(ty: RAMType) -> usize {
-    match ty {
-        RAMType::Conv => flags::K_RWX,
-        RAMType::BootSvcCode => flags::K_RWX,
-        RAMType::RtSvcCode => flags::K_ROX,
-        RAMType::Kernel => flags::K_RWX,
-        RAMType::KernelData => flags::K_RWX,
-        RAMType::KernelPTable => flags::K_RWX,
-        RAMType::MMIO => flags::D_RW,
-        _ => flags::K_RWX
-    }
-}
-
 impl Glacier {
     pub const fn empty() -> Self {
         Self {
@@ -102,12 +89,14 @@ impl Glacier {
 
             let page_size = new.cfg.psz.size();
             let krvm_root = GLACIER.read().root_table;
+            let new_root = new.root_table;
 
             let psize_half = page_size >> 1;
-            let hihalf = krvm_root + psize_half;
 
-            (new.root_table as *mut u8)
-                .copy_from(hihalf as *const u8, psize_half);
+            (new_root as *mut u8)
+                .copy_from(krvm_root as *const u8, page_size);
+            (new_root as *mut u8)
+                .write_bytes(0, psize_half);
         }
 
         return new;
@@ -270,6 +259,19 @@ impl Glacier {
 }
 
 pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
+
+pub fn flags_for_type(ty: RAMType) -> usize {
+    match ty {
+        RAMType::Conv => flags::K_RWX,
+        RAMType::BootSvcCode => flags::K_RWX,
+        RAMType::RtSvcCode => flags::K_ROX,
+        RAMType::Kernel => flags::K_RWX,
+        RAMType::KernelData => flags::K_RWX,
+        RAMType::KernelPTable => flags::K_RWX,
+        RAMType::MMIO => flags::D_RW,
+        _ => flags::K_RWX
+    }
+}
 
 pub fn init_glacier() {
     let mut glacier = GLACIER.write();
