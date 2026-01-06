@@ -46,7 +46,8 @@ impl BlockDevice for BlockDeviceNVMe {
         // PhysPageBuf ensures both address and size alignment to 4 kiB
         // via AllocParams settings.
         let bs = self.block_size() as usize;
-        let mut pabuf = PhysPageBuf::new(bs);
+        let mut pabuf = PhysPageBuf::new(bs)
+            .ok_or("Failed to allocate DMA buffer")?;
 
         for (i, ck) in buf.chunks_mut(bs).enumerate() {
             self.ns.read(lba + i as u64, &mut pabuf).map_err(|e|
@@ -62,7 +63,8 @@ impl BlockDevice for BlockDeviceNVMe {
         // PhysPageBuf ensures both address and size alignment to 4 kiB
         // via AllocParams settings.
         let bs = self.block_size() as usize;
-        let mut pabuf = PhysPageBuf::new(bs);
+        let mut pabuf = PhysPageBuf::new(bs)
+            .ok_or("Failed to allocate DMA buffer")?;
 
         for (i, ck) in buf.chunks(bs).enumerate() {
             if ck.len() < bs {
