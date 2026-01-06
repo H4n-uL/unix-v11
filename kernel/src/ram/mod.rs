@@ -4,14 +4,18 @@ pub mod reloc;
 
 use crate::{
     arch::rvm::flags,
-    kargs::{RAMType, ap_vid},
+    kargs::{KINFO, RAMType, ap_vid},
     ram::{
-        glacier::GLACIER,
+        glacier::{GLACIER, HIHALF},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
 
-use core::{alloc::Layout, ops::{Deref, DerefMut}};
+use core::{
+    alloc::Layout,
+    ops::{Deref, DerefMut},
+    sync::atomic::Ordering as AtomOrd
+};
 use spin::Mutex;
 use talc::{OomHandler, Span, Talc, Talck};
 
@@ -202,6 +206,14 @@ pub fn dump_bytes(buf: &[u8]) {
         offset += line.len();
     }
     crate::printlnk!("{:08x}", offset);
+}
+
+pub fn init_heap() {
+    let heap_base = align_up(
+        KINFO.read().size + HIHALF.load(AtomOrd::Relaxed),
+        PAGE_4KIB
+    );
+    KHEAP.lock().oom_handler.set_base(heap_base);
 }
 
 pub fn stack_top() -> usize {

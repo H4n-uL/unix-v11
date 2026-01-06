@@ -14,11 +14,11 @@ mod arch; mod device; mod filesys;
 mod kargs; mod ram; mod sort;
 
 use crate::{
-    kargs::{Kargs, RAMType, ap_vid, set_kargs},
+    kargs::{Kargs, RAMType, ap_vid},
     ram::{
         STACK_SIZE,
-        glacier::init_glacier,
-        physalloc::PHYS_ALLOC, stack_top
+        physalloc::PHYS_ALLOC,
+        stack_top
     }
 };
 
@@ -40,10 +40,11 @@ macro_rules! printlnk {
 
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
-    set_kargs(kargs);
+    kargs::set_kargs(kargs);
     // KARGS.init(kargs);
     PHYS_ALLOC.init();
-    init_glacier();
+    ram::glacier::init();
+    ram::init_heap();
 
     arch::init_serial();
     ram::reloc::reloc();
