@@ -65,7 +65,7 @@ impl ApVidList {
 
     pub fn assign(&self) -> usize {
         let mut bm = self.bitmap.write();
-        
+
         for (i, word) in bm.iter_mut().enumerate() {
             if *word != usize::MAX {
                 let bit = (!*word).trailing_zeros() as usize;
