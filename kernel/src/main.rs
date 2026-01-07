@@ -10,8 +10,8 @@
 
 extern crate alloc;
 
-mod arch; mod device; mod filesys;
-mod kargs; mod ram; mod sort;
+mod arch; mod device; mod filesys; mod kargs;
+mod kreq; mod proc; mod ram; mod sort;
 
 use crate::{
     kargs::{Kargs, RAMType, ap_vid},
@@ -57,7 +57,6 @@ pub extern "C" fn spark() -> ! {
     PHYS_ALLOC.reclaim();
     device::init_device();
     let _ = filesys::init_filesys();
-    // exec_aleph();
 
     let stack_usage = stack_top() - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
@@ -72,6 +71,8 @@ pub extern "C" fn spark() -> ! {
 
     let ksize = PHYS_ALLOC.filtsize(|b| b.ty() == RAMType::Kernel);
     printlnk!("Loaded kimg size: {:.3} kB", ksize as f64 / 1000.0);
+
+    proc::exec_aleph();
 
     loop { arch::halt(); }
 }
