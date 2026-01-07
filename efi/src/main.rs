@@ -10,12 +10,17 @@
 mod arch;
 mod kargs;
 
-use crate::{arch::R_RELATIVE, kargs::{Kargs, KernelInfo, RelaEntry, SysInfo}};
+use crate::{
+    arch::R_RELATIVE,
+    kargs::{Kargs, KernelInfo, RelaEntry, Segment, SysInfo}
+};
 
 use core::panic::PanicInfo;
 use uefi::{
     boot::{
-        allocate_pages, exit_boot_services, get_image_file_system, image_handle, locate_handle_buffer,
+        allocate_pages, exit_boot_services,
+        get_image_file_system, image_handle,
+        locate_handle_buffer,
         open_protocol_exclusive as open_protocol,
         AllocateType, MemoryType, SearchType
     },
@@ -63,8 +68,8 @@ fn flint() -> Status {
     let kernel_pages = align_up(ksize, PAGE_4KIB) / PAGE_4KIB;
     let kbase = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_CODE, kernel_pages).unwrap().as_ptr() as usize;
 
-    let mut text_ptr = 0;
-    let mut text_len = 0;
+    let seg_ptr = allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1).unwrap().as_ptr() as usize;
+    let mut seg_len = 0;
 
     for ph in elf.program_iter() {
         if let Ok(Type::Load) = ph.get_type() {
@@ -77,11 +82,17 @@ fn flint() -> Status {
             unsafe {
                 phys_addr.write_bytes(0, mem_size);
                 file_binary[offset..offset + file_size].as_ptr().copy_to(phys_addr, file_size);
-            }
 
-            if (virt_addr..virt_addr + mem_size).contains(&ep) {
-                (text_ptr, text_len) = (virt_addr, mem_size);
+                (seg_ptr as *mut Segment)
+                    .add(seg_len)
+                    .write(Segment {
+                        ptr: virt_addr,
+                        len: mem_size,
+                        flags: ph.flags().0,
+                        align: ph.align() as u32
+                    });
             }
+            seg_len += 1;
         }
     }
 
@@ -143,7 +154,7 @@ fn flint() -> Status {
     let sysinfo = Kargs {
         kernel: KernelInfo {
             size: ksize, ep,
-            text_ptr, text_len,
+            seg_ptr, seg_len,
             rela_ptr, rela_len
         },
         sys: SysInfo {

@@ -17,10 +17,19 @@ pub struct Kargs {
 pub struct KernelInfo {
     pub size: usize,
     pub ep: usize,
-    pub text_ptr: usize,
-    pub text_len: usize,
+    pub seg_ptr: usize,
+    pub seg_len: usize,
     pub rela_ptr: usize,
     pub rela_len: usize
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Segment {
+    pub ptr: usize,
+    pub len: usize,
+    pub flags: u32,
+    pub align: u32
 }
 
 #[repr(C)]
@@ -116,6 +125,7 @@ pub enum RAMType {
 
     KernelData      = 0x44415441,
     EfiRamLayout    = 0x524c594f,
+    ElfSegments     = 0x7f454c46,
     KernelPTable    = 0x929b4000,
     Reclaimable     = 0xb6876800,
     UserPTable      = 0xba9b4000,
@@ -144,7 +154,7 @@ impl KernelInfo {
     pub const fn empty() -> Self {
         Self {
             size: 0, ep: 0,
-            text_ptr: 0, text_len: 0,
+            seg_ptr: 0, seg_len: 0,
             rela_ptr: 0, rela_len: 0
         }
     }
@@ -170,6 +180,11 @@ pub fn efi_ram_layout<'a>() -> &'a [RAMDescriptor] {
 pub fn efi_ram_layout_mut<'a>() -> &'a mut [RAMDescriptor] {
     let sys = SYSINFO.read();
     return unsafe { core::slice::from_raw_parts_mut(sys.layout_ptr as *mut RAMDescriptor, sys.layout_len) };
+}
+
+pub fn elf_segments<'a>() -> &'a [Segment] {
+    let kinfo = KINFO.read();
+    return unsafe { core::slice::from_raw_parts(kinfo.seg_ptr as *const Segment, kinfo.seg_len) };
 }
 
 pub fn set_kargs(kargs: Kargs) {

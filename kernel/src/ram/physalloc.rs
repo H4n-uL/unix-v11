@@ -1,7 +1,7 @@
 use crate::{
     kargs::{
-        NON_RAM, RAMDescriptor, RAMType, RECLAMABLE,
-        efi_ram_layout, efi_ram_layout_mut
+        NON_RAM, RAMDescriptor, RAMType, RECLAMABLE, Segment,
+        efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
     ram::{PAGE_4KIB, align_up},
     sort::HeaplessSort
@@ -249,10 +249,20 @@ impl PhysAlloc {
         let layout_ptr = efi_ram_layout.as_ptr() as usize;
         let layout_len = efi_ram_layout.len() * size_of::<RAMDescriptor>();
 
+        let elf_seg = elf_segments();
+        let seg_ptr = elf_seg.as_ptr() as usize;
+        let seg_len = elf_seg.len() * size_of::<Segment>();
+
         self.alloc(
             AllocParams::new(layout_len)
                 .at(layout_ptr as *mut u8)
                 .as_type(RAMType::EfiRamLayout)
+        );
+
+        self.alloc(
+            AllocParams::new(seg_len)
+                .at(seg_ptr as *mut u8)
+                .as_type(RAMType::ElfSegments)
         );
     }
 

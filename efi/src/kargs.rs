@@ -21,10 +21,19 @@ pub struct SysInfo {
 pub struct KernelInfo {
     pub size: usize,
     pub ep: usize,
-    pub text_ptr: usize,
-    pub text_len: usize,
+    pub seg_ptr: usize,
+    pub seg_len: usize,
     pub rela_ptr: usize,
     pub rela_len: usize
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Segment {
+    pub ptr: usize,
+    pub len: usize,
+    pub flags: u32,
+    pub align: u32
 }
 
 #[repr(C)]
