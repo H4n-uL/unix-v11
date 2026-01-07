@@ -5,7 +5,7 @@ use core::arch::asm;
 #[allow(dead_code)]
 pub mod flags {
     pub const VALID: usize = 0b1;
-    pub const NEXT: usize  = 0b11;
+    pub const NEXT: usize  = 0b111;
 
     pub const K_ROO: usize = 0b1 | 1 << 63;
     pub const K_RWO: usize = 0b11 | 1 << 63;
