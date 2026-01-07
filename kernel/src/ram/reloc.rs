@@ -1,6 +1,6 @@
 use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{AP_VID, KBASE, KINFO, RAMType, RelaEntry},
+    kargs::{AP_VID, KBASE, KINFO, RAMType, RelaEntry, elf_segments},
     ram::{
         GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
         glacier::{GLACIER, HIHALF},
@@ -37,14 +37,19 @@ pub fn reloc() -> ! {
     );
 
     // Kernel mapping
-    GLACIER.write().map_range(
-        jump_target, new_kbase.addr(),
-        kinfo.size, flags::K_RWO
-    );
-    GLACIER.write().map_range(
-        jump_target + kinfo.text_ptr, new_kbase.addr() + kinfo.text_ptr,
-        kinfo.text_len, flags::K_ROX
-    );
+    for seg in elf_segments() {
+        let flags = match seg.flags {
+            0b100 => flags::K_ROO, // read only
+            0b101 => flags::K_ROX, // read & execute
+            0b110 => flags::K_RWO, // read & write
+            0b111 => flags::K_RWX, // read & write & execute
+            _     => flags::K_RWO  // fallback to read & write
+        };
+        GLACIER.write().map_range(
+            jump_target + seg.ptr, new_kbase.addr() + seg.ptr,
+            seg.len, flags
+        );
+    }
 
     // Kernel base update as physical address
     let old_kbase = KBASE.load(AtomOrd::SeqCst);
