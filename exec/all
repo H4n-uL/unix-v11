@@ -18,8 +18,8 @@ UNIX V11 All-in-One Script
 Usage: $0 <arch|-h> [options]
 
 Architectures:
-    AMD64    (alias: x86-64, x64)
     AArch64  (alias: Arm64, Armv8, Armv8a, Armv8-A)
+    AMD64    (alias: x86-64, x64)
     -h       Show this help
 
 Options:

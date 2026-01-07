@@ -5,5 +5,5 @@ macro_rules! use_arch {
     };
 }
 
-use_arch!("x86_64", amd64);
 use_arch!("aarch64", aarch64);
+use_arch!("x86_64", amd64);

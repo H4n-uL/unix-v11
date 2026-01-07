@@ -10,6 +10,17 @@ fn kernel_request(
 ) -> usize {
     let ret;
     unsafe {
+        #[cfg(target_arch = "aarch64")]
+        core::arch::asm!(
+            "svc #0",
+            inlateout("x0") req => ret,
+            in("x1") arg1,
+            in("x2") arg2,
+            in("x3") arg3,
+            in("x4") arg4,
+            in("x5") arg5,
+            in("x6") arg6
+        );
         #[cfg(target_arch = "x86_64")]
         core::arch::asm!(
             "syscall",
@@ -22,17 +33,6 @@ fn kernel_request(
             in("r9") arg6,
             out("rcx") _,
             out("r11") _
-        );
-        #[cfg(target_arch = "aarch64")]
-        core::arch::asm!(
-            "svc #0",
-            inlateout("x0") req => ret,
-            in("x1") arg1,
-            in("x2") arg2,
-            in("x3") arg3,
-            in("x4") arg4,
-            in("x5") arg5,
-            in("x6") arg6
         );
     }
     return ret;
