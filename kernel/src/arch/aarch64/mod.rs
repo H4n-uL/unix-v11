@@ -1,4 +1,6 @@
-pub mod inter; pub mod rvm;
+pub mod inter;
+pub mod proc;
+pub mod rvm;
 
 use crate::{
     arch::rvm::flags,
