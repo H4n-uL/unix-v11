@@ -2,92 +2,8 @@ use core::arch::{asm, global_asm};
 use seq_macro::seq;
 use spin::RwLock;
 
-const GDT: [[u8; 8]; 6] = [
-    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-    [0xff, 0xff, 0x00, 0x00, 0x00, 0x9a, 0xaf, 0x00],
-    [0xff, 0xff, 0x00, 0x00, 0x00, 0x92, 0xaf, 0x00],
-    [0xff, 0xff, 0x00, 0x00, 0x00, 0xf2, 0xaf, 0x00],
-    [0xff, 0xff, 0x00, 0x00, 0x00, 0xfa, 0xaf, 0x00],
-    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-];
-
-#[repr(C, packed)]
-struct GdtPtr {
-    limit: u16,
-    base: u64
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct TaskStatSeg {
-    _0: u32, rsp0: u64, rsp1: u64, rsp2: u64,
-    _1: u64, ist1: u64, ist2: u64, ist3: u64,
-    ist4: u64, ist5: u64, ist6: u64, ist7: u64,
-    _2: u64, _3: u16, iomap_base: u16
-}
-
-impl TaskStatSeg {
-    pub const fn new() -> Self {
-        return Self {
-            _0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
-            _1: 0, ist1: 0, ist2: 0, ist3: 0,
-            ist4: 0, ist5: 0, ist6: 0, ist7: 0,
-            _2: 0, _3: 0, iomap_base: size_of::<Self>() as u16
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct IdtEnt {
-    off_lo: u16,
-    sel: u16,
-    ist: u8,
-    attr: u8,
-    off_mid: u16,
-    off_hi: u32,
-    _0: u32
-}
-
-impl IdtEnt {
-    const fn new() -> Self {
-        return Self { off_lo: 0, sel: 0, ist: 0, attr: 0, off_mid: 0, off_hi: 0, _0: 0 };
-    }
-
-    fn set(&mut self, handler: u64, sel: u16, ist: u8, attr: u8) {
-        self.off_lo = handler as u16;
-        self.off_mid = (handler >> 16) as u16;
-        self.off_hi = (handler >> 32) as u32;
-        self.sel = sel;
-        self.ist = ist;
-        self.attr = attr;
-    }
-}
-
-static IDT: RwLock<[IdtEnt; 256]> = RwLock::new([IdtEnt::new(); 256]);
-
-#[repr(C, packed)]
-struct IdtPtr {
-    limit: u16,
-    base: u64
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct InterFrame {
-    pub xmm: [u128; 16],
-    pub mxcsr: u64,
-    _0: u64,
-    pub r15: u64, pub r14: u64, pub r13: u64, pub r12: u64,
-    pub r11: u64, pub r10: u64, pub r9: u64, pub r8: u64,
-    pub rbp: u64, pub rdi: u64, pub rsi: u64, pub rdx: u64,
-    pub rcx: u64, pub rbx: u64, pub rax: u64,
-    pub vec: u64, pub err: u64,
-    pub rip: u64, pub cs: u64, pub rflags: u64, pub rsp: u64, pub ss: u64
-}
-
 unsafe extern "C" {
-    fn syscall();
+    unsafe fn syscall();
 }
 
 seq!(N in 0..256 {
@@ -203,6 +119,90 @@ global_asm!(
         "add rsp, 16",
         "iretq"
 );
+
+const GDT: [[u8; 8]; 6] = [
+    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+    [0xff, 0xff, 0x00, 0x00, 0x00, 0x9a, 0xaf, 0x00],
+    [0xff, 0xff, 0x00, 0x00, 0x00, 0x92, 0xaf, 0x00],
+    [0xff, 0xff, 0x00, 0x00, 0x00, 0xf2, 0xaf, 0x00],
+    [0xff, 0xff, 0x00, 0x00, 0x00, 0xfa, 0xaf, 0x00],
+    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+];
+
+#[repr(C, packed)]
+struct GdtPtr {
+    limit: u16,
+    base: u64
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct TaskStatSeg {
+    _0: u32, rsp0: u64, rsp1: u64, rsp2: u64,
+    _1: u64, ist1: u64, ist2: u64, ist3: u64,
+    ist4: u64, ist5: u64, ist6: u64, ist7: u64,
+    _2: u64, _3: u16, iomap_base: u16
+}
+
+impl TaskStatSeg {
+    pub const fn new() -> Self {
+        return Self {
+            _0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
+            _1: 0, ist1: 0, ist2: 0, ist3: 0,
+            ist4: 0, ist5: 0, ist6: 0, ist7: 0,
+            _2: 0, _3: 0, iomap_base: size_of::<Self>() as u16
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct IdtEnt {
+    off_lo: u16,
+    sel: u16,
+    ist: u8,
+    attr: u8,
+    off_mid: u16,
+    off_hi: u32,
+    _0: u32
+}
+
+impl IdtEnt {
+    const fn new() -> Self {
+        return Self { off_lo: 0, sel: 0, ist: 0, attr: 0, off_mid: 0, off_hi: 0, _0: 0 };
+    }
+
+    fn set(&mut self, handler: u64, sel: u16, ist: u8, attr: u8) {
+        self.off_lo = handler as u16;
+        self.off_mid = (handler >> 16) as u16;
+        self.off_hi = (handler >> 32) as u32;
+        self.sel = sel;
+        self.ist = ist;
+        self.attr = attr;
+    }
+}
+
+static IDT: RwLock<[IdtEnt; 256]> = RwLock::new([IdtEnt::new(); 256]);
+
+#[repr(C, packed)]
+struct IdtPtr {
+    limit: u16,
+    base: u64
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct InterFrame {
+    pub xmm: [u128; 16],
+    pub mxcsr: u64,
+    _0: u64,
+    pub r15: u64, pub r14: u64, pub r13: u64, pub r12: u64,
+    pub r11: u64, pub r10: u64, pub r9: u64, pub r8: u64,
+    pub rbp: u64, pub rdi: u64, pub rsi: u64, pub rdx: u64,
+    pub rcx: u64, pub rbx: u64, pub rax: u64,
+    pub vec: u64, pub err: u64,
+    pub rip: u64, pub cs: u64, pub rflags: u64, pub rsp: u64, pub ss: u64
+}
 
 #[unsafe(no_mangle)]
 extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
