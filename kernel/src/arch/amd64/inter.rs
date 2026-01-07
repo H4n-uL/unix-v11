@@ -1,4 +1,5 @@
 use core::arch::{asm, global_asm};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap};
 use seq_macro::seq;
 use spin::RwLock;
 
@@ -95,14 +96,16 @@ macro_rules! call_handler {
 }
 
 global_asm!(
-    // syscall entry
     ".global syscall",
     "syscall:", // syscall entry
+        "swapgs",
+        "mov gs:[0], rsp",
+        "mov rsp, gs:[8]",
         // additional pushes to match interframe layout
-        "push 0x10",
-        "push rsp",
+        "push 0x1b",
+        "push qword ptr gs:[0]",
         "push r11",
-        "push 0x08",
+        "push 0x23",
         "push rcx",
         "push 0",
         "push 0x80",
@@ -111,7 +114,8 @@ global_asm!(
         "pop rcx",
         "add rsp, 8",
         "pop r11",
-        "add rsp, 16",
+        "pop rsp",
+        "swapgs",
         "sysretq",
 
     "isr_cmm:", // interrupt entry
@@ -120,13 +124,12 @@ global_asm!(
         "iretq"
 );
 
-const GDT: [[u8; 8]; 6] = [
+const GDT: [[u8; 8]; 5] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
     [0xff, 0xff, 0x00, 0x00, 0x00, 0x9a, 0xaf, 0x00],
     [0xff, 0xff, 0x00, 0x00, 0x00, 0x92, 0xaf, 0x00],
     [0xff, 0xff, 0x00, 0x00, 0x00, 0xf2, 0xaf, 0x00],
-    [0xff, 0xff, 0x00, 0x00, 0x00, 0xfa, 0xaf, 0x00],
-    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    [0xff, 0xff, 0x00, 0x00, 0x00, 0xfa, 0xaf, 0x00]
 ];
 
 #[repr(C, packed)]
@@ -135,9 +138,32 @@ struct GdtPtr {
     base: u64
 }
 
+#[repr(C)]
+struct GlobDescTbl {
+    null: [u8; 8],
+    code: [u8; 8],
+    data: [u8; 8],
+    code64: [u8; 8],
+    data64: [u8; 8],
+    tss: [u8; 16]
+}
+
+impl GlobDescTbl {
+    const fn new() -> Self {
+        return Self {
+            null: GDT[0],
+            code: GDT[1],
+            data: GDT[2],
+            code64: GDT[3],
+            data64: GDT[4],
+            tss: [0u8; 16]
+        }
+    }
+}
+
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
-pub struct TaskStatSeg {
+struct TaskStatSeg {
     _0: u32, rsp0: u64, rsp1: u64, rsp2: u64,
     _1: u64, ist1: u64, ist2: u64, ist3: u64,
     ist4: u64, ist5: u64, ist6: u64, ist7: u64,
@@ -145,7 +171,7 @@ pub struct TaskStatSeg {
 }
 
 impl TaskStatSeg {
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         return Self {
             _0: 0, rsp0: 0, rsp1: 0, rsp2: 0,
             _1: 0, ist1: 0, ist2: 0, ist3: 0,
@@ -155,8 +181,89 @@ impl TaskStatSeg {
     }
 }
 
+// Per-CPU data for swapgs
 #[repr(C)]
-#[derive(Clone, Copy)]
+pub struct PerCpuData {
+    pub user_rsp: u64,
+    pub kernel_rsp: u64
+}
+
+struct CPUDesc {
+    gdt: GlobDescTbl,
+    tss: TaskStatSeg,
+    percpu: PerCpuData
+}
+
+impl CPUDesc {
+    const fn new() -> Self {
+        return Self {
+            gdt: GlobDescTbl::new(),
+            tss: TaskStatSeg::new(),
+            percpu: PerCpuData { user_rsp: 0, kernel_rsp: 0 }
+        };
+    }
+
+    fn load_tss(&mut self) {
+        let tss_addr = &raw const self.tss as u64;
+        let limit = (core::mem::size_of::<TaskStatSeg>() - 1) as u32;
+
+        let tss_addr_bytes = tss_addr.to_ne_bytes();
+        let limit_bytes = limit.to_ne_bytes();
+
+        self.gdt.tss[0..2].copy_from_slice(&limit_bytes[0..2]);
+        self.gdt.tss[2..5].copy_from_slice(&tss_addr_bytes[0..3]);
+        self.gdt.tss[5] = 0x89; // present, type=32
+        self.gdt.tss[6] = limit_bytes[2] & 0x0f;
+        self.gdt.tss[7..12].copy_from_slice(&tss_addr_bytes[3..8]);
+    }
+
+    fn load(&mut self, stack_top: usize) {
+        self.tss.rsp0 = stack_top as u64;
+        self.percpu.kernel_rsp = stack_top as u64;
+        self.percpu.user_rsp = 0;
+        self.load_tss();
+
+        let gdtr = GdtPtr {
+            limit: (core::mem::size_of::<GlobDescTbl>() - 1) as u16,
+            base: &raw const self.gdt as u64
+        };
+        let percpu_addr = &raw const self.percpu as u64;
+
+        unsafe {
+            asm!(
+                "lgdt [{gdtr}]",
+                "push 0x08",
+                "lea rax, [rip + 2f]",
+                "push rax",
+                "retfq",
+                "2:",
+                "mov ax, 0x10",
+                "mov ds, ax",
+                "mov es, ax",
+                "mov fs, ax",
+                "mov gs, ax",
+                "mov ss, ax",
+                "ltr {tss:x}",
+                gdtr = in(reg) &gdtr,
+                tss = in(reg) 0x28u16,
+                options(nostack)
+            );
+
+            asm!(
+                "wrmsr",
+                in("ecx") 0xc0000102u32,
+                in("eax") percpu_addr as u32,
+                in("edx") (percpu_addr >> 32) as u32,
+                options(nostack)
+            );
+        }
+    }
+}
+
+static CPU_DESCS: RwLock<BTreeMap<usize, Box<CPUDesc>>> = RwLock::new(BTreeMap::new());
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct IdtEnt {
     off_lo: u16,
     sel: u16,
@@ -195,7 +302,7 @@ struct IdtPtr {
 pub struct InterFrame {
     pub xmm: [u128; 16],
     pub mxcsr: u64,
-    _0: u64,
+    pub _0: u64,
     pub r15: u64, pub r14: u64, pub r13: u64, pub r12: u64,
     pub r11: u64, pub r10: u64, pub r9: u64, pub r8: u64,
     pub rbp: u64, pub rdi: u64, pub rsi: u64, pub rdx: u64,
@@ -206,42 +313,51 @@ pub struct InterFrame {
 
 #[unsafe(no_mangle)]
 extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
-    crate::printlnk!("Exception: vec={}, err={:#x}", exc_type, frame.err);
-    crate::printlnk!("Frame: {:#x?}", frame);
+    match exc_type { // exc_type == frame.vec
+        // // CPU EXCEPTIONS
+        // 0  => { /* #DE divide error             */ }
+        // 1  => { /* #DB debug                    */ }
+        // 2  => { /* #NMI NON-MASKABLE INTERRUPT  */ }
+        // 3  => { /* #BP breakpoint               */ }
+        // 4  => { /* #OF overflow                 */ }
+        // 5  => { /* #BR bound range              */ }
+        // 6  => { /* #UD invalid opcode           */ }
+        // 7  => { /* #NM device not available     */ }
+        // 8  => { /* #DF double fault             */ }
+        // 10 => { /* #TS invalid TSS              */ }
+        // 11 => { /* #NP segment not present      */ }
+        // 12 => { /* #SS stack segment fault      */ }
+        // 13 => { /* #GP general protection fault */ }
+        // 14 => { /* #PF page fault               */ }
+        // 16 => { /* #MF FPU error                */ }
+        // 17 => { /* #AC alignment check          */ }
+        // 18 => { /* #MC machine check            */ }
+        // 19 => { /* #XM SIMD exception           */ }
+        // 20 => { /* #VE virtualisation           */ }
+        // 21 => { /* #CP control protection       */ }
 
-    match exc_type { // exc_type equals frame.vec
-        // CPU EXCEPTIONS
-        0  => { /* #DE divide error             */ }
-        1  => { /* #DB debug                    */ }
-        2  => { /* #NMI NON-MASKABLE INTERRUPT  */ }
-        3  => { /* #BP breakpoint               */ }
-        4  => { /* #OF overflow                 */ }
-        5  => { /* #BR bound range              */ }
-        6  => { /* #UD invalid opcode           */ }
-        7  => { /* #NM device not available     */ }
-        8  => { /* #DF double fault             */ }
-        10 => { /* #TS invalid TSS              */ }
-        11 => { /* #NP segment not present      */ }
-        12 => { /* #SS stack segment fault      */ }
-        13 => { /* #GP general protection fault */ }
-        14 => { /* #PF page fault               */ }
-        16 => { /* #MF FPU error                */ }
-        17 => { /* #AC alignment check          */ }
-        18 => { /* #MC machine check            */ }
-        19 => { /* #XM SIMD exception           */ }
-        20 => { /* #VE virtualisation           */ }
-        21 => { /* #CP control protection       */ }
+        // // AMD SPECIFIC
+        // 29 => { /* #VC VMM communication exception */ }
+        // 30 => { /* #SX security exception          */ }
+        // // END AMD SPECIFIC
 
-        // AMD SPECIFIC
-        29 => { /* #VC VMM communication exception */ }
-        30 => { /* #SX security exception          */ }
-        // END AMD SPECIFIC
+        // ..32 => { /* reserved by Intel */ }
+        // // END OF CPU EXCEPTIONS
 
-        ..32 => { /* reserved by Intel */ }
-        // END OF CPU EXCEPTIONS
+        128 => { /* syscall */
+            frame.rax = crate::kreq::kernel_requestee(
+                frame.rax as *const u8,
+                frame.rdi as usize, frame.rsi as usize, frame.rdx as usize,
+                frame.r10 as usize, frame.r8 as usize, frame.r9 as usize
+            ) as u64;
+        }
+        ..256 => { /* reserved or IRQ */
+            crate::printlnk!("Exception type: {}", exc_type);
+            crate::printlnk!("Exception frame: {:#x?}", frame);
 
-        128 => { /* syscall */ }
-        _  => { /* reserved or IRQ */ }
+            panic!("Unhandled exception");
+        }
+        _  => unreachable!()
     }
 }
 
@@ -264,29 +380,11 @@ pub fn set(enabled: bool) {
 }
 
 pub fn init() {
-    unsafe {
-        // GDT
-        let gdtr = GdtPtr {
-            limit: (size_of::<[[u8; 8]; 6]>() - 1) as u16,
-            base: GDT.as_ptr() as u64
-        };
-        asm!(
-            "lgdt [{}]",
-            "push 0x08",
-            "lea rax, [rip + 2f]",
-            "push rax",
-            "retfq",
-            "2:",
-            "mov ax, 0x10",
-            "mov ds, ax",
-            "mov es, ax",
-            "mov fs, ax",
-            "mov gs, ax",
-            "mov ss, ax",
-            in(reg) &gdtr,
-            options(nostack)
-        );
+    let mut desc = Box::new(CPUDesc::new());
+    desc.load(crate::ram::stack_top());
+    CPU_DESCS.write().insert(crate::kargs::ap_vid(), desc);
 
+    unsafe {
         // IDT
         let mut idt = IDT.write();
         for i in 0..256 {
