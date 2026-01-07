@@ -76,25 +76,24 @@ impl ProcCtrlBlk {
                 let phys_addr = proc_addr + (virt_addr - va_base);
                 let phys_ptr = phys_addr as *mut u8;
 
-                let pf = ph.flags();
-                let flag = ((pf.is_write() as usize) << 1) | pf.is_execute() as usize;
-                let map_flags = [
-                    flags::U_ROO,
-                    flags::U_ROX,
-                    flags::U_RWO,
-                    flags::U_RWX
-                ][flag];
+                let flags = match ph.flags().0 {
+                    0b100 => flags::U_ROO, // read only
+                    0b101 => flags::U_ROX, // read & execute
+                    0b110 => flags::U_RWO, // read & write
+                    0b111 => flags::U_RWX, // read & write & execute
+                    _     => flags::U_RWO  // fallback to read & write
+                };
 
                 glacier.map_range(
                     virt_addr, phys_addr,
-                    mem_size, map_flags
+                    mem_size, flags
                 );
 
                 vram_map.push(VRamMap {
                     va: virt_addr,
                     pa: phys_addr,
                     size: mem_size,
-                    flags: map_flags
+                    flags
                 });
 
                 unsafe {
