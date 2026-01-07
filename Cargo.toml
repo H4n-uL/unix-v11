@@ -1,5 +1,5 @@
 [workspace]
-members = ["efi", "kernel"]
+members = ["corecli/*", "efi", "kernel"]
 resolver = "3"
 
 [profile.dev]
