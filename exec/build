@@ -95,17 +95,17 @@ if [ "$RELEASE" = "true" ]; then
     BUILD_ARGS="-r"
 fi
 if [ "$VERBOSE" = "false" ]; then
-    BUILD_ARGS="$BUILD_ARGS -q"
+    BUILD_ARGS="$BUILD_ARGS -q -- -A warnings"
 fi
 
 cd $PRJCT_ROOT/efi
-cargo build --target $EFI_TARGET $BUILD_ARGS
+cargo rustc --target $EFI_TARGET $BUILD_ARGS
 
 cd $PRJCT_ROOT/kernel
-cargo build --target $KERNEL_TARGET $BUILD_ARGS
+cargo rustc --target $KERNEL_TARGET $BUILD_ARGS
 
 cd $PRJCT_ROOT/corecli/aleph
-cargo build --target $KERNEL_TARGET $BUILD_ARGS
+cargo rustc --target $KERNEL_TARGET $BUILD_ARGS
 
 cd $PRJCT_ROOT
 
