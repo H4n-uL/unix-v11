@@ -124,8 +124,8 @@ global_asm!(
 );
 
 #[repr(C)]
-#[derive(Debug)]
-pub struct ExceptionFrame {
+#[derive(Clone, Copy, Debug)]
+pub struct InterFrame {
     pub x: [u64; 32],  // x regs
     pub elr: u64,      // ret addr
     pub spsr: u64,     // saved pstate
@@ -137,27 +137,34 @@ pub struct ExceptionFrame {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn exc_handler(exc_type: u64, frame: &mut ExceptionFrame) {
-    crate::printlnk!("Exception type: {}", exc_type);
-    crate::printlnk!("Exception frame: {:#x?}", frame);
-
+extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
     match exc_type {
-        0  => { /* sync el1t */ }
-        1  => { /* irq  el1t */ }
-        2  => { /* fiq  el1t */ }
-        3  => { /* serr el1t */ }
-        4  => { /* sync el1h */ }
-        5  => { /* irq  el1h */ }
-        6  => { /* fiq  el1h */ }
-        7  => { /* serr el1h */ }
-        8  => { /* sync el0  */ }
-        9  => { /* irq  el0  */ }
-        10 => { /* fiq  el0  */ }
-        11 => { /* serr el0  */ }
-        12 => { /* sync el0  */ }
-        13 => { /* irq  el0  */ }
-        14 => { /* fiq  el0  */ }
-        15 => { /* serr el0  */ }
+        // 0  => { /* sync el1t */ }
+        // 1  => { /* irq  el1t */ }
+        // 2  => { /* fiq  el1t */ }
+        // 3  => { /* serr el1t */ }
+        // 4  => { /* sync el1h */ }
+        // 5  => { /* irq  el1h */ }
+        // 6  => { /* fiq  el1h */ }
+        // 7  => { /* serr el1h */ }
+        8  | 12 => { /* sync el0 */
+            if (frame.esr >> 26) & 0x3f == 0x15 { // supervisor call
+                frame.x[0] = crate::kreq::kernel_requestee(
+                    frame.x[0] as *const u8,
+                    frame.x[1] as usize, frame.x[2] as usize, frame.x[3] as usize,
+                    frame.x[4] as usize, frame.x[5] as usize, frame.x[6] as usize
+                ) as u64;
+            }
+        }
+        // 9  | 13 => { /* irq  el0  */ }
+        // 10 | 14 => { /* fiq  el0  */ }
+        // 11 | 15 => { /* serr el0  */ }
+        ..16 => {
+            crate::printlnk!("Exception type: {}", exc_type);
+            crate::printlnk!("Exception frame: {:#x?}", frame);
+
+            panic!("Unhandled exception");
+        }
         _ => unreachable!()
     }
 }
