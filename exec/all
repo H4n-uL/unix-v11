@@ -6,7 +6,7 @@ ARCH=""
 DISK_SIZE=64
 RAM_SIZE=512
 CPU_COUNT=1
-VERBOSE=false
+VERBOSE=0
 CLEAN=false
 BUILD_ONLY=false
 RELEASE=false
@@ -26,6 +26,7 @@ Options:
     -c         Clean before building
     -r         Release build
     -v         Verbose output
+    -V         Verbose output including compiler warnings
     -n         Build only, not running QEMU
     -d <size>  Disk size in MiB [default: 64 MiB]
     -p <count> CPU count [default: 1]
@@ -34,7 +35,7 @@ Options:
 Examples:
     $0 amd64
     $0 aarch64 -R 8192 -p 4 -rv
-    $0 arm64 -n
+    $0 arm64 -n -V
     $0 x86-64 -d 524288 -c
 
 EOF
@@ -94,10 +95,11 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -*)
-            case "$1" in -*r*) RELEASE=true ;; esac
+            case "$1" in -*r*) RELEASE=true    ;; esac
             case "$1" in -*n*) BUILD_ONLY=true ;; esac
-            case "$1" in -*c*) CLEAN=true ;; esac
-            case "$1" in -*v*) VERBOSE=true ;; esac
+            case "$1" in -*c*) CLEAN=true      ;; esac
+            case "$1" in -*v*) VERBOSE=1       ;; esac
+            case "$1" in -*V*) VERBOSE=2       ;; esac
             ;;
     esac
     shift
@@ -112,9 +114,10 @@ fi
 if [ "$RELEASE" = "true" ]; then
     BUILD_ARGS="$BUILD_ARGS -r"
 fi
-if [ "$VERBOSE" = "true" ]; then
-    BUILD_ARGS="$BUILD_ARGS -v"
-fi
+case "$VERBOSE" in
+    1) BUILD_ARGS="$BUILD_ARGS -v" ;;
+    2) BUILD_ARGS="$BUILD_ARGS -V" ;;
+esac
 
 "$SCRIPT_DIR/build" $BUILD_ARGS
 "$SCRIPT_DIR/img" -o unix-$DISK_ARCH.disk -s $DISK_SIZE

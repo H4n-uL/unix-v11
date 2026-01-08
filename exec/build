@@ -4,7 +4,7 @@ set -e
 PRJCT_ROOT=`cd \`dirname "$0"\`/.. && pwd`
 
 ARCH=""
-VERBOSE=false
+VERBOSE=0
 CLEAN=false
 RELEASE=false
 
@@ -23,10 +23,11 @@ Options:
     -r      Release build
     -c      Clean before building
     -v      Verbose output
+    -V      Verbose output including compiler warnings
 
 Examples:
     $0 amd64 -r -v
-    $0 aarch64 -cv
+    $0 aarch64 -cV
 
 EOF
     exit 0
@@ -69,15 +70,10 @@ esac
 shift
 
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -*r*) RELEASE=true ;;
-    esac
-    case "$1" in
-        -*c*) CLEAN=true ;;
-    esac
-    case "$1" in
-        -*v*) VERBOSE=true ;;
-    esac
+    case "$1" in -*r*) RELEASE=true ;; esac
+    case "$1" in -*c*) CLEAN=true   ;; esac
+    case "$1" in -*v*) VERBOSE=1    ;; esac
+    case "$1" in -*V*) VERBOSE=2    ;; esac
     shift
 done
 
@@ -94,9 +90,15 @@ BUILD_ARGS=""
 if [ "$RELEASE" = "true" ]; then
     BUILD_ARGS="-r"
 fi
-if [ "$VERBOSE" = "false" ]; then
-    BUILD_ARGS="$BUILD_ARGS -q -- -A warnings"
+if [ "$VERBOSE" = "0" ]; then
+    BUILD_ARGS="$BUILD_ARGS -q"
 fi
+
+BUILD_ARGS="$BUILD_ARGS --"
+
+case "$VERBOSE" in
+    0|1) BUILD_ARGS="$BUILD_ARGS -A warnings" ;;
+esac
 
 cd $PRJCT_ROOT/efi
 cargo rustc --target $EFI_TARGET $BUILD_ARGS
