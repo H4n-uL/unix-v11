@@ -3,7 +3,7 @@ use crate::{
         NON_RAM, RAMDescriptor, RAMType, RECLAMABLE, Segment,
         efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
-    ram::{PAGE_4KIB, align_up},
+    ram::{PAGE_4KIB, align_up, mutex::IntLock},
     sort::HeaplessSort
 };
 
@@ -158,7 +158,7 @@ pub struct PhysAlloc {
     is_init: bool
 }
 
-pub struct PhysAllocGlob(pub Mutex<PhysAlloc>);
+pub struct PhysAllocGlob(pub IntLock<Mutex<()>, PhysAlloc>);
 
 const BASE_RB_SIZE: usize = 128;
 static mut RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
@@ -533,7 +533,7 @@ impl PhysAlloc {
 
 impl PhysAllocGlob {
     const fn empty() -> Self {
-        return Self(Mutex::new(PhysAlloc::empty()));
+        return Self(IntLock::new(PhysAlloc::empty()));
     }
 
     pub fn init(&self) { self.0.lock().init(); }
