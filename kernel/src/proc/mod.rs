@@ -46,7 +46,7 @@ pub fn exec_aleph() {
 }
 
 fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
-    let ctxt = &raw const *proc.ctxt;
+    let ctxt = *proc.ctxt;
 
     {
         proc.glacier.activate();
@@ -58,6 +58,6 @@ fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
     }
 
     unsafe {
-        crate::arch::proc::rstr_ctxt(&*ctxt);
+        crate::arch::proc::rstr_ctxt(&ctxt);
     }
 }
