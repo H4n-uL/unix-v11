@@ -8,7 +8,7 @@ use crate::{
     kargs::{AP_LIST, KINFO, RAMType},
     ram::{
         glacier::{GLACIER, hihalf},
-        physalloc::{AllocParams, PHYS_ALLOC}
+        physalloc::{AllocParams, OwnedPtr, PHYS_ALLOC}
     }
 };
 
@@ -49,10 +49,7 @@ const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-alig
 // +------------------+ -      0x0
 
 // For DMA or other physical page-aligned buffers
-pub struct PhysPageBuf {
-    ptr: *mut u8,
-    size: usize
-}
+pub struct PhysPageBuf(OwnedPtr);
 
 impl PhysPageBuf {
     pub fn new(size: usize) -> Option<Self> {
@@ -61,26 +58,58 @@ impl PhysPageBuf {
                 .align(PAGE_4KIB)
                 .as_type(RAMType::KernelData)
         )?;
-        return Some(Self { ptr: ptr.ptr(), size: ptr.size() });
+        return Some(Self(ptr));
     }
 }
 
 impl Drop for PhysPageBuf {
     fn drop(&mut self) {
-        unsafe { PHYS_ALLOC.free_raw(self.ptr, self.size); }
+        PHYS_ALLOC.free(unsafe { self.0.clone() });
     }
 }
 
 impl Deref for PhysPageBuf {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        unsafe { core::slice::from_raw_parts(self.ptr, self.size) }
+        return self.0.into_slice();
     }
 }
 
 impl DerefMut for PhysPageBuf {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.size) }
+        return self.0.into_slice_mut();
+    }
+}
+
+pub struct VirtPageBuf {
+    ptr: *mut u8,
+    layout: Layout
+}
+
+impl VirtPageBuf {
+    pub fn new(size: usize) -> Option<Self> {
+        let layout = Layout::from_size_align(size, PAGE_4KIB).ok()?;
+        let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
+        return Some(Self { ptr, layout });
+    }
+}
+
+impl Drop for VirtPageBuf {
+    fn drop(&mut self) {
+        unsafe { alloc::alloc::dealloc(self.ptr, self.layout); }
+    }
+}
+
+impl Deref for VirtPageBuf {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::slice::from_raw_parts(self.ptr, self.layout.size()) }
+    }
+}
+
+impl DerefMut for VirtPageBuf {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.layout.size()) }
     }
 }
 
