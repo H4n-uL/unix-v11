@@ -12,6 +12,24 @@ pub fn halt() {
 pub const R_RELATIVE: usize = 8;
 const COM1: u16 = 0x3f8;
 
+#[inline(always)]
+pub fn phys_id() -> usize {
+    let apic_id: u32;
+    unsafe {
+        asm!(
+            "push rax",
+            "push rbx",
+            "mov eax, 1",
+            "cpuid",
+            "mov {0:e}, ebx",
+            "pop rbx",
+            "pop rax",
+            out(reg) apic_id
+        );
+    }
+    return (apic_id >> 24) as usize;
+}
+
 pub fn init_serial() {
     unsafe {
         asm!(
@@ -89,11 +107,9 @@ pub fn stack_ptr() -> *const u8 {
     return rsp as *const u8;
 }
 
-// ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
 #[inline(always)]
-pub unsafe fn move_stack(addr: usize, size: usize) {
+pub unsafe fn move_stack(addr: usize) {
     unsafe {
-        (addr as *mut u8).write_bytes(0, size);
-        asm!("mov rsp, {}", in(reg) addr + size);
+        asm!("mov rsp, {}", in(reg) addr);
     }
 }

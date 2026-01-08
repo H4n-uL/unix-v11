@@ -18,6 +18,13 @@ pub const R_RELATIVE: usize = 1027;
 const SERIAL_IO: usize = 0usize.wrapping_sub(PAGE_4KIB);
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
+#[inline(always)]
+pub fn phys_id() -> usize {
+    let mpidr: usize;
+    unsafe { asm!("mrs {}, mpidr_el1", out(reg) mpidr); }
+    return mpidr & 0xffff;
+}
+
 pub fn init_serial() {
     GLACIER.write().map_page(
         SERIAL_IO, UART0_BASE, flags::D_RW
@@ -56,11 +63,9 @@ pub fn stack_ptr() -> *const u8 {
     return sp as *const u8;
 }
 
-// ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
 #[inline(always)]
-pub unsafe fn move_stack(addr: usize, size: usize) {
+pub unsafe fn move_stack(addr: usize) {
     unsafe {
-        (addr as *mut u8).write_bytes(0, size);
-        asm!("mov sp, {}", in(reg) addr + size);
+        asm!("mov sp, {}", in(reg) addr);
     }
 }

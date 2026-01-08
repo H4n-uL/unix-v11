@@ -1,10 +1,11 @@
 pub mod glacier;
+pub mod mutex;
 pub mod physalloc;
 pub mod reloc;
 
 use crate::{
     arch::rvm::flags,
-    kargs::{KINFO, RAMType, ap_vid},
+    kargs::{AP_LIST, KINFO, RAMType},
     ram::{
         glacier::{GLACIER, hihalf},
         physalloc::{AllocParams, PHYS_ALLOC}
@@ -216,5 +217,5 @@ pub fn init_heap() {
 }
 
 pub fn stack_top() -> usize {
-    return GLEAM_BASE - (ap_vid() * PER_CPU_DATA);
+    return GLEAM_BASE - (AP_LIST.virtid_self() * PER_CPU_DATA);
 }
