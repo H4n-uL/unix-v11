@@ -28,15 +28,16 @@ Options:
     -v         Verbose output
     -V         Verbose output including compiler warnings
     -n         Build only, not running QEMU
-    -d <size>  Disk size in MiB [default: 64 MiB]
+    -o <name>  Name of disk image [default: unix-<arch>.disk]
+    -s <size>  Disk size in MiB [default: 64 MiB]
     -p <count> CPU count [default: 1]
     -R <size>  RAM size in MiB [default: 512 MiB]
 
 Examples:
     $0 amd64
     $0 aarch64 -R 8192 -p 4 -rv
-    $0 arm64 -n -V
-    $0 x86-64 -d 524288 -c
+    $0 arm64 -n -V -o rawdisk.img
+    $0 x86-64 -s 524288 -c
 
 EOF
     exit 0
@@ -78,19 +79,29 @@ case $ARCH in
         die "Unknown architecture: $ARCH"
         ;;
 esac
-
 shift
+
+DISK_NAME="unix-$DISK_ARCH.disk"
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -d|-p|-R)
+        -o)
+            if [ -z "$2" ] || [ `echo "$2" | cut -c1` = "-" ]; then
+                die_msg="-o requires a path argument"
+                [ -n "$2" ] && die_msg="$die_msg\nIf you want to use a path with a leading dash, please consider adding \`./\` prefix."
+                die "$die_msg"
+            fi
+            DISK_NAME="$2"
+            shift
+            ;;
+        -p|-R|-s)
             if [ -z "$2" ] || ! is_uint "$2"; then
                 die "$1 requires an uint argument"
             fi
             case "$1" in
-                -d) DISK_SIZE="$2" ;;
                 -p) CPU_COUNT="$2" ;;
                 -R) RAM_SIZE="$2" ;;
+                -s) DISK_SIZE="$2" ;;
             esac
             shift
             ;;
@@ -120,8 +131,8 @@ case "$VERBOSE" in
 esac
 
 "$SCRIPT_DIR/build" $BUILD_ARGS
-"$SCRIPT_DIR/img" -o unix-$DISK_ARCH.disk -s $DISK_SIZE
+"$SCRIPT_DIR/img" -o $DISK_NAME -s $DISK_SIZE
 
 if [ "$BUILD_ONLY" = "false" ]; then
-    "$SCRIPT_DIR/run" $ARCH -i unix-$DISK_ARCH.disk -r $RAM_SIZE -p $CPU_COUNT
+    "$SCRIPT_DIR/run" $ARCH -i $DISK_NAME -r $RAM_SIZE -p $CPU_COUNT
 fi
