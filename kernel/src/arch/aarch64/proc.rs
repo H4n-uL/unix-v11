@@ -41,13 +41,11 @@ impl InterFrame {
     }
 }
 
-// ctxt MUST NEVER be in kernel stack,
-// since this function is intended to destroy it.
 #[inline(always)]
 pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
     unsafe {
         asm!(
-            "mov sp, {ksp}",
+            "mov x8, {ksp}",
             "mov x9, {ctxt}",
 
             "ldr x10, [x9, #256]",
@@ -82,7 +80,6 @@ pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
             "ldp x2, x3, [x9, #16]",
             "ldp x4, x5, [x9, #32]",
             "ldp x6, x7, [x9, #48]",
-            "ldr x8, [x9, #64]",
             "ldp x10, x11, [x9, #80]",
             "ldp x12, x13, [x9, #96]",
             "ldp x14, x15, [x9, #112]",
@@ -95,6 +92,8 @@ pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
             "ldp x28, x29, [x9, #224]",
             "ldr x30, [x9, #240]",
 
+            "mov sp, x8",
+            "ldr x8, [x9, #64]",
             "ldr x9, [x9, #72]",
             "eret",
             ctxt = in(reg) ctxt,

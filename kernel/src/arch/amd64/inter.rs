@@ -298,7 +298,7 @@ struct IdtPtr {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct InterFrame {
     pub xmm: [u128; 16],
     pub mxcsr: u64,
