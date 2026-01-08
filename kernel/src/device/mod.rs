@@ -1,4 +1,4 @@
-mod acpi; pub mod block; mod nvme; mod vga;
+mod acpi; pub mod block; mod cpu; mod nvme; mod vga;
 
 use crate::{
     arch::rvm::flags,
@@ -9,9 +9,9 @@ use crate::{
 };
 
 use alloc::{string::String, vec::Vec};
-use acpi::{sdt::{madt::{Madt, MadtEntry}, mcfg::Mcfg}, AcpiTables};
+use acpi::{sdt::mcfg::Mcfg, AcpiTables};
 use fdt::Fdt;
-use spin::Mutex;
+use spin::RwLock;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PciDevice {
@@ -138,14 +138,16 @@ fn scan_pcie_devices(base: u64, start_bus: u8, end_bus: u8) -> Vec<PciDevice> {
     return devices;
 }
 
-pub static PCI_DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
-pub static ACPI: Mutex<Option<AcpiTables<KernelAcpiHandler>>> = Mutex::new(None);
-pub static DEVICETREE: Mutex<Option<Fdt>> = Mutex::new(None);
+pub static PCI_DEVICES: RwLock<Vec<PciDevice>> = RwLock::new(Vec::new());
+pub static ACPI: RwLock<Option<AcpiTables<KernelAcpiHandler>>> = RwLock::new(None);
+pub static DEVICETREE: RwLock<Option<Fdt>> = RwLock::new(None);
 
 pub fn scan_pci() {
-    if let Some(acpi) = ACPI.lock().as_ref() {
+    let mut pci = PCI_DEVICES.write();
+
+    if let Some(acpi) = ACPI.read().as_ref() {
         if let Some(mcfg) = acpi.find_table::<Mcfg>() {
-            *PCI_DEVICES.lock() = mcfg.get().entries().iter().flat_map(|entry| {
+            *pci = mcfg.get().entries().iter().flat_map(|entry| {
                 let mcfg_base = entry.base_address;
                 let start_bus = entry.bus_number_start;
                 let end_bus = entry.bus_number_end;
@@ -155,8 +157,8 @@ pub fn scan_pci() {
             panic!("No PCIe devices found")
         }
     }
-    if let Some(dtb) = DEVICETREE.lock().as_ref() {
-        *PCI_DEVICES.lock() = dtb.all_nodes().flat_map(|node| {
+    if let Some(dtb) = DEVICETREE.read().as_ref() {
+        *pci = dtb.all_nodes().flat_map(|node| {
             if let Some(compatible) = node.properties().find(|p| p.name == "compatible") {
                 let compat_str = String::from_utf8_lossy(compatible.value);
 
@@ -186,7 +188,7 @@ pub fn scan_pci() {
 
 pub fn init_acpi() {
     let ptr = SYSINFO.read().acpi_ptr;
-    *ACPI.lock() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, ptr) } {
+    *ACPI.write() = match unsafe { AcpiTables::from_rsdp(KernelAcpiHandler, ptr) } {
         Ok(tables) => Some(tables),
         Err(_) => None
     };
@@ -194,7 +196,7 @@ pub fn init_acpi() {
 
 pub fn init_device_tree() {
     let ptr = SYSINFO.read().dtb_ptr;
-    *DEVICETREE.lock() = match unsafe { Fdt::from_ptr(ptr as *const u8) } {
+    *DEVICETREE.write() = match unsafe { Fdt::from_ptr(ptr as *const u8) } {
         Ok(devtree) => Some(devtree),
         Err(_) => None
     }
@@ -205,7 +207,7 @@ pub fn init_device() {
     init_device_tree();
     scan_pci();
 
-    for dev in PCI_DEVICES.lock().iter() {
+    for dev in PCI_DEVICES.read().iter() {
         printk!(
             "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
             dev.bus(), dev.device(), dev.function(),
@@ -220,28 +222,7 @@ pub fn init_device() {
         printlnk!();
     }
 
-    if let Some(acpi) = ACPI.lock().as_ref() {
-        if let Some(madt) = acpi.find_table::<Madt>() {
-            for entry in madt.get().entries() {
-                match entry {
-                    MadtEntry::LocalApic(lapic) => {
-                        let puid = lapic.processor_id;
-                        let apicid = lapic.apic_id;
-                        let flags = lapic.flags;
-                        printlnk!("APIC CPU ID {}, APIC ID {}, Flags {:#x}", puid, apicid, flags);
-                    }
-                    MadtEntry::Gicc(gicc) => {
-                        let puid = gicc.processor_uid;
-                        let mpidr = gicc.mpidr;
-                        let flags = gicc.flags;
-                        printlnk!("GIC CPU UID {}, MPIDR {:#x}, Flags {:#x}", puid, mpidr, flags);
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
+    // cpu::init_cpu();
     nvme::init_nvme();
     vga::init_vga();
 }

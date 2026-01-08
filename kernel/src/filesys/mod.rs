@@ -256,7 +256,7 @@ pub fn init_filesys() -> Result<(), String> {
 
     let devdir = vfs.walk("/dev")?;
 
-    for (idx, dev) in BLOCK_DEVICES.lock().iter().enumerate() {
+    for (idx, dev) in BLOCK_DEVICES.read().iter().enumerate() {
         let devname = format!("block{}", idx);
 
         let block = Arc::new(DevFile::new(dev.clone()));
