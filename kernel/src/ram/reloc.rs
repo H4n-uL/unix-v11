@@ -3,7 +3,7 @@ use crate::{
     kargs::{AP_VID, KBASE, KINFO, RAMType, RelaEntry, elf_segments},
     ram::{
         GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
-        glacier::{GLACIER, HIHALF},
+        glacier::{GLACIER, hihalf},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
@@ -17,7 +17,7 @@ pub static SPARK_PTR: AtomicUsize = AtomicUsize::new(0);
 
 pub fn reloc() -> ! {
     let kinfo = *KINFO.read();
-    let jump_target = HIHALF.load(AtomOrd::Relaxed);
+    let jump_target = hihalf();
 
     // Kernel allocation
     let new_kbase = PHYS_ALLOC.alloc(
