@@ -19,15 +19,6 @@ use core::{
 use spin::Mutex;
 use talc::{OomHandler, Span, Talc, Talck};
 
-pub const PAGE_4KIB: usize = 0x1000;
-pub const STACK_SIZE: usize = 0x4000;
-pub const PER_CPU_DATA: usize = 0x10000;
-const _: () = assert!(PER_CPU_DATA % PAGE_4KIB == 0, "PER_CPU_DATA must be page-aligned");
-
-// Base addr of Global Emergency Access Map
-pub const GLEAM_BASE: usize = 0usize.wrapping_sub(PER_CPU_DATA);
-const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-aligned");
-
 // Top of virtual RAM
 // +------------------+ - 0x1_0000_0000_0000_0000
 // |      GLEAM       | 64 kiB: global emergency access map
@@ -37,7 +28,18 @@ const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-alig
 // |  per-cpu data 1  | 64 kiB: per-cpu data for cpu 1
 // +------------------+ -   0xffff_ffff_fffd_0000
 // |       ...        | etc.
+// +------------------+ - HIHALF + KINFO.size + KHEAP.size
+// |       heap       | variable: kernel heap
+// +------------------+ - HIHALF + KINFO.size
+// |      Kernel      | variable: UNIX V11 Kernel Image
+// +------------------+ - HIHALF
+// Bottom of Hi-Half
+
+// Top of Lo-Half
 // +------------------+
+// |  idmap ||  user  |
+// +------------------+
+// Bottom of virtual RAM
 
 // per-cpu data
 // +------------------+ - 0x1_0000
@@ -47,6 +49,15 @@ const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-alig
 // +------------------+ -   0xb000
 // |     cpu info     | 44 kiB: per-cpu mappings and structures
 // +------------------+ -      0x0
+
+pub const PAGE_4KIB: usize = 0x1000;
+pub const STACK_SIZE: usize = 0x4000;
+pub const PER_CPU_DATA: usize = 0x10000;
+const _: () = assert!(PER_CPU_DATA % PAGE_4KIB == 0, "PER_CPU_DATA must be page-aligned");
+
+// Base addr of Global Emergency Access Map
+pub const GLEAM_BASE: usize = 0usize.wrapping_sub(PER_CPU_DATA);
+const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-aligned");
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf(OwnedPtr);
