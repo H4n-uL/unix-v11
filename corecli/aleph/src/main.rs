@@ -1,3 +1,9 @@
+//!                                   Aleph                                  !//
+//!
+//! Crafted by HaƞuL in 2026
+//! Description: PID 1 process of UNIX Version 11
+//! Licence: Non-assertion pledge
+
 #![no_std]
 #![no_main]
 

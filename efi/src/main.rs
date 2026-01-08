@@ -2,7 +2,7 @@
 //!
 //! Crafted by HaƞuL in 2025-2026
 //! Description: EFI Bootloader of UNIX Version 11
-//! Licence: Non-assertion
+//! Licence: Non-assertion pledge
 
 #![no_std]
 #![no_main]
