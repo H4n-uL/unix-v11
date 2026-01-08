@@ -1,6 +1,6 @@
 use crate::{
-    kargs::ap_vid, printlnk,
-    proc::PROCS, ram::glacier::GLACIER
+    kargs::ap_vid, printlnk, proc::PROCS,
+    ram::glacier::{GLACIER, hihalf}
 };
 
 use core::slice::from_raw_parts;
@@ -16,8 +16,14 @@ pub extern "C" fn kernel_requestee(
         .unwrap_or(16);
 
     match unsafe { from_raw_parts(req, len) } {
-        b"_print" => {
+        b"_print" => { // This syscall is for debugging purposes only
             for i in 0..arg2 {
+                if arg1 >= hihalf() {
+                    break;
+                    // This should cause a page fault
+                    // before implementing page fault handler,
+                    // all we can do is to just stop printing
+                }
                 crate::arch::serial_putchar(
                     unsafe { *(arg1 as *const u8).add(i) }
                 );
