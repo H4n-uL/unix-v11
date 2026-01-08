@@ -27,7 +27,6 @@ impl Dma for NVMeAlloc {
     }
 
     unsafe fn map_mmio(&self, phys: usize, size: usize) -> usize {
-        crate::printlnk!("NVMe MMIO map: phys={:#x}, size={:#x}", phys, size);
         GLACIER.write().map_range(phys, phys, size, flags::D_RW);
         return phys;
     }
