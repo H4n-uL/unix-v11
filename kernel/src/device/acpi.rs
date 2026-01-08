@@ -23,7 +23,12 @@ impl Handler for KernelAcpiHandler {
         } };
     }
 
-    fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
+    fn unmap_physical_region<T>(region: &PhysicalMapping<Self, T>) {
+        GLACIER.write().unmap_range(
+            region.virtual_start.as_ptr() as usize,
+            region.mapped_length
+        );
+    }
 
     fn read_u8(&self, addr: usize) -> u8 { unsafe { *(addr as *const u8) } }
     fn read_u16(&self, addr: usize) -> u16 { unsafe { *(addr as *const u16) } }
