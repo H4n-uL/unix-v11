@@ -3,12 +3,11 @@ use crate::{
     filesys::vfn::VirtFNode,
     ram::{
         PhysPageBuf,
-        glacier::{Glacier, HIHALF},
+        glacier::{Glacier, hihalf},
         physalloc::{AllocParams, OwnedPtr, PHYS_ALLOC}
     }
 };
 
-use core::sync::atomic::Ordering as AtomOrd;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use xmas_elf::{ElfFile, program::Type};
 
@@ -108,7 +107,7 @@ impl ProcCtrlBlk {
             AllocParams::new(stack_size)
         ).ok_or("Failed to allocate user stack")?;
 
-        let lohalf_top = 0usize.wrapping_sub(HIHALF.load(AtomOrd::Relaxed));
+        let lohalf_top = 0usize.wrapping_sub(hihalf());
         glacier.map_range(
             lohalf_top - stack_size, stack_ptr.addr(),
             stack_size, flags::U_RWO

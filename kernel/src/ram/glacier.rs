@@ -262,6 +262,10 @@ impl Glacier {
 pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
 
+pub fn hihalf() -> usize {
+    return HIHALF.load(AtomOrd::Relaxed);
+}
+
 pub fn flags_for_type(ty: RAMType) -> usize {
     match ty {
         RAMType::Conv => flags::K_RWX,

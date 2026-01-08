@@ -6,15 +6,14 @@ use crate::{
     arch::rvm::flags,
     kargs::{KINFO, RAMType, ap_vid},
     ram::{
-        glacier::{GLACIER, HIHALF},
+        glacier::{GLACIER, hihalf},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
 
 use core::{
     alloc::Layout,
-    ops::{Deref, DerefMut},
-    sync::atomic::Ordering as AtomOrd
+    ops::{Deref, DerefMut}
 };
 use spin::Mutex;
 use talc::{OomHandler, Span, Talc, Talck};
@@ -210,7 +209,7 @@ pub fn dump_bytes(buf: &[u8]) {
 
 pub fn init_heap() {
     let heap_base = align_up(
-        KINFO.read().size + HIHALF.load(AtomOrd::Relaxed),
+        KINFO.read().size + hihalf(),
         PAGE_4KIB
     );
     KHEAP.lock().oom_handler.set_base(heap_base);

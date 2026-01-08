@@ -1,7 +1,6 @@
 pub mod ctrlblk;
 
 use crate::{
-    arch::inter::InterFrame,
     filesys::VFS,
     kargs::ap_vid,
     printlnk,
@@ -47,9 +46,16 @@ pub fn exec_aleph() {
 }
 
 fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
-    let ctxt = &*proc.ctxt as *const InterFrame;
-    proc.glacier.activate();
-    PROCS.write().running.insert(ap_vid(), proc);
+    let ctxt = &raw const *proc.ctxt;
+
+    {
+        proc.glacier.activate();
+        let mut procs = PROCS.write();
+        if let Some(old_proc) = procs.running.remove(&ap_vid()) {
+            procs.ready.push_back(old_proc);
+        }
+        procs.running.insert(ap_vid(), proc);
+    }
 
     unsafe {
         crate::arch::proc::rstr_ctxt(&*ctxt);
