@@ -1,5 +1,5 @@
 use alloc::{string::String, sync::Arc, vec::Vec};
-use spin::Mutex;
+use spin::RwLock;
 
 pub trait BlockDevice: Send + Sync {
     fn block_size(&self) -> u64;
@@ -48,4 +48,4 @@ impl DevId {
     }
 }
 
-pub static BLOCK_DEVICES: Mutex<Vec<Arc<dyn BlockDevice>>> = Mutex::new(Vec::new());
+pub static BLOCK_DEVICES: RwLock<Vec<Arc<dyn BlockDevice>>> = RwLock::new(Vec::new());

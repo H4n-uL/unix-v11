@@ -8,6 +8,14 @@ use acpi::aml::AmlError;
 #[derive(Clone, Copy, Debug)]
 pub struct KernelAcpiHandler;
 
+fn find_dev_ptr(addr: PciAddress) -> Option<usize> {
+    return PCI_DEVICES.read().iter().find(|d| {
+        d.bus() == addr.bus()
+        && d.device() == addr.device()
+        && d.function() == addr.function()
+    }).map(|d| d.ptr() as usize);
+}
+
 impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
@@ -96,51 +104,39 @@ impl Handler for KernelAcpiHandler {
     }
 
     fn read_pci_u8(&self, addr: PciAddress, offset: u16) -> u8 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *const u8) }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *const u8) }
         } else {
             0xff
         }
     }
     fn read_pci_u16(&self, addr: PciAddress, offset: u16) -> u16 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *const u16) }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *const u16) }
         } else {
             0xffff
         }
     }
     fn read_pci_u32(&self, addr: PciAddress, offset: u16) -> u32 {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *const u32) }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *const u32) }
         } else {
             0xffffffff
         }
     }
     fn write_pci_u8(&self, addr: PciAddress, offset: u16, val: u8) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *mut u8) = val; }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *mut u8) = val; }
         }
     }
     fn write_pci_u16(&self, addr: PciAddress, offset: u16, val: u16) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *mut u16) = val; }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *mut u16) = val; }
         }
     }
     fn write_pci_u32(&self, addr: PciAddress, offset: u16, val: u32) {
-        if let Some(dev) = PCI_DEVICES.lock().iter().find(|d|
-            d.bus() == addr.bus() && d.device() == addr.device() && d.function() == addr.function()
-        ) {
-            unsafe { *((dev.ptr() as usize + offset as usize) as *mut u32) = val; }
+        if let Some(dev_ptr) = find_dev_ptr(addr) {
+            unsafe { *((dev_ptr + offset as usize) as *mut u32) = val; }
         }
     }
 

@@ -6,7 +6,7 @@ use crate::{
 
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
 use nvme_oxide::{Dma, NVMeDev, Ns};
-use spin::Mutex;
+use spin::RwLock;
 
 pub struct NVMeAlloc;
 
@@ -89,12 +89,12 @@ impl BlockDevice for BlockDeviceNVMe {
     }
 }
 
-pub static NVME_DEV: Mutex<BTreeMap<u16, Arc<NVMeDev<NVMeAlloc>>>> = Mutex::new(BTreeMap::new());
+pub static NVME_DEV: RwLock<BTreeMap<u16, Arc<NVMeDev<NVMeAlloc>>>> = RwLock::new(BTreeMap::new());
 
 pub fn init_nvme() {
-    let mut nvme_devices = NVME_DEV.lock();
-    let mut block_devices = BLOCK_DEVICES.lock();
-    for pci_dev in PCI_DEVICES.lock().iter().filter(|&dev| dev.is_nvme()) {
+    let mut nvme_devices = NVME_DEV.write();
+    let mut block_devices = BLOCK_DEVICES.write();
+    for pci_dev in PCI_DEVICES.read().iter().filter(|&dev| dev.is_nvme()) {
         let base = pci_dev.bar(0).unwrap() as usize;
         let mmio_addr = if (base & 0b110) == 0b100 {
             ((pci_dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)

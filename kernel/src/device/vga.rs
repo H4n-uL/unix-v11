@@ -219,7 +219,7 @@ unsafe impl Sync for Vga {}
 pub static VGA_DEVICE: Mutex<Option<Vga>> = Mutex::new(None);
 
 pub fn init_vga() {
-    for dev in PCI_DEVICES.lock().iter() {
+    for dev in PCI_DEVICES.read().iter() {
         if dev.is_vga() {
             let vga = match Vga::new(dev) {
                 Some(vga) => vga,
