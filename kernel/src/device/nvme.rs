@@ -1,7 +1,14 @@
 use crate::{
     arch::rvm::flags,
-    device::{block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES}, PCI_DEVICES},
-    ram::{glacier::GLACIER, physalloc::{AllocParams, PHYS_ALLOC}, PhysPageBuf, PAGE_4KIB}
+    device::{
+        block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES},
+        PCI_DEVICES
+    },
+    ram::{
+        glacier::GLACIER,
+        physalloc::{AllocParams, PHYS_ALLOC},
+        PhysPageBuf
+    }
 };
 
 use alloc::{collections::btree_map::BTreeMap, format, string::String, sync::Arc};
@@ -17,6 +24,16 @@ impl Dma for NVMeAlloc {
 
     unsafe fn free(&self, addr: usize, size: usize) {
         unsafe { PHYS_ALLOC.free_raw(addr as *mut u8, size); }
+    }
+
+    unsafe fn map_mmio(&self, phys: usize, size: usize) -> usize {
+        crate::printlnk!("NVMe MMIO map: phys={:#x}, size={:#x}", phys, size);
+        GLACIER.write().map_range(phys, phys, size, flags::D_RW);
+        return phys;
+    }
+
+    unsafe fn unmap_mmio(&self, virt: usize, size: usize) {
+        GLACIER.write().unmap_range(virt, size);
     }
 
     fn virt_to_phys(&self, va: usize) -> usize { va }
@@ -101,7 +118,6 @@ pub fn init_nvme() {
         } else { base & !0b11 };
 
         let devid = pci_dev.devid;
-        GLACIER.write().map_range(mmio_addr, mmio_addr, PAGE_4KIB * 2, flags::D_RW);
         if let Ok(nvme) = NVMeDev::new(mmio_addr, NVMeAlloc) {
             for ns in nvme.ns_list() {
             block_devices.push(Arc::new(BlockDeviceNVMe::new(ns.clone(), devid)));
