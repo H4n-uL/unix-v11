@@ -14,7 +14,7 @@ mod arch; mod device; mod filesys; mod kargs;
 mod kreq; mod proc; mod ram; mod sort;
 
 use crate::{
-    kargs::{Kargs, RAMType, ap_vid},
+    kargs::{Kargs, RAMType, AP_LIST},
     ram::{
         STACK_SIZE,
         physalloc::PHYS_ALLOC,
@@ -61,7 +61,7 @@ pub extern "C" fn spark() -> ! {
     let stack_usage = stack_top() - crate::arch::stack_ptr() as usize;
     printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
 
-    printlnk!("ID of this AP: {}", ap_vid());
+    printlnk!("ID of this AP: {}", AP_LIST.virtid_self());
 
     let ram_used = PHYS_ALLOC.filtsize(|b| b.used());
     printlnk!("RAM used: {:.6} MB", ram_used as f64 / 1000000.0);

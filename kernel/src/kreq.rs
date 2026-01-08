@@ -1,5 +1,5 @@
 use crate::{
-    kargs::ap_vid, printlnk, proc::PROCS,
+    kargs::AP_LIST, printlnk, proc::PROCS,
     ram::glacier::{GLACIER, hihalf}
 };
 
@@ -31,7 +31,7 @@ pub extern "C" fn kernel_requestee(
         }
         b"exit" => {
             GLACIER.read().activate();
-            PROCS.write().running.remove(&ap_vid());
+            PROCS.write().running.remove(&AP_LIST.virtid_self());
             printlnk!("exit code: {}", arg1);
             loop { crate::arch::halt(); }
         }

@@ -2,7 +2,7 @@ pub mod ctrlblk;
 
 use crate::{
     filesys::VFS,
-    kargs::ap_vid,
+    kargs::AP_LIST,
     printlnk,
     proc::ctrlblk::ProcCtrlBlk
 };
@@ -47,14 +47,15 @@ pub fn exec_aleph() {
 
 fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
     let ctxt = *proc.ctxt;
+    let ap_virtid = AP_LIST.virtid_self();
 
     {
         proc.glacier.activate();
         let mut procs = PROCS.write();
-        if let Some(old_proc) = procs.running.remove(&ap_vid()) {
+        if let Some(old_proc) = procs.running.remove(&ap_virtid) {
             procs.ready.push_back(old_proc);
         }
-        procs.running.insert(ap_vid(), proc);
+        procs.running.insert(ap_virtid, proc);
     }
 
     unsafe {

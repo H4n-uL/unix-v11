@@ -1,3 +1,5 @@
+use crate::kargs::AP_LIST;
+
 use core::arch::{asm, global_asm};
 use alloc::{boxed::Box, collections::btree_map::BTreeMap};
 use seq_macro::seq;
@@ -382,7 +384,7 @@ pub fn set(enabled: bool) {
 pub fn init() {
     let mut desc = Box::new(CPUDesc::new());
     desc.load(crate::ram::stack_top());
-    CPU_DESCS.write().insert(crate::kargs::ap_vid(), desc);
+    CPU_DESCS.write().insert(AP_LIST.virtid_self(), desc);
 
     unsafe {
         // IDT

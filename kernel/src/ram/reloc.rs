@@ -1,6 +1,6 @@
 use crate::{
     arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{AP_VID, KBASE, KINFO, RAMType, RelaEntry, elf_segments},
+    kargs::{AP_LIST, KBASE, KINFO, RAMType, RelaEntry, elf_segments},
     ram::{
         GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
         glacier::{GLACIER, hihalf},
@@ -30,9 +30,9 @@ pub fn reloc() -> ! {
     ).unwrap();
 
     // Per-CPU stack mapping
-    let stack_va = GLEAM_BASE - (PER_CPU_DATA * AP_VID.assign()) - STACK_SIZE;
+    let stack_va = GLEAM_BASE - (PER_CPU_DATA * AP_LIST.assign());
     GLACIER.write().map_range(
-        stack_va, stack_ptr.addr(),
+        stack_va - STACK_SIZE, stack_ptr.addr(),
         STACK_SIZE, flags::K_RWO
     );
 
@@ -82,7 +82,7 @@ pub fn reloc() -> ! {
     // JUMP
     unsafe {
         // ALL STACK VARIABLES ARE VOID BEYOND THIS POINT.
-        move_stack(stack_va, stack_ptr.size());
+        move_stack(stack_va);
         transmute::<usize, extern "C" fn() -> !>(
             SPARK_PTR.load(AtomOrd::SeqCst)
         )();

@@ -1,8 +1,8 @@
-use crate::ram::{GLEAM_BASE, PER_CPU_DATA};
-
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
-use alloc::vec::Vec;
+use alloc::{collections::btree_map::BTreeMap, vec::Vec};
 use spin::RwLock;
+
+use crate::ram::mutex::IntRwLock;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -61,35 +61,48 @@ pub struct RAMDescriptor {
     pub padding: u64
 }
 
-pub struct ApVidList {
-    bitmap: RwLock<Vec<usize>>
+pub struct ApList {
+    bitmap: IntRwLock<RwLock<()>, Vec<usize>>,
+    phys2virt: IntRwLock<RwLock<()>, BTreeMap<usize, usize>>
 }
 
-impl ApVidList {
+impl ApList {
     pub const fn new() -> Self {
         return Self {
-            bitmap: RwLock::new(Vec::new())
+            bitmap: IntRwLock::new(Vec::new()),
+            phys2virt: IntRwLock::new(BTreeMap::new())
         };
     }
 
+    pub fn virtid_self(&self) -> usize {
+        return *self.phys2virt.read()
+            .get(&crate::arch::phys_id())
+            .unwrap_or(&0);
+    }
+
     pub fn assign(&self) -> usize {
+        let physid = crate::arch::phys_id();
+        let mut virtid = physid;
         let mut bm = self.bitmap.write();
 
         for (i, word) in bm.iter_mut().enumerate() {
             if *word != usize::MAX {
                 let bit = (!*word).trailing_zeros() as usize;
                 *word |= 1 << bit;
-                let vid = i * usize::BITS as usize + bit;
-                return vid;
+                virtid = i * usize::BITS as usize + bit;
+                break;
             }
         }
 
         bm.push(1);
-        return (bm.len() - 1) * usize::BITS as usize;
+        self.phys2virt.write().insert(physid, virtid);
+        return virtid;
     }
 
     pub fn release(&self, vid: usize) {
         let mut bm = self.bitmap.write();
+        self.phys2virt.write().retain(|_, &mut v| v != vid);
+
         if (vid / usize::BITS as usize) < bm.len() {
             bm[vid / usize::BITS as usize] &= !(1 << (vid % usize::BITS as usize));
         }
@@ -148,7 +161,7 @@ pub const NON_RAM: &[RAMType] = &[
 pub static KINFO: RwLock<KernelInfo> = RwLock::new(KernelInfo::empty());
 pub static SYSINFO: RwLock<SysInfo> = RwLock::new(SysInfo::empty());
 pub static KBASE: AtomicUsize = AtomicUsize::new(0);
-pub static AP_VID: ApVidList = ApVidList::new();
+pub static AP_LIST: ApList = ApList::new();
 
 impl KernelInfo {
     pub const fn empty() -> Self {
@@ -191,12 +204,4 @@ pub fn set_kargs(kargs: Kargs) {
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
     KBASE.store(kargs.kbase, AtomOrd::Relaxed);
-}
-
-pub fn ap_vid() -> usize {
-    let sp = crate::arch::stack_ptr() as usize;
-    if sp >> (usize::BITS - 1) == 0 { // if sp is lo-half
-        return 0; // can be assumed as BSP
-    }
-    return (GLEAM_BASE - sp) / PER_CPU_DATA;
 }

@@ -45,8 +45,8 @@ impl InterFrame {
 pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
     unsafe {
         asm!(
-            "mov x8, {ksp}",
             "mov x9, {ctxt}",
+            "mov x8, {ksp}",
 
             "ldr x10, [x9, #256]",
             "msr elr_el1, x10",
