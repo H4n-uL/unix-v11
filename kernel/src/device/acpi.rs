@@ -1,12 +1,20 @@
-use crate::{arch::rvm::flags, device::PCI_DEVICES, ram::glacier::GLACIER};
+use crate::{
+    arch::rvm::flags,
+    device::PCI_DEVICES,
+    ram::{PAGE_4KIB, align_down, align_up, glacier::GLACIER}
+};
 
 #[allow(unused)]
 use core::{arch::asm, ptr::NonNull};
 pub use acpi::*;
 use acpi::aml::AmlError;
+use alloc::collections::btree_map::BTreeMap;
+use spin::Mutex;
 
 #[derive(Clone, Copy, Debug)]
 pub struct KernelAcpiHandler;
+
+static ACPI_MAP: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
 
 fn find_dev_ptr(addr: PciAddress) -> Option<usize> {
     return PCI_DEVICES.read().iter().find(|d| {
@@ -20,7 +28,20 @@ impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        GLACIER.write().map_range(phys_addr, phys_addr, size, flags::K_RWO);
+        let mut acpi_map = ACPI_MAP.lock();
+        let mut glacier = GLACIER.write();
+
+        let start_page = align_down(phys_addr, PAGE_4KIB);
+        let end_page = align_up(phys_addr + size, PAGE_4KIB);
+
+        for addr in (start_page..end_page).step_by(PAGE_4KIB) {
+            if let Some(rcnt) = acpi_map.get_mut(&addr) {
+                *rcnt += 1;
+            } else {
+                acpi_map.insert(addr, 1);
+                glacier.map_page(addr, addr, flags::K_RWO);
+            }
+        }
 
         return unsafe { PhysicalMapping {
             physical_start: phys_addr,
@@ -31,17 +52,22 @@ impl Handler for KernelAcpiHandler {
         } };
     }
 
-    // Since `acpi` crate assumes permanent mappings - which is a design flaw -
-    // unmap function should stay no-op.
-    fn unmap_physical_region<T>(_: &PhysicalMapping<Self, T>) {
-        // If `acpi` crate had a proper lifecycle management
-        // the code below would be used to unmap the region.
-        // Yes, I'm blaming `acpi` crate maintainer.
+    fn unmap_physical_region<T>(region: &PhysicalMapping<Self, T>) {
+        let mut acpi_map = ACPI_MAP.lock();
+        let mut glacier = GLACIER.write();
 
-        // GLACIER.write().unmap_range(
-        //     region.virtual_start.as_ptr() as usize,
-        //     region.mapped_length
-        // );
+        let start_page = align_down(region.physical_start, PAGE_4KIB);
+        let end_page = align_up(region.physical_start + region.region_length, PAGE_4KIB);
+
+        for addr in (start_page..end_page).step_by(PAGE_4KIB) {
+            if let Some(rcnt) = acpi_map.get_mut(&addr) {
+                *rcnt -= 1;
+                if *rcnt == 0 {
+                    acpi_map.remove(&addr);
+                    glacier.unmap_page(addr);
+                }
+            }
+        }
     }
 
     fn read_u8(&self, addr: usize) -> u8 { unsafe { *(addr as *const u8) } }

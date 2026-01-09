@@ -221,6 +221,11 @@ impl OomHandler for KheapHandler {
 #[global_allocator]
 pub static KHEAP: Talck<Mutex<()>, KheapHandler> = Talc::new(KheapHandler::new()).lock();
 
+pub fn align_down(val: usize, align: usize) -> usize {
+    if align == 0 { return val; }
+    return (val / align) * align;
+}
+
 pub fn align_up(val: usize, align: usize) -> usize {
     if align == 0 { return val; }
     return val.div_ceil(align) * align;
