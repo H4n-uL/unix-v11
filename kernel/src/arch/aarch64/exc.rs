@@ -9,8 +9,8 @@ unsafe extern "C" {
 macro_rules! exc_stub {
     ($n:tt) => {
         concat!(
-            "sub sp, sp, #816\n",
-            "stp x0, x1, [sp, #0]\n",
+            "sub sp, sp, #816\n",     // sp -= size_of::<ExcFrame>()
+            "stp x0, x1, [sp, #0]\n", // frame.x0, x1 = x0, x1
             "mov x0, #", stringify!($n), "\n",
             "b exc_entry\n",
             ".align 7\n"
@@ -156,6 +156,10 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
                     frame.x[1] as usize, frame.x[2] as usize, frame.x[3] as usize,
                     frame.x[4] as usize, frame.x[5] as usize, frame.x[6] as usize
                 ) as u64;
+            } else {
+                printlnk!("Exception type: {}", exc_type);
+                printlnk!("Exception frame: {:#x?}", frame);
+                panic!("Unhandled exception");
             }
         }
         // 9  | 13 => { /* irq  el0  */ }
