@@ -222,7 +222,7 @@ pub fn init_device() {
         printlnk!();
     }
 
-    // cpu::init_cpu();
+    cpu::init_cpu();
     nvme::init_nvme();
     vga::init_vga();
 }
