@@ -127,7 +127,7 @@ global_asm!(
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct InterFrame {
+pub struct ExcFrame {
     pub x: [u64; 32],  // x regs
     pub elr: u64,      // ret addr
     pub spsr: u64,     // saved pstate
@@ -139,7 +139,7 @@ pub struct InterFrame {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
+extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
     match exc_type {
         // 0  => { /* sync el1t */ }
         // 1  => { /* irq  el1t */ }

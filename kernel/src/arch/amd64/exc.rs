@@ -103,7 +103,7 @@ global_asm!(
         "swapgs",
         "mov gs:[0], rsp",
         "mov rsp, gs:[8]",
-        // additional pushes to match interframe layout
+        // additional pushes to match excframe layout
         "push 0x1b",
         "push qword ptr gs:[0]",
         "push r11",
@@ -301,7 +301,7 @@ struct IdtPtr {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct InterFrame {
+pub struct ExcFrame {
     pub xmm: [u128; 16],
     pub mxcsr: u64,
     pub _0: u64,
@@ -314,7 +314,7 @@ pub struct InterFrame {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
+extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
     match exc_type { // exc_type == frame.vec
         // // CPU EXCEPTIONS
         // 0  => { /* #DE divide error             */ }

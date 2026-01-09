@@ -1,4 +1,4 @@
-pub mod inter;
+pub mod exc;
 pub mod proc;
 pub mod rvm;
 
@@ -10,7 +10,7 @@ use crate::{
 use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
 
 pub fn halt() {
-    inter::set(false);
+    exc::set(false);
     unsafe { asm!("wfi"); }
 }
 
