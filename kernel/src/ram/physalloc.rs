@@ -192,7 +192,12 @@ impl PhysAlloc {
             if desc.ty == RAMType::Conv {
                 let size = desc.page_count as usize * PAGE_4KIB;
                 let addr = desc.phys_start as usize;
-                let block = RAMBlock::new(addr, size, desc.ty, false);
+
+                let ty = cfg!(target_arch = "x86_64").then(|| {
+                    if addr < 0x100000 { RAMType::Reserved } else { desc.ty }
+                }).unwrap_or(desc.ty);
+
+                let block = RAMBlock::new(addr, size, ty, false);
                 self.add(block);
             }
         }
@@ -213,9 +218,7 @@ impl PhysAlloc {
                 let mut ty = desc.ty;
 
                 #[cfg(target_arch = "x86_64")]
-                if desc.phys_start < 0x100000 {
-                    desc.ty = RAMType::Reserved;
-                }
+                if addr < 0x100000 { ty = RAMType::Reserved; }
 
                 if RECLAMABLE.contains(&desc.ty) {
                     ty = RAMType::Reclaimable;
