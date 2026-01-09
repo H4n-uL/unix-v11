@@ -13,7 +13,6 @@ pub fn init_cpu() {
     };
 
     for entry in madt.get().entries() {
-        printlnk!("{:?}", entry);
         match entry {
             MadtEntry::LocalApic(lapic) => {
                 let puid = lapic.processor_id;
