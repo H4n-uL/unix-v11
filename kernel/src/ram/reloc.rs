@@ -1,6 +1,11 @@
 use crate::{
-    arch::{R_RELATIVE, move_stack, rvm::flags},
-    kargs::{AP_LIST, KBASE, KINFO, RAMType, RelaEntry, elf_segments},
+    arch::{R_REL, R_SYM, move_stack, rvm::flags},
+    kargs::{
+        DT_NULL, DT_RELA, DT_RELASZ,
+        AP_LIST, KBASE, KINFO,
+        DynEntry, RAMType, RelaEntry,
+        elf_segments
+    },
     ram::{
         GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
         glacier::{GLACIER, hihalf},
@@ -9,7 +14,7 @@ use crate::{
 };
 
 use core::{
-    mem::transmute,
+    mem::{size_of, transmute},
     sync::atomic::{AtomicUsize, Ordering as AtomOrd}
 };
 
@@ -63,17 +68,36 @@ pub fn reloc() -> ! {
     }
     // ANY MODIFICATION OF STATIC VARIABLES IS VOID BEYOND THIS POINT.
 
+    // Dynamic section parsing
+    let dynamic = unsafe {
+        core::slice::from_raw_parts(
+            (kinfo.dyn_ptr + old_kbase) as *const DynEntry,
+            kinfo.dyn_len
+        )
+    };
+
+    // RELA parsing from dynamic section
+    let (mut rela_ptr, mut rela_sz) = (0, 0);
+    for entry in dynamic.iter() {
+        *match entry.tag {
+            DT_NULL => break,
+            DT_RELA => &mut rela_ptr,
+            DT_RELASZ => &mut rela_sz,
+            _ => continue
+        } = entry.val;
+    }
+
     let rela = unsafe {
         core::slice::from_raw_parts(
-            (kinfo.rela_ptr + old_kbase) as *const RelaEntry,
-            kinfo.rela_len
+            (rela_ptr + old_kbase) as *const RelaEntry,
+            rela_sz / size_of::<RelaEntry>()
         )
     };
 
     // Relocation
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
-        if ty == R_RELATIVE {
+        if R_REL == ty || R_SYM.contains(&ty) {
             let addr = (new_kbase.addr() + entry.offset) as *mut usize;
             unsafe { *addr += delta; }
         }

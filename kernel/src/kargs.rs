@@ -19,8 +19,8 @@ pub struct KernelInfo {
     pub ep: usize,
     pub seg_ptr: usize,
     pub seg_len: usize,
-    pub rela_ptr: usize,
-    pub rela_len: usize
+    pub dyn_ptr: usize,
+    pub dyn_len: usize
 }
 
 #[repr(C)]
@@ -40,6 +40,22 @@ pub struct SysInfo {
     pub acpi_ptr: usize,
     pub dtb_ptr: usize,
     pub disk_uuid: [u8; 16]
+}
+
+#[repr(C)]
+pub struct DynEntry {
+    pub tag: usize,
+    pub val: usize
+}
+
+#[repr(C)]
+pub struct SymEntry {
+    pub name: u32,
+    pub info: u8,
+    pub other: u8,
+    pub shndx: u16,
+    pub value: usize,
+    pub size: usize
 }
 
 #[repr(C)]
@@ -145,6 +161,12 @@ pub enum RAMType {
     Kernel          = 0xffffffff
 }
 
+pub const DT_NULL: usize   = 0;
+// pub const DT_STRTAB: usize = 5;
+// pub const DT_SYMTAB: usize = 6;
+pub const DT_RELA: usize   = 7;
+pub const DT_RELASZ: usize = 8;
+
 pub const RECLAMABLE: &[RAMType] = &[
     RAMType::LoaderCode,
     RAMType::LoaderData,
@@ -168,7 +190,7 @@ impl KernelInfo {
         Self {
             size: 0, ep: 0,
             seg_ptr: 0, seg_len: 0,
-            rela_ptr: 0, rela_len: 0
+            dyn_ptr: 0, dyn_len: 0
         }
     }
 }

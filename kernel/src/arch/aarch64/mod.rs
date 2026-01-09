@@ -14,7 +14,13 @@ pub fn halt() {
     unsafe { asm!("wfi"); }
 }
 
-pub const R_RELATIVE: usize = 1027;
+pub const R_REL: usize    = 1027; // R_RELATIVE
+pub const R_SYM: &[usize] = &[
+    257,  // R_64:        S + A
+    1025, // R_GLOB_DAT:  S
+    1026  // R_JUMP_SLOT: S
+];
+
 const SERIAL_IO: usize = 0usize.wrapping_sub(PAGE_4KIB);
 const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 

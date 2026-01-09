@@ -10,10 +10,7 @@
 mod arch;
 mod kargs;
 
-use crate::{
-    arch::R_RELATIVE,
-    kargs::{Kargs, KernelInfo, RelaEntry, Segment, SysInfo}
-};
+use crate::{arch::*, kargs::*};
 
 use core::panic::PanicInfo;
 use uefi::{
@@ -35,7 +32,13 @@ use uefi::{
     system::with_config_table,
     table::cfg::ConfigTableEntry
 };
-use xmas_elf::{program::Type, ElfFile};
+use xmas_elf::{program::Type as PhType, ElfFile};
+
+const DT_NULL: usize   = 0;
+const DT_STRTAB: usize = 5;
+const DT_SYMTAB: usize = 6;
+const DT_RELA: usize   = 7;
+const DT_RELASZ: usize = 8;
 
 const PAGE_4KIB: usize = 0x1000;
 
@@ -68,7 +71,7 @@ fn flint() -> Status {
     let ep = elf.header.pt2.entry_point() as usize;
 
     let ksize = elf.program_iter()
-        .filter(|ph| ph.get_type() == Ok(Type::Load))
+        .filter(|ph| ph.get_type() == Ok(PhType::Load))
         .map(|ph| ph.virtual_addr() + ph.mem_size())
         .max().unwrap() as usize;
 
@@ -79,39 +82,71 @@ fn flint() -> Status {
     let mut seg_len = 0;
 
     for ph in elf.program_iter() {
-        if let Ok(Type::Load) = ph.get_type() {
+        if let Ok(PhType::Load) = ph.get_type() {
             let offset = ph.offset() as usize;
             let file_size = ph.file_size() as usize;
             let mem_size = ph.mem_size() as usize;
             let virt_addr = ph.virtual_addr() as usize;
             let phys_addr = (kbase + virt_addr) as *mut u8;
 
+            let seg = Segment {
+                ptr: virt_addr,
+                len: mem_size,
+                flags: ph.flags().0,
+                align: ph.align() as u32
+            };
+
             unsafe {
                 phys_addr.write_bytes(0, mem_size);
-                file_binary[offset..offset + file_size].as_ptr().copy_to(phys_addr, file_size);
+                file_binary[offset..][..file_size].as_ptr().copy_to(phys_addr, file_size);
 
-                (seg_ptr as *mut Segment)
-                    .add(seg_len)
-                    .write(Segment {
-                        ptr: virt_addr,
-                        len: mem_size,
-                        flags: ph.flags().0,
-                        align: ph.align() as u32
-                    });
+                (seg_ptr as *mut Segment).add(seg_len).write(seg);
             }
             seg_len += 1;
         }
     }
 
-    let rela = elf.find_section_by_name(".rela.dyn").unwrap();
-    let rela_ptr = rela.address() as usize;
-    let rela_len = rela.size() as usize / size_of::<RelaEntry>();
-    let rela = unsafe { core::slice::from_raw_parts_mut((rela_ptr + kbase) as *mut RelaEntry, rela_len) };
+    let (mut dyn_ptr, mut dyn_len) = (0, 0);
+    for ph in elf.program_iter() {
+        if ph.get_type() == Ok(PhType::Dynamic) {
+            dyn_ptr = ph.virtual_addr() as usize;
+            dyn_len = ph.mem_size() as usize / size_of::<DynEntry>();
+            break;
+        }
+    }
+
+    let dynamic = unsafe { core::slice::from_raw_parts((dyn_ptr + kbase) as *const DynEntry, dyn_len) };
+    let (mut rela_ptr, mut rela_sz, mut symtab, mut strtab) = (0, 0, 0, 0);
+    for entry in dynamic.iter() {
+        *match entry.tag {
+            DT_NULL => break,
+            DT_RELA =>   &mut rela_ptr,
+            DT_RELASZ => &mut rela_sz,
+            DT_SYMTAB => &mut symtab,
+            DT_STRTAB => &mut strtab,
+            _ => continue
+        } = entry.val;
+    }
+
+    let rela_len = rela_sz / size_of::<RelaEntry>();
+    let rela = unsafe { core::slice::from_raw_parts((rela_ptr + kbase) as *const RelaEntry, rela_len) };
+    let symbols = (symtab + kbase) as *const SymEntry;
+
     for entry in rela.iter() {
         let ty = entry.info & 0xffffffff;
-        if ty == R_RELATIVE {
-            let reloc_addr = (kbase + entry.offset) as *mut usize;
-            unsafe { *reloc_addr = kbase.wrapping_add_signed(entry.addend); }
+        let sym_idx = entry.info >> 32;
+        let reloc_addr = (kbase + entry.offset) as *mut usize;
+
+        match ty {
+            R_REL => {
+                unsafe { *reloc_addr = kbase.wrapping_add_signed(entry.addend); }
+            }
+            _ if R_SYM.contains(&ty) => {
+                let sym = unsafe { &*symbols.add(sym_idx) };
+                let sym_addr = kbase + sym.value;
+                unsafe { *reloc_addr = sym_addr.wrapping_add_signed(entry.addend); }
+            }
+            _ => {}
         }
     }
 
@@ -163,7 +198,7 @@ fn flint() -> Status {
         kernel: KernelInfo {
             size: ksize, ep,
             seg_ptr, seg_len,
-            rela_ptr, rela_len
+            dyn_ptr, dyn_len
         },
         sys: SysInfo {
             layout_ptr: efi_ram_layout.buffer().as_ptr() as usize,

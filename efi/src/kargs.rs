@@ -23,8 +23,8 @@ pub struct KernelInfo {
     pub ep: usize,
     pub seg_ptr: usize,
     pub seg_len: usize,
-    pub rela_ptr: usize,
-    pub rela_len: usize
+    pub dyn_ptr: usize,
+    pub dyn_len: usize
 }
 
 #[repr(C)]
@@ -34,6 +34,22 @@ pub struct Segment {
     pub len: usize,
     pub flags: u32,
     pub align: u32
+}
+
+#[repr(C)]
+pub struct DynEntry {
+    pub tag: usize,
+    pub val: usize
+}
+
+#[repr(C)]
+pub struct SymEntry {
+    pub name: u32,
+    pub info: u8,
+    pub other: u8,
+    pub shndx: u16,
+    pub value: usize,
+    pub size: usize
 }
 
 #[repr(C)]
