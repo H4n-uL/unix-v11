@@ -41,7 +41,6 @@ macro_rules! printlnk {
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
     kargs::set_kargs(kargs);
-    // KARGS.init(kargs);
     PHYS_ALLOC.init();
     ram::glacier::init();
     ram::init_heap();
