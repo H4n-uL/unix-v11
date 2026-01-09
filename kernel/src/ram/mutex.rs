@@ -1,4 +1,4 @@
-use crate::arch::inter;
+use crate::arch::exc;
 
 use core::{mem::ManuallyDrop, ops::{Deref, DerefMut}};
 use lock_api::{RawMutex, RawRwLock};
@@ -13,22 +13,22 @@ impl<R: RawMutex, T> IntLock<R, T> {
     }
 
     pub fn lock(&self) -> IntLockGuard<'_, R, T> {
-        let inter = inter::get();
-        inter::set(false);
+        let exc_flag = exc::get();
+        exc::set(false);
         return IntLockGuard {
-            guard: ManuallyDrop::new(self.mutex.lock()), inter
+            guard: ManuallyDrop::new(self.mutex.lock()), exc_flag
         };
     }
 
     // pub fn try_lock(&self) -> Option<IntLockGuard<'_, R, T>> {
-    //     let inter = inter::get();
-    //     inter::set(false);
+    //     let exc_flag = exc_flag::get();
+    //     exc_flag::set(false);
     //     return match self.mutex.try_lock() {
     //         Some(guard) => Some(IntLockGuard {
-    //             guard: ManuallyDrop::new(guard), inter
+    //             guard: ManuallyDrop::new(guard), exc_flag
     //         }),
     //         None => {
-    //             inter::set(inter);
+    //             exc_flag::set(exc_flag);
     //             None
     //         }
     //     }
@@ -37,7 +37,7 @@ impl<R: RawMutex, T> IntLock<R, T> {
 
 pub struct IntLockGuard<'a, R: RawMutex, T> {
     guard: ManuallyDrop<lock_api::MutexGuard<'a, R, T>>,
-    inter: bool
+    exc_flag: bool
 }
 
 impl<R: RawMutex, T> Deref for IntLockGuard<'_, R, T> {
@@ -52,7 +52,7 @@ impl<R: RawMutex, T> DerefMut for IntLockGuard<'_, R, T> {
 impl<R: RawMutex, T> Drop for IntLockGuard<'_, R, T> {
     fn drop(&mut self) {
         unsafe { ManuallyDrop::drop(&mut self.guard); }
-        inter::set(self.inter);
+        exc::set(self.exc_flag);
     }
 }
 
@@ -66,25 +66,25 @@ impl<R: RawRwLock, T> IntRwLock<R, T> {
     }
 
     pub fn read(&self) -> IntRwReadGuard<'_, R, T> {
-        let inter = inter::get();
-        inter::set(false);
+        let exc_flag = exc::get();
+        exc::set(false);
         return IntRwReadGuard {
-            guard: ManuallyDrop::new(self.mutex.read()), inter
+            guard: ManuallyDrop::new(self.mutex.read()), exc_flag
         };
     }
 
     pub fn write(&self) -> IntRwWriteGuard<'_, R, T> {
-        let inter = inter::get();
-        inter::set(false);
+        let exc_flag = exc::get();
+        exc::set(false);
         return IntRwWriteGuard {
-            guard: ManuallyDrop::new(self.mutex.write()), inter
+            guard: ManuallyDrop::new(self.mutex.write()), exc_flag
         };
     }
 }
 
 pub struct IntRwReadGuard<'a, R: RawRwLock, T> {
     guard: ManuallyDrop<lock_api::RwLockReadGuard<'a, R, T>>,
-    inter: bool
+    exc_flag: bool
 }
 
 impl<R: RawRwLock, T> Deref for IntRwReadGuard<'_, R, T> {
@@ -95,13 +95,13 @@ impl<R: RawRwLock, T> Deref for IntRwReadGuard<'_, R, T> {
 impl<R: RawRwLock, T> Drop for IntRwReadGuard<'_, R, T> {
     fn drop(&mut self) {
         unsafe { ManuallyDrop::drop(&mut self.guard); }
-        inter::set(self.inter);
+        exc::set(self.exc_flag);
     }
 }
 
 pub struct IntRwWriteGuard<'a, R: RawRwLock, T> {
     guard: ManuallyDrop<lock_api::RwLockWriteGuard<'a, R, T>>,
-    inter: bool
+    exc_flag: bool
 }
 
 impl<R: RawRwLock, T> Deref for IntRwWriteGuard<'_, R, T> {
@@ -116,6 +116,6 @@ impl<R: RawRwLock, T> DerefMut for IntRwWriteGuard<'_, R, T> {
 impl<R: RawRwLock, T> Drop for IntRwWriteGuard<'_, R, T> {
     fn drop(&mut self) {
         unsafe { ManuallyDrop::drop(&mut self.guard); }
-        inter::set(self.inter);
+        exc::set(self.exc_flag);
     }
 }

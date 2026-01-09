@@ -1,8 +1,8 @@
-use crate::{arch::inter::InterFrame, ram::stack_top};
+use crate::{arch::exc::ExcFrame, ram::stack_top};
 
 use core::arch::asm;
 
-impl InterFrame {
+impl ExcFrame {
     pub const fn new() -> Self {
         return Self {
             xmm: [0u128; 16],
@@ -59,7 +59,7 @@ impl InterFrame {
 }
 
 #[inline(always)]
-pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
+pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
     unsafe {
         asm!(
             "mov r14, {ksp}",

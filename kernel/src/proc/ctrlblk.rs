@@ -1,5 +1,5 @@
 use crate::{
-    arch::{inter::InterFrame, rvm::flags},
+    arch::{exc::ExcFrame, rvm::flags},
     filesys::vfn::VirtFNode,
     ram::{
         PhysPageBuf,
@@ -25,7 +25,7 @@ pub struct ProcCtrlBlk {
     pub glacier: Glacier,
     pub phys_alloc: Vec<OwnedPtr>,
     pub vram_map: Vec<VRamMap>,
-    pub ctxt: Box<InterFrame>,
+    pub ctxt: Box<ExcFrame>,
 
     pub fds: Vec<usize>
 }
@@ -121,7 +121,7 @@ impl ProcCtrlBlk {
         });
         phys_alloc.push(stack_ptr);
 
-        let mut ctxt = InterFrame::new();
+        let mut ctxt = ExcFrame::new();
         ctxt.set_pc(ep);
         ctxt.set_sp(lohalf_top);
 

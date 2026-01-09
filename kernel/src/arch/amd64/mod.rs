@@ -1,11 +1,11 @@
-pub mod inter;
+pub mod exc;
 pub mod proc;
 pub mod rvm;
 
 use core::{arch::asm, fmt::{Result, Write}};
 
 pub fn halt() {
-    inter::set(false);
+    exc::set(false);
     unsafe { asm!("hlt"); }
 }
 

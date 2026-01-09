@@ -64,7 +64,7 @@ fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
 }
 
 pub fn exit_proc(code: i32) -> ! {
-    arch::inter::set(false);
+    arch::exc::set(false);
     GLACIER.read().activate();
     let ap_virtid = AP_LIST.virtid_self();
 
