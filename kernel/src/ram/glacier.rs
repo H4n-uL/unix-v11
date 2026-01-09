@@ -1,6 +1,6 @@
 use crate::{
     arch::rvm::flags,
-    kargs::{RAMType, efi_ram_layout},
+    kargs::{NON_RAM, RAMType, efi_ram_layout},
     ram::physalloc::{AllocParams, PHYS_ALLOC}
 };
 
@@ -292,6 +292,9 @@ pub fn init() {
         let block_ty = desc.ty;
         let addr = desc.phys_start as usize;
         let size = desc.page_count as usize * 0x1000;
+        if NON_RAM.contains(&block_ty) {
+            continue;
+        }
 
         glacier.map_range(addr, addr, size, flags_for_type(block_ty));
     }
