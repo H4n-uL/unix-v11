@@ -1,7 +1,7 @@
 use crate::{
     arch::rvm::flags,
     kargs::{NON_RAM, RAMType, efi_ram_layout},
-    ram::physalloc::{AllocParams, PHYS_ALLOC}
+    ram::{mutex::IntRwLock, physalloc::{AllocParams, PHYS_ALLOC}}
 };
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
@@ -259,7 +259,7 @@ impl Glacier {
     }
 }
 
-pub static GLACIER: RwLock<Glacier> = RwLock::new(Glacier::empty());
+pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
 
 pub fn hihalf() -> usize {

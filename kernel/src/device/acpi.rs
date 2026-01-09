@@ -28,8 +28,8 @@ impl Handler for KernelAcpiHandler {
     unsafe fn map_physical_region<T>(
         &self, phys_addr: usize, size: usize
     ) -> PhysicalMapping<Self, T> {
-        let mut acpi_map = ACPI_MAP.lock();
         let mut glacier = GLACIER.write();
+        let mut acpi_map = ACPI_MAP.lock();
 
         let start_page = align_down(phys_addr, PAGE_4KIB);
         let end_page = align_up(phys_addr + size, PAGE_4KIB);
@@ -53,8 +53,8 @@ impl Handler for KernelAcpiHandler {
     }
 
     fn unmap_physical_region<T>(region: &PhysicalMapping<Self, T>) {
-        let mut acpi_map = ACPI_MAP.lock();
         let mut glacier = GLACIER.write();
+        let mut acpi_map = ACPI_MAP.lock();
 
         let start_page = align_down(region.physical_start, PAGE_4KIB);
         let end_page = align_up(region.physical_start + region.region_length, PAGE_4KIB);
