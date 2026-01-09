@@ -1,3 +1,5 @@
+use crate::{kreq::kernel_requestee, printlnk, ram::stack_top};
+
 use core::arch::{asm, global_asm};
 
 unsafe extern "C" {
@@ -149,7 +151,7 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
         // 7  => { /* serr el1h */ }
         8  | 12 => { /* sync el0 */
             if (frame.esr >> 26) & 0x3f == 0x15 { // supervisor call
-                frame.x[0] = crate::kreq::kernel_requestee(
+                frame.x[0] = kernel_requestee(
                     frame.x[0] as *const u8,
                     frame.x[1] as usize, frame.x[2] as usize, frame.x[3] as usize,
                     frame.x[4] as usize, frame.x[5] as usize, frame.x[6] as usize
@@ -160,8 +162,8 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
         // 10 | 14 => { /* fiq  el0  */ }
         // 11 | 15 => { /* serr el0  */ }
         ..16 => {
-            crate::printlnk!("Exception type: {}", exc_type);
-            crate::printlnk!("Exception frame: {:#x?}", frame);
+            printlnk!("Exception type: {}", exc_type);
+            printlnk!("Exception frame: {:#x?}", frame);
 
             panic!("Unhandled exception");
         }
@@ -192,7 +194,7 @@ pub fn init() {
         asm!(
             "msr tpidr_el1, {}",
             "msr vbar_el1, {}",
-            in(reg) &crate::ram::stack_top(),
+            in(reg) &stack_top(),
             in(reg) exc_vts,
             options(nostack, preserves_flags)
         );

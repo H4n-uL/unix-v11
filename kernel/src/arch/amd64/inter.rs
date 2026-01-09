@@ -1,4 +1,4 @@
-use crate::kargs::AP_LIST;
+use crate::{kargs::AP_LIST, kreq::kernel_requestee, printlnk, ram::stack_top};
 
 use core::arch::{asm, global_asm};
 use alloc::{boxed::Box, collections::btree_map::BTreeMap};
@@ -347,15 +347,15 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut InterFrame) {
         // // END OF CPU EXCEPTIONS
 
         128 => { /* syscall */
-            frame.rax = crate::kreq::kernel_requestee(
+            frame.rax = kernel_requestee(
                 frame.rax as *const u8,
                 frame.rdi as usize, frame.rsi as usize, frame.rdx as usize,
                 frame.r10 as usize, frame.r8 as usize, frame.r9 as usize
             ) as u64;
         }
         ..256 => { /* reserved or IRQ */
-            crate::printlnk!("Exception type: {}", exc_type);
-            crate::printlnk!("Exception frame: {:#x?}", frame);
+            printlnk!("Exception type: {}", exc_type);
+            printlnk!("Exception frame: {:#x?}", frame);
 
             panic!("Unhandled exception");
         }
@@ -383,7 +383,7 @@ pub fn set(enabled: bool) {
 
 pub fn init() {
     let mut desc = Box::new(CPUDesc::new());
-    desc.load(crate::ram::stack_top());
+    desc.load(stack_top());
     CPU_DESCS.write().insert(AP_LIST.virtid_self(), desc);
 
     unsafe {

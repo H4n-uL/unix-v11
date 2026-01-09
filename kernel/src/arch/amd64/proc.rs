@@ -1,4 +1,4 @@
-use crate::arch::inter::InterFrame;
+use crate::{arch::inter::InterFrame, ram::stack_top};
 
 use core::arch::asm;
 
@@ -111,7 +111,7 @@ pub unsafe fn rstr_ctxt(ctxt: &InterFrame) -> ! {
 
             "iretq",
             ctxt = in(reg) ctxt,
-            ksp = in(reg) crate::ram::stack_top(),
+            ksp = in(reg) stack_top(),
             options(noreturn)
         );
     }

@@ -1,8 +1,8 @@
+use crate::{arch::phys_id, ram::mutex::IntRwLock};
+
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
 use spin::RwLock;
-
-use crate::ram::mutex::IntRwLock;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -76,12 +76,12 @@ impl ApList {
 
     pub fn virtid_self(&self) -> usize {
         return *self.phys2virt.read()
-            .get(&crate::arch::phys_id())
+            .get(&phys_id())
             .unwrap_or(&0);
     }
 
     pub fn assign(&self) -> usize {
-        let physid = crate::arch::phys_id();
+        let physid = phys_id();
         let mut virtid = physid;
         let mut bm = self.bitmap.write();
 

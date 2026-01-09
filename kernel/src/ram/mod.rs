@@ -6,6 +6,7 @@ pub mod reloc;
 use crate::{
     arch::rvm::flags,
     kargs::{AP_LIST, KINFO, RAMType},
+    printk, printlnk,
     ram::{
         glacier::{GLACIER, hihalf},
         physalloc::{AllocParams, OwnedPtr, PHYS_ALLOC}
@@ -229,23 +230,23 @@ pub fn dump_bytes(buf: &[u8]) {
     const LINE: usize = 16;
     let mut offset = 0;
     for line in buf.chunks(LINE) {
-        crate::printk!("{:08x}  ", offset);
+        printk!("{:08x}  ", offset);
         for (i, byte) in line.iter().enumerate() {
-            if i == LINE / 2 { crate::printk!(" "); }
-            crate::printk!("{:02x} ", byte);
+            if i == LINE / 2 { printk!(" "); }
+            printk!("{:02x} ", byte);
         }
         for i in line.len()..LINE {
-            if i == LINE / 2 { crate::printk!(" "); }
-            crate::printk!("   ");
+            if i == LINE / 2 { printk!(" "); }
+            printk!("   ");
         }
-        crate::printk!("   |");
-        for byte in line { crate::printk!("{}",
+        printk!("   |");
+        for byte in line { printk!("{}",
             if (0x20..0x7f).contains(byte) { *byte as char } else { '.' }
         ); }
-        crate::printlnk!("|");
+        printlnk!("|");
         offset += line.len();
     }
-    crate::printlnk!("{:08x}", offset);
+    printlnk!("{:08x}", offset);
 }
 
 pub fn init_heap() {
