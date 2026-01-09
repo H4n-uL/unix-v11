@@ -31,11 +31,17 @@ impl Handler for KernelAcpiHandler {
         } };
     }
 
-    fn unmap_physical_region<T>(region: &PhysicalMapping<Self, T>) {
-        GLACIER.write().unmap_range(
-            region.virtual_start.as_ptr() as usize,
-            region.mapped_length
-        );
+    // Since `acpi` crate assumes permanent mappings - which is a design flaw -
+    // unmap function should stay no-op.
+    fn unmap_physical_region<T>(_: &PhysicalMapping<Self, T>) {
+        // If `acpi` crate had a proper lifecycle management
+        // the code below would be used to unmap the region.
+        // Yes, I'm blaming `acpi` crate maintainer.
+
+        // GLACIER.write().unmap_range(
+        //     region.virtual_start.as_ptr() as usize,
+        //     region.mapped_length
+        // );
     }
 
     fn read_u8(&self, addr: usize) -> u8 { unsafe { *(addr as *const u8) } }
