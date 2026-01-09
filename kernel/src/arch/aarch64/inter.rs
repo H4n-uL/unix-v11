@@ -20,10 +20,10 @@ global_asm!(
     ".align 11",
     ".global exc_vts",
     "exc_vts:",
-    exc_stub!(0),  exc_stub!(1),  exc_stub!(2),  exc_stub!(3),
-    exc_stub!(4),  exc_stub!(5),  exc_stub!(6),  exc_stub!(7),
-    exc_stub!(8),  exc_stub!(9),  exc_stub!(10), exc_stub!(11),
-    exc_stub!(12), exc_stub!(13), exc_stub!(14), exc_stub!(15),
+        exc_stub!(0),  exc_stub!(1),  exc_stub!(2),  exc_stub!(3),
+        exc_stub!(4),  exc_stub!(5),  exc_stub!(6),  exc_stub!(7),
+        exc_stub!(8),  exc_stub!(9),  exc_stub!(10), exc_stub!(11),
+        exc_stub!(12), exc_stub!(13), exc_stub!(14), exc_stub!(15),
 
     "exc_entry:",
         "stp x2, x3, [sp, #16]",
@@ -190,7 +190,9 @@ pub fn set(enabled: bool) {
 pub fn init() {
     unsafe {
         asm!(
+            "msr tpidr_el1, {}",
             "msr vbar_el1, {}",
+            in(reg) &crate::ram::stack_top(),
             in(reg) exc_vts,
             options(nostack, preserves_flags)
         );
