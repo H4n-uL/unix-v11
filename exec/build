@@ -78,10 +78,10 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$CLEAN" = "true" ]; then
-    if [ "$VERBOSE" = "true" ]; then
-        cargo clean
-    else
+    if [ "$VERBOSE" = "0" ]; then
         cargo clean -q
+    else
+        cargo clean
     fi
 fi
 
