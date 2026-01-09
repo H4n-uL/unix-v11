@@ -1,10 +1,10 @@
 pub mod ctrlblk;
 
 use crate::{
-    filesys::VFS,
-    kargs::AP_LIST,
+    arch, filesys::VFS, kargs::AP_LIST,
     printlnk,
-    proc::ctrlblk::ProcCtrlBlk
+    proc::ctrlblk::ProcCtrlBlk,
+    ram::{glacier::GLACIER, stack_top}
 };
 
 use alloc::{
@@ -59,6 +59,30 @@ fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
     }
 
     unsafe {
-        crate::arch::proc::rstr_ctxt(&ctxt);
+        arch::proc::rstr_ctxt(&ctxt);
+    }
+}
+
+pub fn exit_proc(code: i32) -> ! {
+    arch::inter::set(false);
+    GLACIER.read().activate();
+    let ap_virtid = AP_LIST.virtid_self();
+
+    {
+        let mut procs = PROCS.write();
+        if let Some(old_proc) = procs.running.remove(&ap_virtid) {
+            printlnk!("proc {} exited: {}", old_proc.pid, code);
+        }
+    }
+
+    unsafe { arch::move_stack(stack_top()); }
+    schedule();
+}
+
+fn schedule() -> ! {
+    printlnk!("scheduling...");
+
+    loop {
+        arch::halt();
     }
 }
