@@ -1,9 +1,19 @@
-use crate::{
-    kargs::AP_LIST, printlnk, proc::PROCS,
-    ram::glacier::{GLACIER, hihalf}
-};
+use crate::{arch, proc::exit_proc, ram::glacier::hihalf};
 
 use core::slice::from_raw_parts;
+
+macro_rules! check_fault {
+    ($ptr:tt, $ctr:tt, $sz:ty) => { {
+        const INVALID_VA: usize = 1 << (usize::BITS - 1);
+        let ctr_end = $ptr.saturating_add(
+            $ctr.saturating_mul(size_of::<$sz>())
+        );
+
+        if ctr_end >= hihalf() {
+            let _ = unsafe { (INVALID_VA as *const u8).read_volatile() };
+        }
+    } };
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_requestee(
@@ -15,25 +25,26 @@ pub extern "C" fn kernel_requestee(
         .find(|&i| unsafe { *req.add(i) } == 0)
         .unwrap_or(16);
 
-    match unsafe { from_raw_parts(req, len) } {
-        b"_print" => { // This syscall is for debugging purposes only
+    let req = unsafe { from_raw_parts(req, len) };
+
+    if req == b"exit" {
+        exit_proc(arg1 as i32);
+    }
+
+    match req {
+        b"open" => {
+            check_fault!(arg1, arg2, u8);
             for i in 0..arg2 {
-                if arg1 >= hihalf() {
-                    break;
-                    // This should cause a page fault
-                    // before implementing page fault handler,
-                    // all we can do is to just stop printing
-                }
-                crate::arch::serial_putchar(
+                let _ = unsafe { *(arg1 as *const u8).add(i) };
+            }
+        }
+        b"_print" => { // This syscall is for debugging purposes only
+            check_fault!(arg1, arg2, u8);
+            for i in 0..arg2 {
+                arch::serial_putchar(
                     unsafe { *(arg1 as *const u8).add(i) }
                 );
             }
-        }
-        b"exit" => {
-            GLACIER.read().activate();
-            PROCS.write().running.remove(&AP_LIST.virtid_self());
-            printlnk!("exit code: {}", arg1);
-            loop { crate::arch::halt(); }
         }
         // ... kernel request impls goes here ...
         _ => {}
