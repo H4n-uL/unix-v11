@@ -17,16 +17,23 @@ use crate::{
 
 use core::panic::PanicInfo;
 use uefi::{
+    Identify, Status,
     boot::{
+        AllocateType, MemoryType, SearchType,
         allocate_pages, exit_boot_services,
-        get_image_file_system, image_handle,
-        locate_handle_buffer,
-        open_protocol_exclusive as open_protocol,
-        AllocateType, MemoryType, SearchType
+        free_pages, get_image_file_system,
+        image_handle, locate_handle_buffer,
+        open_protocol_exclusive as open_protocol
     },
-    cstr16, entry, mem::memory_map::MemoryMap, println,
-    proto::media::{block::BlockIO, file::{File, FileAttribute, FileInfo, FileMode}},
-    system::with_config_table, table::cfg::ConfigTableEntry, Identify, Status
+    cstr16, entry,
+    mem::memory_map::MemoryMap,
+    println,
+    proto::media::{
+        block::BlockIO,
+        file::{File, FileAttribute, FileInfo, FileMode}
+    },
+    system::with_config_table,
+    table::cfg::ConfigTableEntry
 };
 use xmas_elf::{program::Type, ElfFile};
 
@@ -145,6 +152,7 @@ fn flint() -> Status {
                     disk_uuid.copy_from_slice(&gpt_header[56..72]);
                     break;
                 }
+                unsafe { let _ = free_pages(gpt_header_ptr, gpt_header_pages); }
             }
         }
     }
