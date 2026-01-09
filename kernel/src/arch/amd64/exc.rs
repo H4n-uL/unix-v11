@@ -99,30 +99,29 @@ macro_rules! call_handler {
 
 global_asm!(
     ".global syscall",
-    "syscall:", // syscall entry
+    "syscall:",
         "swapgs",
-        "mov gs:[0], rsp",
-        "mov rsp, gs:[8]",
-        // additional pushes to match excframe layout
-        "push 0x1b",
-        "push qword ptr gs:[0]",
-        "push r11",
-        "push 0x23",
-        "push rcx",
-        "push 0",
-        "push 0x80",
+        "mov gs:[0], rsp",       // gs:[0] = rsp
+        "mov rsp, gs:[8]",       // rsp = gs:[8]
+        "push 0x1b",             // frame.ss = 0x1b
+        "push qword ptr gs:[0]", // frame.rsp = gs:[0]
+        "push r11",              // frame.rflags = r11
+        "push 0x23",             // frame.cs = 0x23
+        "push rcx",              // frame.rip = rcx
+        "push 0",                // frame.err = 0
+        "push 0x80",             // frame.vec = 0x80
         call_handler!(),
-        "add rsp, 16",
-        "pop rcx",
-        "add rsp, 8",
-        "pop r11",
-        "pop rsp",
+        "add rsp, 16",           // rsp += 16
+        "pop rcx",               // rcx = frame.rip
+        "add rsp, 8",            // rsp += 8
+        "pop r11",               // r11 = frame.rflags
+        "pop rsp",               // rsp = frame.rsp
         "swapgs",
         "sysretq",
 
-    "isr_cmm:", // interrupt entry
+    "isr_cmm:",
         call_handler!(),
-        "add rsp, 16",
+        "add rsp, 16",           // rsp += 16
         "iretq"
 );
 
