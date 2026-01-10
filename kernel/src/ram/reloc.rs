@@ -7,9 +7,9 @@ use crate::{
         elf_segments
     },
     ram::{
-        GLEAM_BASE, PER_CPU_DATA, STACK_SIZE,
         glacier::{GLACIER, hihalf},
-        physalloc::{AllocParams, PHYS_ALLOC}
+        physalloc::{AllocParams, PHYS_ALLOC},
+        gleam_base, per_cpu_data, stack_size
     }
 };
 
@@ -31,14 +31,14 @@ pub fn reloc() -> ! {
 
     // Stack allocation
     let stack_ptr = PHYS_ALLOC.alloc(
-        AllocParams::new(STACK_SIZE).as_type(RAMType::KernelData)
+        AllocParams::new(stack_size()).as_type(RAMType::KernelData)
     ).unwrap();
 
     // Per-CPU stack mapping
-    let stack_va = GLEAM_BASE - (PER_CPU_DATA * AP_LIST.assign());
+    let stack_va = gleam_base() - (per_cpu_data() * AP_LIST.assign());
     GLACIER.write().map_range(
-        stack_va - STACK_SIZE, stack_ptr.addr(),
-        STACK_SIZE, flags::K_RWO
+        stack_va - stack_size(), stack_ptr.addr(),
+        stack_size(), flags::K_RWO
     );
 
     // Kernel mapping

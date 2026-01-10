@@ -1,7 +1,7 @@
 use crate::{
     arch::rvm::flags,
     device::PCI_DEVICES,
-    ram::{PAGE_4KIB, align_down, align_up, glacier::GLACIER}
+    ram::{align_down, align_up, glacier::{GLACIER, page_size}}
 };
 
 #[allow(unused)]
@@ -31,10 +31,10 @@ impl Handler for KernelAcpiHandler {
         let mut glacier = GLACIER.write();
         let mut acpi_map = ACPI_MAP.lock();
 
-        let start_page = align_down(phys_addr, PAGE_4KIB);
-        let end_page = align_up(phys_addr + size, PAGE_4KIB);
+        let start_page = align_down(phys_addr, page_size());
+        let end_page = align_up(phys_addr + size, page_size());
 
-        for addr in (start_page..end_page).step_by(PAGE_4KIB) {
+        for addr in (start_page..end_page).step_by(page_size()) {
             if let Some(rcnt) = acpi_map.get_mut(&addr) {
                 *rcnt += 1;
             } else {
@@ -56,10 +56,10 @@ impl Handler for KernelAcpiHandler {
         let mut glacier = GLACIER.write();
         let mut acpi_map = ACPI_MAP.lock();
 
-        let start_page = align_down(region.physical_start, PAGE_4KIB);
-        let end_page = align_up(region.physical_start + region.region_length, PAGE_4KIB);
+        let start_page = align_down(region.physical_start, page_size());
+        let end_page = align_up(region.physical_start + region.region_length, page_size());
 
-        for addr in (start_page..end_page).step_by(PAGE_4KIB) {
+        for addr in (start_page..end_page).step_by(page_size()) {
             if let Some(rcnt) = acpi_map.get_mut(&addr) {
                 *rcnt -= 1;
                 if *rcnt == 0 {

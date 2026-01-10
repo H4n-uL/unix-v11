@@ -5,7 +5,7 @@ use crate::{
     device::acpi::KernelAcpiHandler,
     kargs::SYSINFO,
     printk, printlnk,
-    ram::{PAGE_4KIB, glacier::GLACIER}
+    ram::glacier::{GLACIER, page_size}
 };
 
 use alloc::{string::String, vec::Vec};
@@ -26,7 +26,7 @@ unsafe impl Sync for PciDevice {}
 impl PciDevice {
     pub fn read(base: u64, devid: u16) -> Option<Self> {
         let ptr = base as usize + ((devid as usize) << 12);
-        GLACIER.write().map_range(ptr, ptr, PAGE_4KIB, flags::D_RW);
+        GLACIER.write().map_range(ptr, ptr, page_size(), flags::D_RW);
         let dev = PciDevice { devid, ptr: ptr as *mut u32 };
         if dev.vendor_id() == 0xFFFF { return None; }
         return Some(dev);

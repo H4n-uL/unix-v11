@@ -45,18 +45,28 @@ impl RvmCfg {
         let page_shift = self.psz.shift();
         let index_bits = self.psz.index_bits();
         let addr_bits = self.va_bits - page_shift;
-
         return (addr_bits + index_bits - 1) / index_bits;
     }
 
-    pub fn get_index(&self, level: u8, va: usize) -> usize {
+    pub fn shift(&self, level: u8) -> u8 {
         let page_shift = self.psz.shift();
         let index_bits = self.psz.index_bits();
         let levels = self.levels();
         if level >= levels { unreachable!(); }
 
-        let shift = page_shift + (levels - level - 1) * index_bits;
-        return (va >> shift) & ((1 << index_bits) - 1);
+        return page_shift + (levels - level - 1) * index_bits;
+    }
+
+    pub fn get_index(&self, level: u8, va: usize) -> usize {
+        return (va >> self.shift(level)) & (self.ent_cnt(level) - 1);
+    }
+
+    pub fn ent_cnt(&self, level: u8) -> usize {
+        return 1usize << if level == 0 {
+            self.va_bits - self.shift(level)
+        } else {
+            self.psz.index_bits()
+        };
     }
 }
 
@@ -162,17 +172,17 @@ impl Glacier {
     }
 
     fn unmap_rec(&self, table: usize, va: usize, level: u8) -> bool {
-        let is_tbl_null = |tbl: usize| {
-            (0..1 << self.cfg.psz.index_bits())
-                .all(|i| unsafe { *(tbl as *const usize).add(i) == 0 })
-        };
+        let entries = self.cfg.ent_cnt(level);
+        let is_tbl_null = || (0..entries).all(|i| unsafe {
+            *(table as *const usize).add(i) == 0
+        });
 
         let index = self.cfg.get_index(level, va);
         let entry = unsafe { (table as *mut usize).add(index) };
 
         if level == self.cfg.levels() - 1 {
             unsafe { *entry = 0; }
-            return is_tbl_null(table);
+            return is_tbl_null();
         }
 
         if unsafe { *entry & flags::VALID == 0 } {
@@ -186,7 +196,7 @@ impl Glacier {
                 *entry = 0;
                 PHYS_ALLOC.free_raw(child as *mut u8, self.cfg.psz.size());
             }
-            return is_tbl_null(table);
+            return is_tbl_null();
         }
         return false;
     }
@@ -219,6 +229,32 @@ impl Glacier {
         }
     }
 
+    pub fn get_pa(&self, va: usize) -> Option<usize> {
+        if !self.is_init { return None; }
+        let page_mask = !(self.cfg.psz.size() - 1);
+        let va = va & page_mask;
+
+        let levels = self.cfg.levels();
+        let mut table = self.root_table;
+
+        for level in 0..levels {
+            let index = self.cfg.get_index(level, va);
+            let entry = unsafe { *((table as *const usize).add(index)) };
+
+            if entry & flags::VALID == 0 {
+                return None;
+            }
+
+            if level == levels - 1 {
+                return Some(entry & self.cfg.psz.addr_mask());
+            } else {
+                table = entry & self.cfg.psz.addr_mask();
+            }
+        }
+
+        return None;
+    }
+
     pub fn root_table(&self) -> *mut usize {
         return self.root_table as *mut usize;
     }
@@ -237,10 +273,8 @@ impl Drop for Glacier {
 
 impl Glacier {
     fn _drop(&self, table: usize, level: u8) {
-        let mut entries = 1 << self.cfg.psz.index_bits();
-        if level == 0 {
-            entries >>= 1;
-        }
+        let mut entries = self.cfg().ent_cnt(level);
+        if level == 0 { entries >>= 1; }
 
         for i in 0..entries {
             let entry = unsafe { *((table as *const usize).add(i)) };
@@ -261,22 +295,16 @@ impl Glacier {
 
 pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
+pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(PageSize::Size4kiB as usize);
 
+#[inline(always)]
 pub fn hihalf() -> usize {
     return HIHALF.load(AtomOrd::Relaxed);
 }
 
-pub fn flags_for_type(ty: RAMType) -> usize {
-    match ty {
-        RAMType::Conv => flags::K_RWX,
-        RAMType::BootSvcCode => flags::K_RWX,
-        RAMType::RtSvcCode => flags::K_ROX,
-        RAMType::Kernel => flags::K_RWX,
-        RAMType::KernelData => flags::K_RWX,
-        RAMType::KernelPTable => flags::K_RWX,
-        RAMType::MMIO => flags::D_RW,
-        _ => flags::K_RWX
-    }
+#[inline(always)]
+pub fn page_size() -> usize {
+    return PAGE_SIZE.load(AtomOrd::Relaxed);
 }
 
 pub fn init() {
@@ -296,7 +324,23 @@ pub fn init() {
             continue;
         }
 
-        glacier.map_range(addr, addr, size, flags_for_type(block_ty));
+        glacier.map_range(addr, addr, size, flags::K_RWX);
     }
+
     glacier.identity_map();
+}
+
+pub fn remap() {
+    let mut glacier = GLACIER.write();
+
+    for desc in efi_ram_layout() {
+        let block_ty = desc.ty;
+        let addr = desc.phys_start as usize;
+        let size = desc.page_count as usize * 0x1000;
+        if NON_RAM.contains(&block_ty) {
+            continue;
+        }
+
+        glacier.map_range(addr, addr, size, flags::K_RWO);
+    }
 }

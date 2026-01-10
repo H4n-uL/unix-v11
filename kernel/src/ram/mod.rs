@@ -8,7 +8,7 @@ use crate::{
     kargs::{AP_LIST, KINFO, RAMType},
     printk, printlnk,
     ram::{
-        glacier::{GLACIER, hihalf},
+        glacier::{GLACIER, hihalf, page_size},
         physalloc::{AllocParams, OwnedPtr, PHYS_ALLOC}
     }
 };
@@ -20,45 +20,66 @@ use core::{
 use spin::Mutex;
 use talc::{OomHandler, Span, Talc, Talck};
 
+// RAM Layout
+
+// VA_BITS =    Virtual address bits(defined by architecture) - typically 48, 52, or 57
+// HIHALF =     !0 << (VA_BITS - 1)
+// HI_END =     0x1_0000_0000_0000_0000 = 1 << usize::BITS
+// PAGE_SIZE =  Page size(defined by architecture) - typically 4 kiB, 16 kiB, or 64 kiB
+// KINFO.size = Size of the kernel image
+// KHEAP.size = Size of the kernel heap
+
+// PER_CPU_DATA = PAGE_SIZE << 4
+// STACK_SIZE =   PAGE_SIZE.max(0x4000)
+
 // Top of virtual RAM
-// +------------------+ - 0x1_0000_0000_0000_0000
-// |      GLEAM       | 64 kiB: global emergency access map
-// +------------------+ -   0xffff_ffff_ffff_0000
-// |  per-cpu data 0  | 64 kiB: per-cpu data for cpu 0
-// +------------------+ -   0xffff_ffff_fffe_0000
-// |  per-cpu data 1  | 64 kiB: per-cpu data for cpu 1
-// +------------------+ -   0xffff_ffff_fffd_0000
-// |       ...        | etc.
+// +------------------+ - HI_END
+// |      gleam       |     Global Emergency Access Map
+// +------------------+ - HI_END - (PER_CPU_DATA * 1)
+// |  per-cpu data 0  |     Per-CPU data region for CPU 0
+// +------------------+ - HI_END - (PER_CPU_DATA * 2)
+// |  per-cpu data 1  |     Per-CPU data region for CPU 1
+// +------------------+ - HI_END - (PER_CPU_DATA * 3) ...
+// |       ...        |     etc.
 // +------------------+ - HIHALF + KINFO.size + KHEAP.size
-// |       heap       | variable: kernel heap
+// |       heap       |     Dynamic kernel heap
 // +------------------+ - HIHALF + KINFO.size
-// |      Kernel      | variable: UNIX V11 Kernel Image
+// |      kernel      |     UNIX V11 kernel image
 // +------------------+ - HIHALF
 // Bottom of Hi-Half
 
 // Top of Lo-Half
-// +------------------+
-// |  idmap ||  user  |
-// +------------------+
+// +----------+    +----------+ - !HIHALF + 1
+// |  id-map  | or |   user   |
+// +----------+    +----------+ - 0x0
 // Bottom of virtual RAM
 
 // per-cpu data
-// +------------------+ - 0x1_0000
-// |      stack       | 16 kiB: kernel stack
-// +------------------+ -   0xc000
-// |    guard page    | 4 kiB: unmapped guard page
-// +------------------+ -   0xb000
-// |     cpu info     | 44 kiB: per-cpu mappings and structures
-// +------------------+ -      0x0
+// +------------------+ - PER_CPU_DATA
+// |      stack       |     Per-CPU kernel stack
+// +------------------+ - PER_CPU_DATA - STACK_SIZE
+// |    guard page    |     Guard page (not mapped)
+// +------------------+ - PER_CPU_DATA - STACK_SIZE - PAGE_SIZE
+// |     cpu info     |     Per-CPU mappings and structures
+// +------------------+ - 0x0
+
+#[inline(always)]
+pub fn stack_size() -> usize {
+    return page_size().max(0x4000);
+}
+
+#[inline(always)]
+pub fn per_cpu_data() -> usize {
+    return page_size() << 4;
+}
 
 pub const PAGE_4KIB: usize = 0x1000;
-pub const STACK_SIZE: usize = 0x4000;
-pub const PER_CPU_DATA: usize = 0x10000;
-const _: () = assert!(PER_CPU_DATA % PAGE_4KIB == 0, "PER_CPU_DATA must be page-aligned");
 
 // Base addr of Global Emergency Access Map
-pub const GLEAM_BASE: usize = 0usize.wrapping_sub(PER_CPU_DATA);
-const _: () = assert!(GLEAM_BASE % PAGE_4KIB == 0, "GLEAM_BASE must be page-aligned");
+#[inline(always)]
+pub fn gleam_base() -> usize {
+    return 0usize.wrapping_sub(per_cpu_data());
+}
 
 // For DMA or other physical page-aligned buffers
 pub struct PhysPageBuf(OwnedPtr);
@@ -67,7 +88,7 @@ impl PhysPageBuf {
     pub fn new(size: usize) -> Option<Self> {
         let ptr = PHYS_ALLOC.alloc(
             AllocParams::new(size)
-                .align(PAGE_4KIB)
+                .align(page_size())
                 .as_type(RAMType::KernelData)
         )?;
         return Some(Self(ptr));
@@ -100,7 +121,7 @@ pub struct VirtPageBuf {
 
 impl VirtPageBuf {
     pub fn new(size: usize) -> Option<Self> {
-        let layout = Layout::from_size_align(size, PAGE_4KIB).ok()?;
+        let layout = Layout::from_size_align(size, page_size()).ok()?;
         let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
         return Some(Self { ptr, layout });
     }
@@ -161,7 +182,7 @@ impl KheapHandler {
 
 impl OomHandler for KheapHandler {
     fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
-        let size = align_up(layout.size() * 2, PAGE_4KIB);
+        let size = align_up(layout.size() * 2, page_size());
         let mut rem = size;
 
         while rem > 0 {
@@ -170,12 +191,12 @@ impl OomHandler for KheapHandler {
                 match PHYS_ALLOC.alloc(
                     AllocParams::new(try_sz)
                         .as_type(RAMType::KernelData)
-                        .align(PAGE_4KIB)
+                        .align(page_size())
                 ) {
                     Some(p) => break p,
                     None => {
-                        if try_sz > PAGE_4KIB {
-                            try_sz = (try_sz / (2 * PAGE_4KIB)) * PAGE_4KIB;
+                        if try_sz > page_size() {
+                            try_sz = (try_sz / (page_size() << 1)) * page_size();
                         } else {
                             return Err(());
                         }
@@ -257,11 +278,11 @@ pub fn dump_bytes(buf: &[u8]) {
 pub fn init_heap() {
     let heap_base = align_up(
         KINFO.read().size + hihalf(),
-        PAGE_4KIB
+        page_size()
     );
     KHEAP.lock().oom_handler.set_base(heap_base);
 }
 
 pub fn stack_top() -> usize {
-    return GLEAM_BASE - (AP_LIST.virtid_self() * PER_CPU_DATA);
+    return gleam_base() - (AP_LIST.virtid_self() * per_cpu_data());
 }

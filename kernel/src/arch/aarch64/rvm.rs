@@ -28,14 +28,14 @@ impl RvmCfg {
 
         let tgran4  = (mmfr0 >> 28) & 0xf;
         let tgran16 = (mmfr0 >> 20) & 0xf;
-        // let tgran64 = (mmfr0 >> 24) & 0xf;
+        let tgran64 = (mmfr0 >> 24) & 0xf;
 
         let psz = if tgran4 != 0xf {
             PageSize::Size4kiB
-        // } else if tgran16 != 0 {
-        //     PageSize::Size16kiB
-        // } else if tgran64 != 0xf {
-        //     PageSize::Size64kiB
+        } else if tgran16 != 0 {
+            PageSize::Size16kiB
+        } else if tgran64 != 0xf {
+            PageSize::Size64kiB
         } else {
             panic!("No supported page granule found");
         };
@@ -106,6 +106,10 @@ impl Glacier {
 
         unsafe {
             asm!(
+                "tlbi vmalle1",
+                "dsb sy",
+                "isb",
+
                 "msr mair_el1, {mair}",
                 "msr tcr_el1, {tcr}",
                 "msr ttbr0_el1, {ttbr0}",
@@ -119,6 +123,7 @@ impl Glacier {
                 "msr sctlr_el1, x0",
                 "isb",
 
+                "tlbi vmalle1",
                 "ic iallu",
                 "dsb sy",
                 "isb",
