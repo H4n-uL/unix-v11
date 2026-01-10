@@ -16,7 +16,7 @@ use alloc::{
     collections::btree_map::BTreeMap,
     format, string::String, sync::Arc, vec::Vec
 };
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 
 struct VirtFile {
     vfd: Mutex<VFileData>
@@ -126,16 +126,16 @@ impl VirtFNode for VirtDir {
 }
 
 pub struct VirtualFileSystem {
-    parts: BTreeMap<String, Arc<dyn Partition>>
+    parts: RwLock<BTreeMap<String, Arc<dyn Partition>>>
 }
 
 impl VirtualFileSystem { // Constructors
     const fn empty() -> Self {
-        return Self { parts: BTreeMap::new() };
+        return Self { parts: RwLock::new(BTreeMap::new()) };
     }
 
-    pub fn init(&mut self) {
-        self.parts.insert("/".into(), Arc::new(VirtPart::new()));
+    pub fn init(&self) {
+        self.parts.write().insert("/".into(), Arc::new(VirtPart::new()));
     }
 }
 
@@ -165,7 +165,8 @@ impl VirtualFileSystem { // File operations
 
 impl VirtualFileSystem { // Directory operations
     fn walk_inner(&self, path: &str, isparent: bool) -> Result<Arc<dyn VirtFNode>, String> {
-        let root = self.parts.get("/").ok_or("VFS not initialised")?.clone().root();
+        let parts = self.parts.read();
+        let root = parts.get("/").ok_or("VFS not initialised")?.clone().root();
         let partlen = path.split('/').count();
         let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
         let mut path_now = String::new();
@@ -181,7 +182,7 @@ impl VirtualFileSystem { // Directory operations
                 if !path_now.ends_with('/') { path_now.push('/') }
                 path_now.push_str(part);
 
-                if let Some(mounted) = self.parts.get(&path_now) {
+                if let Some(mounted) = parts.get(&path_now) {
                     stack.push(mounted.clone().root());
                 } else {
                     stack.push(last.walk(part)?);
@@ -224,17 +225,19 @@ impl VirtualFileSystem { // Directory operations
 }
 
 impl VirtualFileSystem { // Mount operations
-    pub fn mount(&mut self, path: &str, part: Arc<dyn Partition>) -> Result<(), String> {
-        if self.parts.contains_key(path) { return Err("Mount point already exists".into()); }
+    pub fn mount(&self, path: &str, part: Arc<dyn Partition>) -> Result<(), String> {
+        let mut parts = self.parts.write();
+        if parts.contains_key(path) { return Err("Mount point already exists".into()); }
         let dir = self.walk(path).map_err(|_| "Mount point does not exist")?;
         if dir.meta().ftype != FType::Directory { return Err("Mount point is not a directory".into()); }
-        self.parts.insert(path.into(), part);
+        parts.insert(path.into(), part);
         return Ok(());
     }
 
     pub fn unmount(&mut self, path: &str) -> Result<(), String> {
+        let mut parts = self.parts.write();
         if path == "/" { return Err("Cannot unmount root".into()); }
-        self.parts.remove(path).map(|_| ()).ok_or("No such mount point".into())
+        parts.remove(path).map(|_| ()).ok_or("No such mount point".into())
     }
 }
 
@@ -244,17 +247,16 @@ fn get_file_name(path: &str) -> Option<&str> {
     return Some(name);
 }
 
-pub static VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::empty());
+pub static VFS: VirtualFileSystem = VirtualFileSystem::empty();
 
 pub fn init_filesys() -> Result<(), String> {
-    let mut vfs = VFS.lock();
-    vfs.init();
+    VFS.init();
 
     // mkdir /dev
-    vfs.create("/dev", FType::Directory)?;
-    vfs.create("/mnt", FType::Directory)?;
+    VFS.create("/dev", FType::Directory)?;
+    VFS.create("/mnt", FType::Directory)?;
 
-    let devdir = vfs.walk("/dev")?;
+    let devdir = VFS.walk("/dev")?;
 
     for (idx, dev) in BLOCK_DEVICES.read().iter().enumerate() {
         let devname = format!("block{}", idx);
@@ -267,8 +269,8 @@ pub fn init_filesys() -> Result<(), String> {
 
             if let Some(fat) = FileAllocTable::new(partdev.clone()) {
                 let name = format!("/mnt/{}p{}", devname, i);
-                vfs.create(&name, FType::Directory)?;
-                vfs.mount(&name, fat)?;
+                VFS.create(&name, FType::Directory)?;
+                VFS.mount(&name, fat)?;
             }
             devdir.link(&format!("{}p{}", devname, i), partdev)?;
         }
@@ -276,14 +278,14 @@ pub fn init_filesys() -> Result<(), String> {
 
     // echo buf > /main.rs
     let mut buf = "fn main() {\n    println!(\"Hello, world!\");\n}".as_bytes().to_vec();
-    vfs.link("/main.rs", Arc::new(VirtFile::new()))?;
-    vfs.write("/main.rs", &buf, 0)?;
+    VFS.link("/main.rs", Arc::new(VirtFile::new()))?;
+    VFS.write("/main.rs", &buf, 0)?;
 
     // mv
-    vfs.walk("/main.rs").and_then(|file| {
-        vfs.link("/src", Arc::new(VirtDir::new()))?;
-        vfs.link("/src/main.rs", file)?;
-        vfs.unlink("/main.rs")?;
+    VFS.walk("/main.rs").and_then(|file| {
+        VFS.link("/src", Arc::new(VirtDir::new()))?;
+        VFS.link("/src/main.rs", file)?;
+        VFS.unlink("/main.rs")?;
         return Ok(());
     })?;
 
@@ -291,15 +293,15 @@ pub fn init_filesys() -> Result<(), String> {
     buf.iter_mut().for_each(|b| *b = 0);
     buf.resize(13, 0);
     // // walk in to read
-    // let file = vfs.walk("/src/main.rs")?;
+    // let file = VFS.walk("/src/main.rs")?;
     // file.read(&mut buf, 0);
-    // or direct read from vfs
-    vfs.read("/src/main.rs", &mut buf, 26)?;
+    // or direct read from VFS
+    VFS.read("/src/main.rs", &mut buf, 26)?;
     dump_bytes(&buf);
 
     // ls /dev
     let dir = "/dev";
-    let vdirn = vfs.walk(dir)?;
+    let vdirn = VFS.walk(dir)?;
     vdirn.list().iter().for_each(|entries| {
         printlnk!("in {}:", dir);
         for entry in entries {
@@ -321,7 +323,7 @@ pub fn init_filesys() -> Result<(), String> {
     });
 
     // xd -n 64 /mnt/block0p0/unix
-    match vfs.walk("/mnt/block0p0/unix") {
+    match VFS.walk("/mnt/block0p0/unix") {
         Ok(fnode) => {
             printlnk!("Found /mnt/block0p0/unix");
             printlnk!("    size: {} bytes", fnode.meta().size);
