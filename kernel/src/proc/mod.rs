@@ -36,7 +36,7 @@ pub static PROCS: RwLock<ProcTables> = RwLock::new(ProcTables::new());
 pub fn exec_aleph() {
     let path = "/mnt/block0p0/sbin/aleph";
 
-    VFS.lock().walk(path).and_then(|node| {
+    VFS.walk(path).and_then(|node| {
         let proc = ProcCtrlBlk::new(&*node, &[path])?;
         exec_proc(proc)?;
         Ok(())
