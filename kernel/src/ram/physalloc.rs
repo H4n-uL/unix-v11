@@ -1,6 +1,7 @@
 use crate::{
     kargs::{
-        NON_RAM, RAMDescriptor, RAMType, RECLAMABLE, Segment,
+        NON_RAM, RECLAMABLE, KINFO, SYSINFO,
+        RAMDescriptor, RAMType, Segment,
         efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
     ram::{PAGE_4KIB, align_up, mutex::IntLock},
@@ -232,6 +233,30 @@ impl PhysAlloc {
     }
 
     fn reclaim(&mut self) {
+        let efi_ram = efi_ram_layout();
+        let layout_len = efi_ram.len() * size_of::<RAMDescriptor>();
+
+        let elf_seg = elf_segments();
+        let seg_len = elf_seg.len() * size_of::<Segment>();
+
+        let efi_ptr = self.alloc(
+            AllocParams::new(layout_len)
+                .as_type(RAMType::EfiRamLayout)
+        ).unwrap();
+
+        let elf_ptr = self.alloc(
+            AllocParams::new(seg_len)
+                .as_type(RAMType::ElfSegments)
+        ).unwrap();
+
+        unsafe {
+            core::ptr::copy(efi_ram.as_ptr(), efi_ptr.ptr(), efi_ram.len());
+            core::ptr::copy(elf_seg.as_ptr(),elf_ptr.ptr(),elf_seg.len());
+        }
+
+        SYSINFO.write().layout_ptr = efi_ptr.addr();
+        KINFO.write().seg_ptr = elf_ptr.addr();
+
         loop {
             let idx = self.blocks_raw().iter().position(|blk| {
                 blk.valid() && blk.ty() == RAMType::Reclaimable
@@ -247,26 +272,6 @@ impl PhysAlloc {
             block.invalidate();
             self.add(new_blk);
         }
-
-        let efi_ram_layout = efi_ram_layout();
-        let layout_ptr = efi_ram_layout.as_ptr() as usize;
-        let layout_len = efi_ram_layout.len() * size_of::<RAMDescriptor>();
-
-        let elf_seg = elf_segments();
-        let seg_ptr = elf_seg.as_ptr() as usize;
-        let seg_len = elf_seg.len() * size_of::<Segment>();
-
-        self.alloc(
-            AllocParams::new(layout_len)
-                .at(layout_ptr as *mut u8)
-                .as_type(RAMType::EfiRamLayout)
-        );
-
-        self.alloc(
-            AllocParams::new(seg_len)
-                .at(seg_ptr as *mut u8)
-                .as_type(RAMType::ElfSegments)
-        );
     }
 
     fn blocks_raw(&self) -> &[RAMBlock] {
