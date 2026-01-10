@@ -29,16 +29,18 @@ fn kernel_request(
         );
         #[cfg(target_arch = "x86_64")]
         core::arch::asm!(
+            "push rcx",
+            "push r11",
             "syscall",
+            "pop r11",
+            "pop rcx",
             inlateout("rax") req => ret,
             in("rdi") arg1,
             in("rsi") arg2,
             in("rdx") arg3,
             in("r10") arg4,
             in("r8") arg5,
-            in("r9") arg6,
-            out("rcx") _,
-            out("r11") _
+            in("r9") arg6
         );
     }
     return ret;
