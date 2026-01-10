@@ -98,7 +98,7 @@ impl Glacier {
         unsafe {
             new.init();
 
-            let page_size = new.cfg.psz.size();
+            let page_size = new.cfg().psz.size();
             let krvm_root = GLACIER.read().root_table;
             let new_root = new.root_table;
 
@@ -116,7 +116,7 @@ impl Glacier {
     unsafe fn init(&mut self) {
         if self.is_init { return; }
         self.cfg = RvmCfg::detect();
-        let table_size = self.cfg.psz.size();
+        let table_size = self.cfg().psz.size();
         let root_table = PHYS_ALLOC.alloc(
             AllocParams::new(table_size)
                 .align(table_size)
@@ -130,15 +130,15 @@ impl Glacier {
 
     pub fn map_page(&mut self, va: usize, pa: usize, flags: usize) {
         if !self.is_init { return; }
-        let page_mask = !(self.cfg.psz.size() - 1);
+        let page_mask = !(self.cfg().psz.size() - 1);
         let va = va & page_mask;
         let pa = pa & page_mask;
 
-        let levels = self.cfg.levels();
+        let levels = self.cfg().levels();
         let mut table = self.root_table;
 
         for level in 0..levels {
-            let index = self.cfg.get_index(level, va);
+            let index = self.cfg().get_index(level, va);
             let entry = unsafe { (table as *mut usize).add(index) };
 
             if level == levels - 1 {
@@ -147,7 +147,7 @@ impl Glacier {
             }
 
             if unsafe { *entry & flags::VALID == 0 } {
-                let table_size = self.cfg.psz.size();
+                let table_size = self.cfg().psz.size();
                 let next_table = PHYS_ALLOC.alloc(
                     AllocParams::new(table_size)
                         .align(table_size)
@@ -160,28 +160,31 @@ impl Glacier {
                 }
                 table = next_table.ptr::<()>() as usize;
             } else {
-                table = unsafe { *entry & self.cfg.psz.addr_mask() };
+                table = unsafe { *entry & self.cfg().psz.addr_mask() };
             }
         }
+
+        self.flush();
     }
 
     pub fn unmap_page(&mut self, va: usize) {
         if !self.is_init { return; }
-        let va = va & !(self.cfg.psz.size() - 1);
+        let va = va & !(self.cfg().psz.size() - 1);
         let _ = self.unmap_rec(self.root_table, va, 0);
     }
 
     fn unmap_rec(&self, table: usize, va: usize, level: u8) -> bool {
-        let entries = self.cfg.ent_cnt(level);
+        let entries = self.cfg().ent_cnt(level);
         let is_tbl_null = || (0..entries).all(|i| unsafe {
             *(table as *const usize).add(i) == 0
         });
 
-        let index = self.cfg.get_index(level, va);
+        let index = self.cfg().get_index(level, va);
         let entry = unsafe { (table as *mut usize).add(index) };
 
-        if level == self.cfg.levels() - 1 {
+        if level == self.cfg().levels() - 1 {
             unsafe { *entry = 0; }
+            self.flush();
             return is_tbl_null();
         }
 
@@ -189,13 +192,14 @@ impl Glacier {
             return false;
         }
 
-        let child = unsafe { *entry & self.cfg.psz.addr_mask() };
+        let child = unsafe { *entry & self.cfg().psz.addr_mask() };
 
         if self.unmap_rec(child, va, level + 1) {
             unsafe {
                 *entry = 0;
-                PHYS_ALLOC.free_raw(child as *mut u8, self.cfg.psz.size());
+                PHYS_ALLOC.free_raw(child as *mut u8, self.cfg().psz.size());
             }
+            self.flush();
             return is_tbl_null();
         }
         return false;
@@ -203,7 +207,7 @@ impl Glacier {
 
     pub fn map_range(&mut self, va: usize, pa: usize, size: usize, flags: usize) {
         if !self.is_init { return; }
-        let page_size = self.cfg.psz.size();
+        let page_size = self.cfg().psz.size();
         let page_mask = !(page_size - 1);
 
         let pa_start = pa & page_mask;
@@ -218,7 +222,7 @@ impl Glacier {
 
     pub fn unmap_range(&mut self, va: usize, size: usize) {
         if !self.is_init { return; }
-        let page_size = self.cfg.psz.size();
+        let page_size = self.cfg().psz.size();
         let page_mask = !(page_size - 1);
 
         let va_start = va & page_mask;
@@ -231,14 +235,14 @@ impl Glacier {
 
     pub fn get_pa(&self, va: usize) -> Option<usize> {
         if !self.is_init { return None; }
-        let page_mask = !(self.cfg.psz.size() - 1);
+        let page_mask = !(self.cfg().psz.size() - 1);
         let va = va & page_mask;
 
-        let levels = self.cfg.levels();
+        let levels = self.cfg().levels();
         let mut table = self.root_table;
 
         for level in 0..levels {
-            let index = self.cfg.get_index(level, va);
+            let index = self.cfg().get_index(level, va);
             let entry = unsafe { *((table as *const usize).add(index)) };
 
             if entry & flags::VALID == 0 {
@@ -246,9 +250,9 @@ impl Glacier {
             }
 
             if level == levels - 1 {
-                return Some(entry & self.cfg.psz.addr_mask());
+                return Some(entry & self.cfg().psz.addr_mask());
             } else {
-                table = entry & self.cfg.psz.addr_mask();
+                table = entry & self.cfg().psz.addr_mask();
             }
         }
 
@@ -280,15 +284,15 @@ impl Glacier {
             let entry = unsafe { *((table as *const usize).add(i)) };
 
             if entry & flags::VALID != 0 {
-                if level < self.cfg.levels() - 1 {
-                    let child = entry & self.cfg.psz.addr_mask();
+                if level < self.cfg().levels() - 1 {
+                    let child = entry & self.cfg().psz.addr_mask();
                     self._drop(child, level + 1);
                 }
             }
         }
 
         unsafe {
-            PHYS_ALLOC.free_raw(table as *mut u8, self.cfg.psz.size());
+            PHYS_ALLOC.free_raw(table as *mut u8, self.cfg().psz.size());
         }
     }
 }
@@ -315,12 +319,22 @@ pub fn init() {
         !((1 << (glacier.cfg().va_bits - 1)) - 1),
         AtomOrd::Relaxed
     );
+    PAGE_SIZE.store(
+        glacier.cfg().psz.size(),
+        AtomOrd::Relaxed
+    );
 
     for desc in efi_ram_layout() {
         let block_ty = desc.ty;
         let addr = desc.phys_start as usize;
         let size = desc.page_count as usize * 0x1000;
-        if NON_RAM.contains(&block_ty) {
+
+        if block_ty == RAMType::MMIO || block_ty == RAMType::MMIOPortSpace {
+            glacier.map_range(addr, addr, size, flags::D_RW);
+            continue;
+        }
+
+        if block_ty == RAMType::Reserved {
             continue;
         }
 

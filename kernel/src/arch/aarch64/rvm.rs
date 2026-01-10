@@ -134,6 +134,12 @@ impl Glacier {
         }
     }
 
+    pub fn flush(&self) {
+        unsafe {
+            asm!("dsb ishst", "isb");
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         let ptr: usize;
         unsafe {

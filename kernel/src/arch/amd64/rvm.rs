@@ -56,6 +56,8 @@ impl Glacier {
         }
     }
 
+    pub fn flush(&self) {}
+
     pub fn is_active(&self) -> bool {
         let ptr: usize;
         unsafe {
