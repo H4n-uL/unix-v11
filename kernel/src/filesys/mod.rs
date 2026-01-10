@@ -12,11 +12,12 @@ use crate::{
     ram::dump_bytes
 };
 
+use core::ops::{Deref, DerefMut};
 use alloc::{
     collections::btree_map::BTreeMap,
     format, string::String, sync::Arc, vec::Vec
 };
-use spin::{Mutex, RwLock};
+use spin::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 struct VirtFile {
     vfd: Mutex<VFileData>
@@ -125,6 +126,31 @@ impl VirtFNode for VirtDir {
     }
 }
 
+enum VfsLockType<'a> {
+    Read(RwLockReadGuard<'a, BTreeMap<String, Arc<dyn Partition>>>),
+    Write(RwLockWriteGuard<'a, BTreeMap<String, Arc<dyn Partition>>>)
+}
+
+impl Deref for VfsLockType<'_> {
+    type Target = BTreeMap<String, Arc<dyn Partition>>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            VfsLockType::Read(guard) => &*guard,
+            VfsLockType::Write(guard) => &*guard
+        }
+    }
+}
+
+impl DerefMut for VfsLockType<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            VfsLockType::Read(_) => panic!("Cannot get mutable reference from read lock"),
+            VfsLockType::Write(guard) => &mut *guard
+        }
+    }
+}
+
 pub struct VirtualFileSystem {
     parts: RwLock<BTreeMap<String, Arc<dyn Partition>>>
 }
@@ -137,35 +163,48 @@ impl VirtualFileSystem { // Constructors
     pub fn init(&self) {
         self.parts.write().insert("/".into(), Arc::new(VirtPart::new()));
     }
+
+    fn parts_read(&self) -> VfsLockType<'_> {
+        return VfsLockType::Read(self.parts.read());
+    }
+
+    fn parts_write(&self) -> VfsLockType<'_> {
+        return VfsLockType::Write(self.parts.write());
+    }
 }
 
 impl VirtualFileSystem { // File operations
     pub fn read(&self, path: &str, buf: &mut [u8], offset: u64) -> Result<(), String> {
-        return self.walk(path).and_then(|file|
+        let lock = self.parts_read();
+        return self.walk_inner(path, false, &lock).and_then(|file|
             file.read(buf, offset)
         );
     }
 
     pub fn write(&self, path: &str, buf: &[u8], offset: u64) -> Result<(), String> {
-        return self.walk(path).and_then(|file|
+        let lock = self.parts_read();
+        return self.walk_inner(path, false, &lock).and_then(|file|
             file.write(buf, offset)
         );
     }
 
     pub fn truncate(&self, path: &str, size: u64) -> Result<(), String> {
-        return self.walk(path).and_then(|file|
+        let lock = self.parts_read();
+        return self.walk_inner(path, false, &lock).and_then(|file|
             file.truncate(size)
         );
     }
 
     pub fn list(&self, path: &str) -> Result<Vec<String>, String> {
-        return self.walk(path).and_then(|node| node.list());
+        let lock = self.parts_read();
+        return self.walk_inner(path, false, &lock).and_then(|node| node.list());
     }
 }
 
 impl VirtualFileSystem { // Directory operations
-    fn walk_inner(&self, path: &str, isparent: bool) -> Result<Arc<dyn VirtFNode>, String> {
-        let parts = self.parts.read();
+    fn walk_inner(
+        &self, path: &str, isparent: bool, parts: &VfsLockType<'_>
+    ) -> Result<Arc<dyn VirtFNode>, String> {
         let root = parts.get("/").ok_or("VFS not initialised")?.clone().root();
         let partlen = path.split('/').count();
         let mut stack = Vec::<Arc<dyn VirtFNode>>::new();
@@ -198,27 +237,32 @@ impl VirtualFileSystem { // Directory operations
     }
 
     pub fn walk(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
-        return self.walk_inner(path, false);
+        let lock = self.parts_read();
+        return self.walk_inner(path, false, &lock);
     }
 
     pub fn walk_parent(&self, path: &str) -> Result<Arc<dyn VirtFNode>, String> {
-        return self.walk_inner(path, true);
+        let lock = self.parts_read();
+        return self.walk_inner(path, true, &lock);
     }
 
     pub fn create(&self, path: &str, ftype: FType) -> Result<(), String> {
-        let dir = self.walk_parent(path)?;
+        let lock = self.parts_read();
+        let dir = self.walk_inner(path, true, &lock)?;
         let filename = get_file_name(path).ok_or("Invalid path")?;
         return dir.create(filename, ftype);
     }
 
     pub fn link(&self, path: &str, node: Arc<dyn VirtFNode>) -> Result<(), String> {
-        let dir = self.walk_parent(path)?;
+        let lock = self.parts_read();
+        let dir = self.walk_inner(path, true, &lock)?;
         let filename = get_file_name(path).ok_or("Invalid path")?;
         return dir.link(filename, node);
     }
 
     pub fn unlink(&self, path: &str) -> Result<(), String> {
-        let dir = self.walk_parent(path)?;
+        let lock = self.parts_read();
+        let dir = self.walk_inner(path, true, &lock)?;
         let filename = get_file_name(path).ok_or("Invalid path")?;
         return dir.remove(filename);
     }
@@ -226,18 +270,18 @@ impl VirtualFileSystem { // Directory operations
 
 impl VirtualFileSystem { // Mount operations
     pub fn mount(&self, path: &str, part: Arc<dyn Partition>) -> Result<(), String> {
-        let mut parts = self.parts.write();
-        if parts.contains_key(path) { return Err("Mount point already exists".into()); }
-        let dir = self.walk(path).map_err(|_| "Mount point does not exist")?;
+        let mut lock = self.parts_write();
+        if lock.contains_key(path) { return Err("Mount point already exists".into()); }
+        let dir = self.walk_inner(path, false, &lock).map_err(|_| "Mount point does not exist")?;
         if dir.meta().ftype != FType::Directory { return Err("Mount point is not a directory".into()); }
-        parts.insert(path.into(), part);
+        lock.insert(path.into(), part);
         return Ok(());
     }
 
     pub fn unmount(&mut self, path: &str) -> Result<(), String> {
-        let mut parts = self.parts.write();
+        let mut lock = self.parts_write();
         if path == "/" { return Err("Cannot unmount root".into()); }
-        parts.remove(path).map(|_| ()).ok_or("No such mount point".into())
+        lock.remove(path).map(|_| ()).ok_or("No such mount point".into())
     }
 }
 
