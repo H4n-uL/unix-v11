@@ -4,7 +4,7 @@ use crate::{
         RAMDescriptor, RAMType, Segment,
         efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
-    ram::{PAGE_4KIB, align_up, mutex::IntLock},
+    ram::{PAGE_4KIB, align_up, glacier::page_size, mutex::IntLock},
     sort::HeaplessSort
 };
 
@@ -131,7 +131,7 @@ impl AllocParams {
     pub fn new(size: usize) -> Self {
         return Self {
             addr: None, size,
-            align: PAGE_4KIB,
+            align: page_size(),
             from_type: RAMType::Conv,
             as_type: RAMType::Conv,
             used: true
@@ -533,8 +533,8 @@ impl PhysAlloc {
         }
 
         let kept_addr = kept.as_ptr() as usize;
-        let kept_size = align_up(kept.len() * size_of::<RAMBlock>(), PAGE_4KIB);
-        let freed_addr = align_up(kept_addr + kept_size, PAGE_4KIB);
+        let kept_size = align_up(kept.len() * size_of::<RAMBlock>(), page_size());
+        let freed_addr = align_up(kept_addr + kept_size, page_size());
         let freed_size = self.ptr.size() - kept_size;
 
         if freed_size == 0 { return; }

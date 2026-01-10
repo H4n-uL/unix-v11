@@ -14,11 +14,10 @@ mod arch; mod device; mod filesys; mod kargs;
 mod kreq; mod proc; mod ram; mod sort;
 
 use crate::{
-    kargs::{Kargs, RAMType, AP_LIST},
+    kargs::{AP_LIST, Kargs, RAMType},
     ram::{
-        STACK_SIZE,
         physalloc::PHYS_ALLOC,
-        stack_top
+        stack_size, stack_top
     }
 };
 
@@ -51,6 +50,7 @@ pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn spark() -> ! {
+    ram::glacier::remap();
     arch::exc::init();
     printlnk!("The UNIX Time-Sharing System: Eleventh Edition");
     PHYS_ALLOC.reclaim();
@@ -58,7 +58,7 @@ pub extern "C" fn spark() -> ! {
     let _ = filesys::init_filesys();
 
     let stack_usage = stack_top() - crate::arch::stack_ptr() as usize;
-    printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, STACK_SIZE);
+    printlnk!("Kernel stack usage: {} / {} bytes", stack_usage, stack_size());
 
     printlnk!("ID of this AP: {}", AP_LIST.virtid_self());
 
