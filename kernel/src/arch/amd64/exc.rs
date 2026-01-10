@@ -390,7 +390,8 @@ pub fn init() {
         let mut idt = IDT.write();
         for i in 0..256 {
             let handler = ISR_STUBS[i] as u64;
-            idt[i].set(handler, 0x08, 0, 0x8e);
+            let attr = if i == 0x80 { 0xee } else { 0x8e };
+            idt[i].set(handler, 0x08, 0, attr);
         }
 
         let idtr = IdtPtr {
