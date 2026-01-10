@@ -319,9 +319,18 @@ impl PhysAlloc {
 
     fn find_free_ram(&mut self, args: AllocParams) -> Option<OwnedPtr> {
         let args = args.build();
-        return self.find(|block|
-            block.not_used() && block.size() >= args.size && block.ty() == args.from_type
-        ).map(|block| OwnedPtr::new_bytes(block.addr(), args.size));
+        return self.find(|block| {
+            let aligned = align_up(block.addr(), args.align);
+
+            block.not_used()
+            && aligned + args.size <= block.addr() + block.size()
+            && block.size() >= args.size
+            && block.ty() == args.from_type
+        }
+        ).map(|block|{
+            let addr = align_up(block.addr(), args.align);
+            OwnedPtr::new_bytes(addr, args.size)
+        });
     }
 
     fn alloc(&mut self, args: AllocParams) -> Option<OwnedPtr> {
