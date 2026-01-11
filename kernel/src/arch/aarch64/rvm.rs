@@ -130,7 +130,7 @@ impl Glacier {
                 mair = in(reg) mair_el1,
                 tcr = in(reg) self.cfg().tcr_el1(),
                 ttbr0 = in(reg) self.root_table(),
-                out("x0") _,
+                out("x0") _
             );
         }
     }
