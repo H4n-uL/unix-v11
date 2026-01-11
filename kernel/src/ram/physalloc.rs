@@ -165,11 +165,6 @@ const BASE_RB_SIZE: usize = 128;
 static mut RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
 pub static PHYS_ALLOC: PhysAllocGlob = PhysAllocGlob::empty();
 
-unsafe impl Send for RAMBlock {}
-unsafe impl Sync for RAMBlock {}
-unsafe impl Send for PhysAlloc {}
-unsafe impl Sync for PhysAlloc {}
-
 impl PhysAlloc {
     const fn empty() -> Self {
         Self {
@@ -257,19 +252,23 @@ impl PhysAlloc {
         SYSINFO.write().layout_ptr = efi_ptr.addr();
         KINFO.write().seg_ptr = elf_ptr.addr();
 
-        loop {
-            let idx = self.blocks_raw().iter().position(|blk| {
-                blk.valid() && blk.ty() == RAMType::Reclaimable
-            });
+        use alloc::vec::Vec;
+        // Heap allocation is permitted because PhysAlloc::reclaim
+        // is called only after heap initialisation and only once.
 
-            if idx.is_none() { break; }
+        let iter = self.blocks_raw().iter().enumerate()
+            .filter(|(_, blk)| blk.valid() && blk.ty() == RAMType::Reclaimable)
+            .map(|(idx, &blk)| (idx, blk)).collect::<Vec<(usize, RAMBlock)>>();
 
-            let block = &mut self.blocks_raw_mut()[idx.unwrap()];
+        for (idx, _) in iter.iter() {
+            self.blocks_raw_mut()[*idx].invalidate();
+        }
+
+        for (_, block) in iter.iter() { // O(kn)
             let new_blk = RAMBlock::new(
                 block.addr(), block.size(),
                 RAMType::Conv, false
             );
-            block.invalidate();
             self.add(new_blk);
         }
     }
@@ -352,6 +351,7 @@ impl PhysAlloc {
             from: RAMBlock,
             to: RAMBlock
         }
+
         let mut alloc_info = None;
         for block in self.blocks_iter_mut() {
             if filter(block) {
