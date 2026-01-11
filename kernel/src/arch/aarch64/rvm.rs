@@ -110,28 +110,17 @@ impl Glacier {
                 "dsb sy",
                 "isb",
 
-                "mrs x0, sctlr_el1",      // clear ...
-                "bic x0, x0, #(1 << 0)",  // M bit (turn off RAM Virtualisation Controller)
-                "bic x0, x0, #(1 << 2)",  // C bit (turn off D-cache)
-                "bic x0, x0, #(1 << 12)", // I bit (turn off I-cache)
-                "msr sctlr_el1, x0",      // ... write back
-                "isb",
-
-                "dc cisw, xzr",
-                "dsb sy",
-                "isb",
-
                 "msr mair_el1, {mair}",
                 "msr tcr_el1, {tcr}",
                 "msr ttbr0_el1, {ttbr0}",
                 "msr ttbr1_el1, {ttbr0}",
                 "isb",
 
-                "mrs x0, sctlr_el1",
-                "orr x0, x0, #(1 << 0)",  // M bit
-                "orr x0, x0, #(1 << 2)",  // C bit
-                "orr x0, x0, #(1 << 12)", // I bit
-                "msr sctlr_el1, x0",
+                "mrs x0, sctlr_el1",      // set ...
+                "orr x0, x0, #(1 << 0)",  // M bit (turn on RAM Virtualisation Controller)
+                "orr x0, x0, #(1 << 2)",  // C bit (turn on Data cache)
+                "orr x0, x0, #(1 << 12)", // I bit (turn on Instruction cache)
+                "msr sctlr_el1, x0",      // ... write back
                 "isb",
 
                 "tlbi vmalle1",
