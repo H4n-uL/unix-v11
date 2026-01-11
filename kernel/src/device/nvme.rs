@@ -19,7 +19,10 @@ pub struct NVMeAlloc;
 
 impl Dma for NVMeAlloc {
     unsafe fn alloc(&self, size: usize) -> usize {
-        return PHYS_ALLOC.alloc(AllocParams::new(size)).unwrap().addr();
+        return PHYS_ALLOC.alloc(
+            AllocParams::new(size)
+                .align(0x1000)
+        ).unwrap().addr();
     }
 
     unsafe fn free(&self, addr: usize, size: usize) {
