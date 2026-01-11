@@ -164,7 +164,7 @@ impl Glacier {
             }
         }
 
-        self.flush();
+        self.flush(va);
     }
 
     pub fn unmap_page(&mut self, va: usize) {
@@ -184,7 +184,7 @@ impl Glacier {
 
         if level == self.cfg().levels() - 1 {
             unsafe { *entry = 0; }
-            self.flush();
+            self.flush(va);
             return is_tbl_null();
         }
 
@@ -199,7 +199,7 @@ impl Glacier {
                 *entry = 0;
                 PHYS_ALLOC.free_raw(child as *mut u8, self.cfg().psz.size());
             }
-            self.flush();
+            self.flush(va);
             return is_tbl_null();
         }
         return false;

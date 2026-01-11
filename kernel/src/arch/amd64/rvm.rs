@@ -25,8 +25,7 @@ impl RvmCfg {
     pub fn detect() -> Self {
         return Self {
             psz: PageSize::Size4kiB,
-            va_bits: 48,
-            pa_bits: 52
+            va_bits: 48, pa_bits: 52
         };
     }
 }
@@ -56,7 +55,7 @@ impl Glacier {
         }
     }
 
-    pub fn flush(&self) {}
+    pub fn flush(&self, _va: usize) {}
 
     pub fn is_active(&self) -> bool {
         let ptr: usize;

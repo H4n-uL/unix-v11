@@ -5,20 +5,20 @@ use core::arch::asm;
 #[allow(dead_code)]
 pub mod flags {
     pub const VALID: usize = 0b1;
-    pub const NEXT: usize  = 0b10000000011;
+    pub const NEXT: usize  = 0b100_0000_0011;
 
-    pub const K_ROO: usize = 0b11110000011 | 0b11 << 53;
-    pub const K_RWO: usize = 0b11100000011 | 0b11 << 53;
-    pub const K_ROX: usize = 0b11110000011;
-    pub const K_RWX: usize = 0b11100000011;
+    pub const K_ROO: usize = 0b111_1000_0011 | 0b11 << 53;
+    pub const K_RWO: usize = 0b111_0000_0011 | 0b11 << 53;
+    pub const K_ROX: usize = 0b111_1000_0011;
+    pub const K_RWX: usize = 0b111_0000_0011;
 
-    pub const D_RO: usize  = 0b10010000111 | 0b11 << 53;
-    pub const D_RW: usize  = 0b10000000111 | 0b11 << 53;
+    pub const D_RO: usize  = 0b100_1000_0111 | 0b11 << 53;
+    pub const D_RW: usize  = 0b100_0000_0111 | 0b11 << 53;
 
-    pub const U_ROO: usize = 0b11111000011 | 0b11 << 53;
-    pub const U_RWO: usize = 0b11101000011 | 0b11 << 53;
-    pub const U_ROX: usize = 0b11111000011;
-    pub const U_RWX: usize = 0b11101000011;
+    pub const U_ROO: usize = 0b111_1100_0011 | 0b11 << 53;
+    pub const U_RWO: usize = 0b111_0100_0011 | 0b11 << 53;
+    pub const U_ROX: usize = 0b111_1100_0011;
+    pub const U_RWX: usize = 0b111_0100_0011;
 }
 
 impl RvmCfg {
@@ -110,6 +110,17 @@ impl Glacier {
                 "dsb sy",
                 "isb",
 
+                "mrs x0, sctlr_el1",      // clear ...
+                "bic x0, x0, #(1 << 0)",  // M bit (turn off RAM Virtualisation Controller)
+                "bic x0, x0, #(1 << 2)",  // C bit (turn off D-cache)
+                "bic x0, x0, #(1 << 12)", // I bit (turn off I-cache)
+                "msr sctlr_el1, x0",      // ... write back
+                "isb",
+
+                "dc cisw, xzr",
+                "dsb sy",
+                "isb",
+
                 "msr mair_el1, {mair}",
                 "msr tcr_el1, {tcr}",
                 "msr ttbr0_el1, {ttbr0}",
@@ -117,9 +128,9 @@ impl Glacier {
                 "isb",
 
                 "mrs x0, sctlr_el1",
-                "orr x0, x0, #(1 << 0)",  // M bit: MMU enable
-                "orr x0, x0, #(1 << 2)",  // C bit: Data cache enable
-                "orr x0, x0, #(1 << 12)", // I bit: Instruction cache enable
+                "orr x0, x0, #(1 << 0)",  // M bit
+                "orr x0, x0, #(1 << 2)",  // C bit
+                "orr x0, x0, #(1 << 12)", // I bit
                 "msr sctlr_el1, x0",
                 "isb",
 
@@ -129,14 +140,21 @@ impl Glacier {
                 "isb",
                 mair = in(reg) mair_el1,
                 tcr = in(reg) self.cfg().tcr_el1(),
-                ttbr0 = in(reg) self.root_table()
+                ttbr0 = in(reg) self.root_table(),
+                out("x0") _,
             );
         }
     }
 
-    pub fn flush(&self) {
+    pub fn flush(&self, va: usize) {
+        let tlbi_va = va >> self.cfg().psz.shift();
         unsafe {
-            asm!("dsb ishst", "isb");
+            asm!(
+                "tlbi vale1, {va}",
+                "dsb ish",
+                "isb",
+                va = in(reg) tlbi_va
+            );
         }
     }
 
