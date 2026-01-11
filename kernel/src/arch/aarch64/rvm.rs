@@ -175,7 +175,9 @@ impl Glacier {
                 "msr ttbr0_el1, {ttbr0}",
                 "msr ttbr1_el1, {ttbr0}",
                 "isb",
+
                 "tlbi vmalle1",
+                "ic iallu",
                 "dsb sy",
                 "isb",
                 ttbr0 = in(reg) self.root_table()

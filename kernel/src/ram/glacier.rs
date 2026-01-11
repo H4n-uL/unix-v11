@@ -102,12 +102,12 @@ impl Glacier {
             let krvm_root = GLACIER.read().root_table;
             let new_root = new.root_table;
 
-            let psize_half = page_size >> 1;
+            let hihalf_idx = new.cfg().ent_cnt(0) >> 1;
 
             (new_root as *mut u8)
                 .copy_from(krvm_root as *const u8, page_size);
             (new_root as *mut u8)
-                .write_bytes(0, psize_half);
+                .write_bytes(0, hihalf_idx);
         }
 
         return new;
