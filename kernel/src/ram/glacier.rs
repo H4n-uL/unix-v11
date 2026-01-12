@@ -316,7 +316,7 @@ pub fn init() {
 
     unsafe { glacier.init(); }
     HIHALF.store(
-        !((1 << (glacier.cfg().va_bits - 1)) - 1),
+        !0 << (glacier.cfg().va_bits - 1),
         AtomOrd::Relaxed
     );
     PAGE_SIZE.store(
