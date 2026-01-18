@@ -111,10 +111,10 @@ cargo rustc --target $KERNEL_TARGET $BUILD_ARGS
 
 cd $PRJCT_ROOT
 
-rm -rf $PRJCT_ROOT/udisk
-mkdir -p $PRJCT_ROOT/udisk
-mkdir -p $PRJCT_ROOT/udisk/efi/boot
-mkdir -p $PRJCT_ROOT/udisk/sbin
+rm -rf "$PRJCT_ROOT/udisk"
+mkdir -p "$PRJCT_ROOT/udisk"
+mkdir -p "$PRJCT_ROOT/udisk/efi/boot"
+mkdir -p "$PRJCT_ROOT/udisk/sbin"
 
 EFI_TARGET_DIR=`echo "$EFI_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
 KERNEL_TARGET_DIR=`echo "$KERNEL_TARGET" | sed 's/\.json$//' | sed 's/.*\///'`
@@ -126,7 +126,7 @@ else
     BUILD_DIR="debug"
 fi
 
-cp $PRJCT_ROOT/target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi udisk/efi/boot/$EFI_BOOT_NAME
-cp $PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel udisk/unix
-cp $PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-aleph udisk/sbin/aleph
+cp "$PRJCT_ROOT/target/$EFI_TARGET_DIR/$BUILD_DIR/unix-v11-efi.efi" "$PRJCT_ROOT/udisk/efi/boot/$EFI_BOOT_NAME"
+cp "$PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-kernel" "$PRJCT_ROOT/udisk/unix"
+cp "$PRJCT_ROOT/target/$KERNEL_TARGET_DIR/$BUILD_DIR/unix-v11-aleph" "$PRJCT_ROOT/udisk/sbin/aleph"
 echo System ready: udisk
