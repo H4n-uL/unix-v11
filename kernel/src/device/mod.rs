@@ -1,4 +1,9 @@
-mod acpi; pub mod block; mod cpu; mod nvme; mod vga;
+mod acpi;
+pub mod block;
+mod cpu;
+mod nvme;
+mod usb;
+mod vga;
 
 use crate::{
     arch::rvm::flags,
@@ -76,6 +81,15 @@ impl PciDevice {
             0 => { if index < 6 { Some(val) } else { None } },
             1 => { if index < 2 { Some(val) } else { None } },
             _ => None
+        }
+    }
+
+    pub fn mmio_addr(&self) -> usize {
+        let base = self.bar(0).unwrap() as usize;
+        if (base & 0b110) == 0b100 {
+            return ((self.bar(1).unwrap() as usize) << 32) | (base & !0b111);
+        } else {
+            return base & !0b11;
         }
     }
 
@@ -207,7 +221,7 @@ pub fn init_device() {
     init_device_tree();
     scan_pci();
 
-    for dev in PCI_DEVICES.read().iter() {
+    for dev in PCI_DEVICES.write().iter_mut() {
         printk!(
             "/bus{}/dev{}/fn{} | {:04x}:{:04x} Class {:02x}.{:02x} IF {:02x}",
             dev.bus(), dev.device(), dev.function(),
@@ -215,14 +229,22 @@ pub fn init_device() {
             dev.class(), dev.subclass(), dev.prog_if()
         );
 
-        if dev.is_nvme()    { printk!(" --> NVMe Controller"); }
-        if dev.is_usb()     { printk!(" --> USB Controller"); }
+        if dev.is_nvme() {
+            printk!(" --> NVMe Controller");
+            nvme::add(dev);
+        }
+
+        if dev.is_usb()     {
+            printk!(" --> USB Controller");
+            let _ = usb::add(dev);
+        }
+
         if dev.is_display() { printk!(" --> Display Controller"); }
         if dev.is_bridge()  { printk!(" (PCI Bridge)"); }
+
         printlnk!();
     }
 
     cpu::init_cpu();
-    nvme::init_nvme();
     vga::init_vga();
 }
