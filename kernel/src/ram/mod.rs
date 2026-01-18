@@ -29,7 +29,7 @@ use talc::{OomHandler, Span, Talc, Talck};
 // KINFO.size = Size of the kernel image
 // KHEAP.size = Size of the kernel heap
 
-// PER_CPU_DATA = PAGE_SIZE << 4
+// PER_CPU_DATA = (PAGE_SIZE << 4).max(0x40000)
 // STACK_SIZE =   PAGE_SIZE.max(0x4000)
 
 // Top of virtual RAM
@@ -70,7 +70,7 @@ pub fn stack_size() -> usize {
 
 #[inline(always)]
 pub fn per_cpu_data() -> usize {
-    return page_size() << 4;
+    return (page_size() << 4).max(0x40000);
 }
 
 pub const PAGE_4KIB: usize = 0x1000;
