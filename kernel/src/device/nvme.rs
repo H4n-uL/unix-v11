@@ -1,13 +1,13 @@
 use crate::{
     arch::rvm::flags,
     device::{
-        block::{BlockDevType, BlockDevice, DevId, BLOCK_DEVICES},
-        PCI_DEVICES
+        PciDevice,
+        block::{BLOCK_DEVICES, BlockDevType, BlockDevice, DevId}
     },
     ram::{
-        glacier::GLACIER,
-        physalloc::{AllocParams, PHYS_ALLOC},
-        PhysPageBuf
+        PhysPageBuf, align_up,
+        glacier::{GLACIER, page_size},
+        physalloc::{AllocParams, PHYS_ALLOC}
     }
 };
 
@@ -18,15 +18,20 @@ use spin::RwLock;
 pub struct NVMeAlloc;
 
 impl Dma for NVMeAlloc {
-    unsafe fn alloc(&self, size: usize) -> usize {
+    unsafe fn alloc(&self, size: usize, align: usize) -> usize {
         return PHYS_ALLOC.alloc(
             AllocParams::new(size)
-                .align(0x1000)
+                .align(align)
         ).unwrap().addr();
     }
 
-    unsafe fn free(&self, addr: usize, size: usize) {
-        unsafe { PHYS_ALLOC.free_raw(addr as *mut u8, size); }
+    unsafe fn free(&self, addr: usize, size: usize, align: usize) {
+        unsafe {
+            PHYS_ALLOC.free_raw(
+                addr as *mut u8,
+                align_up(size, align)
+            );
+        }
     }
 
     unsafe fn map_mmio(&self, phys: usize, size: usize) -> usize {
@@ -38,7 +43,9 @@ impl Dma for NVMeAlloc {
         GLACIER.write().unmap_range(virt, size);
     }
 
-    fn virt_to_phys(&self, va: usize) -> usize { va }
+    fn virt_to_phys(&self, va: usize) -> usize { return va; }
+
+    fn page_size(&self) -> usize { return page_size(); }
 }
 
 pub struct BlockDeviceNVMe {
@@ -110,21 +117,20 @@ impl BlockDevice for BlockDeviceNVMe {
 
 pub static NVME_DEV: RwLock<BTreeMap<u16, Arc<NVMeDev<NVMeAlloc>>>> = RwLock::new(BTreeMap::new());
 
-pub fn init_nvme() {
-    let mut nvme_devices = NVME_DEV.write();
-    let mut block_devices = BLOCK_DEVICES.write();
-    for pci_dev in PCI_DEVICES.read().iter().filter(|&dev| dev.is_nvme()) {
-        let base = pci_dev.bar(0).unwrap() as usize;
-        let mmio_addr = if (base & 0b110) == 0b100 {
-            ((pci_dev.bar(1).unwrap() as usize) << 32) | (base & !0b111)
-        } else { base & !0b11 };
+pub fn add(dev: &mut PciDevice) {
+    if !dev.is_nvme() {
+        return;
+    }
 
-        let devid = pci_dev.devid;
-        if let Ok(nvme) = NVMeDev::new(mmio_addr, NVMeAlloc) {
-            for ns in nvme.ns_list() {
+    dev.enable_pci_device();
+
+    let devid = dev.devid;
+    if let Ok(nvme) = NVMeDev::new(dev.mmio_addr(), NVMeAlloc) {
+        let mut nvme_devices = NVME_DEV.write();
+        let mut block_devices = BLOCK_DEVICES.write();
+        for ns in nvme.ns_list() {
             block_devices.push(Arc::new(BlockDeviceNVMe::new(ns.clone(), devid)));
-            }
-            nvme_devices.insert(devid, nvme);
         }
+        nvme_devices.insert(devid, nvme);
     }
 }
