@@ -52,9 +52,10 @@ pub fn add(dev: &mut PciDevice) -> Result<(), String> {
 
     dev.enable_pci_device();
 
-    let ctrl = XhciCtrl::new(dev.mmio_addr(), UsbAlloc)
-        .map_err(|e| alloc::format!("xHCI init failed: {:?}", e))?;
-    let ctrl = Arc::new(ctrl);
+    let ctrl = Arc::new(
+        XhciCtrl::new(dev.mmio_addr(), UsbAlloc)
+            .map_err(|e| alloc::format!("xHCI init failed: {:?}", e))?
+    );
 
     for port in 0..ctrl.max_ports() {
         if !ctrl.port_connected(port) {
