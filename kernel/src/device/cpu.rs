@@ -1,39 +1,39 @@
 use crate::{
-    arch::{self, rvm::flags}, device::ACPI, printlnk,
+    arch::{self, intc, rvm::flags},
+    device::ACPI, kargs::AP_LIST,
     ram::{
-        glacier::{GLACIER, page_size},
-        per_cpu_data, stack_size, stack_top
+        glacier::GLACIER,
+        per_cpu_data, stack_top
     }
 };
 
+use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use acpi::sdt::madt::{Madt, MadtEntry};
 
-pub const IC_DOORBELL_SIZE: usize = 0x10000; // I/O APIC 4K, GICD 64K
+pub static GICD_BASE: AtomicUsize = AtomicUsize::new(0);
+pub static GICC_BASE: AtomicUsize = AtomicUsize::new(0); // GICv2 GIC CPU intfce
+pub static GICR_BASE: AtomicUsize = AtomicUsize::new(0); // GICv3 GIC redistrib
+pub static CPU_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+// AMD64:   LAPIC Doorbell  4KB
+// AArch64: GICD Doorbell  64KB
+pub const IC_DOORBELL_SIZE: usize = 0x10000;
+
+// AMD64:   LAPIC   4KB
+// AArch64: GICR  128KB
+pub const IC_SIZE: usize = 0x20000;
 
 // cpu-info Layout:
-// +------------------+ - cpu_info_base()
-// |  GICC / LAPIC    |       ic_gicc_size() = PAGE_SIZE.max(0x2000)
-// +------------------+ - ic_gicc_size()
-// |      GICR        |       IC_GICR_SIZE = 128KB
-// +------------------+ - ic_gicc_size() + IC_GICR_SIZE
-
-pub fn ic_gicc_size() -> usize { page_size().max(0x2000) } // GICC 8K, LAPIC 4K
-pub const IC_GICR_SIZE: usize = 0x20000; // GICR 128K
-
-pub fn cpu_info_size() -> usize {
-    per_cpu_data() - stack_size() - page_size() // guard page
-}
+// +------------------+ - cpu_info_base() == ic_va()
+// |   LAPIC / GICR   |       IC_SIZE
+// +------------------+ - ic_va() + IC_SIZE
 
 pub fn cpu_info_base() -> usize {
-    stack_top() - per_cpu_data()
+    return stack_top() - per_cpu_data();
 }
 
-pub fn ic_gicc_va() -> usize {
-    cpu_info_base()
-}
-
-pub fn ic_gicr_va() -> usize {
-    cpu_info_base() + ic_gicc_size()
+pub fn ic_va() -> usize {
+    return cpu_info_base();
 }
 
 fn map_doorbell(phys: usize) {
@@ -49,57 +49,66 @@ pub fn init_cpu() {
     let madt = madt.get();
 
     let phys_id = arch::phys_id();
-    let mut gicc_phys = None;
-    let mut gicr_phys = None;
+    let mut ic_phys = None;
+    let mut cpu_count = 0usize;
 
     #[cfg(target_arch = "x86_64")]
-    { gicc_phys = Some(madt.local_apic_address as usize); }
+    { ic_phys = Some(madt.local_apic_address as usize); }
 
     for entry in madt.entries() {
         match entry {
-            // AMD64: LAPIC / I/O APIC
-            LocalApic(lapic) => {
-                if lapic.apic_id as usize == phys_id {
-                    printlnk!("CPU {}: LAPIC @ {:#x}", phys_id, gicc_phys.unwrap_or(0));
-                }
+            // AMD64
+            LocalApic(_) => {
+                cpu_count += 1;
             }
             LocalApicAddressOverride(ovr) => {
-                gicc_phys = Some(ovr.local_apic_address as usize);
+                ic_phys = Some(ovr.local_apic_address as usize);
             }
             IoApic(io) => {
                 map_doorbell(io.io_apic_address as usize);
             }
 
-            // AArch64: GICC / GICR / GICD
+            // AArch64
             Gicc(gicc) => {
-                let mpidr = gicc.mpidr;
-                let gicc_addr = gicc.gic_registers_address;
-                let gicr_addr = gicc.gicr_base_address;
-                if (mpidr as usize & 0xffff) == phys_id {
-                    gicc_phys = Some(gicc_addr as usize);
-                    gicr_phys = Some(gicr_addr as usize);
-                    printlnk!("CPU {}: GICC @ {:#x}, GICR @ {:#x}", phys_id, gicc_addr, gicr_addr);
+                cpu_count += 1;
+                // GICv2: GICC base
+                if GICC_BASE.load(AtomOrd::Relaxed) == 0 && gicc.gic_registers_address != 0 {
+                    GICC_BASE.store(gicc.gic_registers_address as usize, AtomOrd::Relaxed);
+                }
+                // GICv3: GICR base
+                if GICR_BASE.load(AtomOrd::Relaxed) == 0 && gicc.gicr_base_address != 0 {
+                    GICR_BASE.store(gicc.gicr_base_address as usize, AtomOrd::Relaxed);
+                }
+                if (gicc.mpidr as usize & 0xffff) == phys_id {
+                    ic_phys = Some(if gicc.gicr_base_address != 0 {
+                        gicc.gicr_base_address as usize
+                    } else {
+                        gicc.gic_registers_address as usize
+                    });
                 }
             }
             Gicd(gicd) => {
-                map_doorbell(gicd.physical_base_address as usize);
+                let base = gicd.physical_base_address as usize;
+                GICD_BASE.store(base, AtomOrd::Relaxed);
+                map_doorbell(base);
+            }
+            GicRedistributor(gicr) => {
+                let base = gicr.discovery_range_base_address as usize;
+                let len = gicr.discovery_range_length as usize;
+                if base != 0 {
+                    GICR_BASE.store(base, AtomOrd::Relaxed);
+                    GLACIER.write().map_range(base, base, len, flags::D_RW);
+                }
             }
 
             _ => {}
         }
     }
 
-    if let Some(phys) = gicc_phys {
-        GLACIER.write().map_range(
-            ic_gicc_va(), phys,
-            ic_gicc_size(), flags::D_RW
-        );
-    }
+    CPU_COUNT.store(cpu_count, AtomOrd::Relaxed);
 
-    if let Some(phys) = gicr_phys {
-        GLACIER.write().map_range(
-            ic_gicr_va(), phys,
-            IC_GICR_SIZE, flags::D_RW
-        );
+    if let Some(phys) = ic_phys {
+        GLACIER.write().map_range(ic_va(), phys, IC_SIZE, flags::D_RW);
+        intc::init(AP_LIST.virtid_self());
     }
 }

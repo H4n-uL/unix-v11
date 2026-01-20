@@ -1,4 +1,8 @@
-use crate::{kreq::kernel_requestee, printlnk, ram::stack_top};
+use crate::{
+    arch::intc,
+    kreq::kernel_requestee,
+    printlnk, ram::stack_top
+};
 
 use core::arch::{asm, global_asm};
 
@@ -146,7 +150,18 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
         // 2  => { /* fiq  el1t */ }
         // 3  => { /* serr el1t */ }
         // 4  => { /* sync el1h */ }
-        // 5  => { /* irq  el1h */ }
+        5  => { /* irq el1h */
+            let intid = intc::ack();
+            match intid {
+                30 => { // timer
+                    printlnk!("Timer IRQ");
+                }
+                _ => {
+                    printlnk!("Unhandled IRQ: {}", intid);
+                }
+            }
+            intc::eoi(intid);
+        }
         // 6  => { /* fiq  el1h */ }
         // 7  => { /* serr el1h */ }
         8  | 12 => { /* sync el0 */
@@ -162,7 +177,18 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
                 panic!("Unhandled exception");
             }
         }
-        // 9  | 13 => { /* irq  el0  */ }
+        9  | 13 => { /* irq el0 */
+            let intid = intc::ack();
+            match intid {
+                30 => { // timer
+                    printlnk!("Timer IRQ");
+                }
+                _ => {
+                    printlnk!("Unhandled IRQ: {}", intid);
+                }
+            }
+            intc::eoi(intid);
+        }
         // 10 | 14 => { /* fiq  el0  */ }
         // 11 | 15 => { /* serr el0  */ }
         ..16 => {

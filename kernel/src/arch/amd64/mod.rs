@@ -1,4 +1,5 @@
 pub mod exc;
+pub mod intc;
 pub mod proc;
 pub mod rvm;
 

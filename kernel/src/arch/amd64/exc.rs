@@ -1,4 +1,8 @@
-use crate::{kargs::AP_LIST, kreq::kernel_requestee, printlnk, ram::stack_top};
+use crate::{
+    arch::intc, kargs::AP_LIST,
+    kreq::kernel_requestee,
+    printlnk, ram::stack_top
+};
 
 use core::arch::{asm, global_asm};
 use alloc::{boxed::Box, collections::btree_map::BTreeMap};
@@ -345,6 +349,12 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
         // ..32 => { /* reserved by Intel */ }
         // // END OF CPU EXCEPTIONS
 
+        32 => { // timer
+            intc::eoi(0);
+            printlnk!("Timer IRQ");
+            return;
+        }
+
         128 => { /* syscall */
             frame.rax = kernel_requestee(
                 frame.rax as *const u8,
@@ -390,7 +400,7 @@ pub fn init() {
         let mut idt = IDT.write();
         for i in 0..256 {
             let handler = ISR_STUBS[i] as u64;
-            let attr = if i == 0x80 { 0xee } else { 0x8e };
+            let attr = if [0x20, 0x80].contains(&i) { 0xee } else { 0x8e };
             idt[i].set(handler, 0x08, 0, attr);
         }
 

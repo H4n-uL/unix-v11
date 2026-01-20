@@ -1,6 +1,6 @@
 mod acpi;
 pub mod block;
-mod cpu;
+pub mod cpu;
 mod nvme;
 mod usb;
 mod vga;

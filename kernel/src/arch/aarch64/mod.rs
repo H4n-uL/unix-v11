@@ -1,10 +1,11 @@
 pub mod exc;
+pub mod intc;
 pub mod proc;
 pub mod rvm;
 
 use crate::{
     arch::rvm::flags,
-    ram::glacier::GLACIER
+    ram::glacier::{GLACIER, page_size}
 };
 
 use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
@@ -25,7 +26,7 @@ const UART0_BASE: usize = 0x0900_0000; // QEMU virt PL011 UART
 
 #[inline(always)]
 fn serial_io() -> usize {
-    0usize.wrapping_sub(crate::ram::glacier::page_size())
+    0usize.wrapping_sub(page_size())
 }
 
 #[inline(always)]
