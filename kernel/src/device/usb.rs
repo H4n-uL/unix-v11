@@ -1,7 +1,6 @@
 use crate::{
     arch::rvm::flags, device::PciDevice, printk,
     ram::{
-        align_up,
         glacier::{GLACIER, page_size},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
@@ -20,9 +19,9 @@ impl Dma for UsbAlloc {
         ).map(|p| p.addr()).unwrap_or(0)
     }
 
-    unsafe fn free(&self, addr: usize, size: usize, align: usize) {
+    unsafe fn free(&self, addr: usize, size: usize, _: usize) {
         unsafe {
-            PHYS_ALLOC.free_raw(addr as *mut u8, align_up(size, align));
+            PHYS_ALLOC.free_raw(addr as *mut u8, size.next_power_of_two());
         }
     }
 

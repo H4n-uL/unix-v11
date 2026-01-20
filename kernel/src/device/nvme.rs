@@ -5,7 +5,7 @@ use crate::{
         block::{BLOCK_DEVICES, BlockDevType, BlockDevice, DevId}
     },
     ram::{
-        PhysPageBuf, align_up,
+        PhysPageBuf,
         glacier::{GLACIER, page_size},
         physalloc::{AllocParams, PHYS_ALLOC}
     }
@@ -25,11 +25,11 @@ impl Dma for NVMeAlloc {
         ).unwrap().addr();
     }
 
-    unsafe fn free(&self, addr: usize, size: usize, align: usize) {
+    unsafe fn free(&self, addr: usize, size: usize, _: usize) {
         unsafe {
             PHYS_ALLOC.free_raw(
                 addr as *mut u8,
-                align_up(size, align)
+                size.next_power_of_two()
             );
         }
     }

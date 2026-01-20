@@ -146,7 +146,7 @@ impl AllocParams {
 
     pub fn build(mut self) -> Self {
         self.addr = self.addr.map(|a| align_up(a, self.align));
-        self.size = align_up(self.size, self.align);
+        self.size = self.size.next_power_of_two();
         return self;
     }
 }
