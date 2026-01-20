@@ -13,7 +13,7 @@ pub struct DevFile {
 
 impl DevFile {
     pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
-        let meta = FMeta::default(vfid(), 1, FType::Device);
+        let meta = FMeta::default(vfid(), 1, FType::BlockDev);
         let mut s = Self { dev, meta };
         s.meta.size = s.total_size();
         return s;
@@ -96,7 +96,7 @@ pub struct PartDev {
 impl PartDev {
     pub fn new(dev: Arc<dyn BlockDevice>, part_no: u32, start_lba: u64, block_count: u64) -> Self {
         let devid = DevId::new(dev.devid()).part(part_no).build();
-        let meta = FMeta::default(vfid(), 1, FType::Partition);
+        let meta = FMeta::default(vfid(), 1, FType::BlockDev);
         let mut s = Self { dev, meta, devid, start_lba, block_count };
         s.meta.size = s.total_size();
         return s;

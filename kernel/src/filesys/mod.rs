@@ -354,8 +354,11 @@ pub fn init_filesys() -> Result<(), String> {
             let ty = match meta.ftype {
                 FType::Regular =>   "Regular:  ",
                 FType::Directory => "Directory:",
-                FType::Device =>    "Device:   ",
-                FType::Partition => "Partition:"
+                FType::BlockDev =>  "BlockDev: ",
+                FType::CharDev =>   "CharDev:  ",
+                FType::Fifo =>      "FIFO:     ",
+                FType::SymLink =>   "SymLink:  ",
+                FType::Socket =>    "Socket:   "
             };
             printlnk!("    {}  {}", ty, entry);
             printlnk!("    File ID     {}", meta.fid);

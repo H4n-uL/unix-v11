@@ -6,10 +6,13 @@ use alloc::{string::String, sync::Arc, vec::Vec};
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FType {
-    Regular = 0,
-    Directory = 1,
-    Device = 2,
-    Partition = 3
+    Fifo = 1,
+    CharDev = 2,
+    Directory = 4,
+    BlockDev = 6,
+    Regular = 8,
+    SymLink = 0xa,
+    Socket = 0xc
 }
 
 #[repr(C)]
@@ -39,8 +42,11 @@ impl FMeta {
         let perm = match ftype {
             FType::Regular => 0x644,
             FType::Directory => 0x755,
-            FType::Device => 0x640,
-            FType::Partition => 0x640
+            FType::BlockDev => 0x640,
+            FType::CharDev => 0x640,
+            FType::Fifo => 0x644,
+            FType::SymLink => 0o777,
+            FType::Socket => 0x644
         };
         return Self {
             fid, hostdev,
