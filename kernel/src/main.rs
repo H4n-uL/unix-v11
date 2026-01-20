@@ -37,6 +37,10 @@ macro_rules! printlnk {
     ($($arg:tt)*) => { $crate::printk!("{}\n", format_args!($($arg)*)) };
 }
 
+const _: () = {
+    let _ = include_str!("../link.ld");
+};
+
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
     kargs::set_kargs(kargs);
