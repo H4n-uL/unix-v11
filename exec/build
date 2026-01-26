@@ -37,6 +37,10 @@ to_lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+target2json() {
+    echo "$PRJCT_ROOT/cfg/$1.json"
+}
+
 die() {
     echo "Error: $1"
     echo "Use '$0 -h' for usage information"
@@ -53,13 +57,13 @@ case $ARCH in
         usage
         ;;
     aarch64|arm64|armv8|armv8a|armv8-a)
-        EFI_TARGET="aarch64-unknown-uefi"
-        KERNEL_TARGET="aarch64-unknown-none"
+        EFI_TARGET="aarch64-uefi"
+        KERNEL_TARGET="aarch64-unix-baremetal"
         EFI_BOOT_NAME="bootaa64.efi"
         ;;
     amd64|x86-64|x86_64|x64)
-        EFI_TARGET="x86_64-unknown-uefi"
-        KERNEL_TARGET="x86_64-unknown-none"
+        EFI_TARGET="amd64-uefi"
+        KERNEL_TARGET="amd64-unix-baremetal"
         EFI_BOOT_NAME="bootx64.efi"
         ;;
     *)
@@ -101,13 +105,13 @@ case "$VERBOSE" in
 esac
 
 cd $PRJCT_ROOT/efi
-cargo rustc --target $EFI_TARGET $BUILD_ARGS
+cargo rustc --target `target2json "$EFI_TARGET"` $BUILD_ARGS
 
 cd $PRJCT_ROOT/kernel
-cargo rustc --target $KERNEL_TARGET $BUILD_ARGS
+cargo rustc --target `target2json "$KERNEL_TARGET"` $BUILD_ARGS
 
 cd $PRJCT_ROOT/corecli/aleph
-cargo rustc --target $KERNEL_TARGET $BUILD_ARGS
+cargo rustc --target `target2json "$KERNEL_TARGET"` $BUILD_ARGS
 
 cd $PRJCT_ROOT
 
