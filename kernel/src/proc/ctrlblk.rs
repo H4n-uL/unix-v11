@@ -18,8 +18,15 @@ pub struct VRamMap {
     pub flags: usize
 }
 
+#[derive(PartialEq, Eq)]
+pub enum ProcState {
+    Running(usize),
+    Ready,
+    Blocked,
+    Sleeping
+}
+
 pub struct ProcCtrlBlk {
-    pub pid: usize,
     pub ppid: usize,
 
     pub glacier: Glacier,
@@ -27,6 +34,7 @@ pub struct ProcCtrlBlk {
     pub vram_map: Vec<VRamMap>,
     pub ctxt: Box<ExcFrame>,
 
+    pub state: ProcState,
     pub fds: Vec<usize>
 }
 
@@ -126,12 +134,12 @@ impl ProcCtrlBlk {
         ctxt.set_sp(lohalf_top);
 
         return Ok(Self {
-            pid: 0,
             ppid: 0,
             glacier,
             phys_alloc,
             vram_map,
             ctxt: Box::new(ctxt),
+            state: ProcState::Ready,
             fds: Vec::new()
         });
     }

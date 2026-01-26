@@ -1,61 +1,73 @@
 pub mod ctrlblk;
 
 use crate::{
-    arch, filesys::VFS, kargs::AP_LIST,
+    arch,
+    filesys::{VFS, vfn::VirtFNode},
     printlnk,
-    proc::ctrlblk::ProcCtrlBlk,
+    proc::ctrlblk::{ProcCtrlBlk, ProcState},
     ram::{glacier::GLACIER, stack_top}
 };
 
+
+use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use alloc::{
-    collections::{btree_map::BTreeMap, vec_deque::VecDeque},
+    collections::btree_map::BTreeMap,
     string::String
 };
 use spin::RwLock;
 
-pub struct ProcTables {
-    pub running: BTreeMap<usize, ProcCtrlBlk>,
-    pub ready: VecDeque<ProcCtrlBlk>,
-    pub blocked: VecDeque<ProcCtrlBlk>,
-    pub sleeping: VecDeque<ProcCtrlBlk>
-}
+pub struct ProcTables(pub BTreeMap<usize, ProcCtrlBlk>);
 
 impl ProcTables {
     const fn new() -> Self {
-        Self {
-            running: BTreeMap::new(),
-            ready: VecDeque::new(),
-            blocked: VecDeque::new(),
-            sleeping: VecDeque::new()
-        }
+        return Self(BTreeMap::new());
+    }
+
+    pub fn exec(&mut self, node: &dyn VirtFNode, args: &[&str]) -> Result<usize, String> {
+        let proc = ProcCtrlBlk::new(node, args)?;
+        let pid = loop {
+            let pid = PID_RR.load(AtomOrd::Relaxed);
+            if !self.0.contains_key(&pid) && pid != 0 {
+                break pid;
+            }
+            PID_RR.fetch_add(1, AtomOrd::Relaxed);
+        };
+        self.0.insert(pid, proc);
+        return Ok(pid);
     }
 }
 
+pub static PID_RR: AtomicUsize = AtomicUsize::new(1);
 pub static PROCS: RwLock<ProcTables> = RwLock::new(ProcTables::new());
 
 pub fn exec_aleph() {
     let path = "/mnt/block0p0/sbin/aleph";
 
     VFS.walk(path).and_then(|node| {
-        let proc = ProcCtrlBlk::new(&*node, &[path])?;
-        exec_proc(proc)?;
-        Ok(())
+        let pid = PROCS.write().exec(&*node, &[path])?;
+        return Err(exec_proc(pid));
     }).unwrap_or_else(|err| {
         printlnk!("Failed to exec {}: {:?}", path, err);
     });
 }
 
-fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
-    let ctxt = *proc.ctxt;
-    let ap_virtid = AP_LIST.virtid_self();
+fn exec_proc(pid: usize) -> String {
+    let ctxt;
 
     {
-        proc.glacier.activate();
         let mut procs = PROCS.write();
-        if let Some(old_proc) = procs.running.remove(&ap_virtid) {
-            procs.ready.push_back(old_proc);
+
+        let Some(proc) = procs.0.get_mut(&pid) else {
+            return "No such process".into();
+        };
+
+        if proc.state != ProcState::Ready {
+            return "Process not in ready state".into();
         }
-        procs.running.insert(ap_virtid, proc);
+
+        proc.state = ProcState::Running(arch::phys_id());
+        proc.glacier.activate();
+        ctxt = *proc.ctxt;
     }
 
     unsafe {
@@ -66,13 +78,19 @@ fn exec_proc(proc: ProcCtrlBlk) -> Result<(), String> {
 pub fn exit_proc(code: i32) -> ! {
     arch::exc::set(false);
     GLACIER.read().activate();
-    let ap_virtid = AP_LIST.virtid_self();
 
     {
         let mut procs = PROCS.write();
-        if let Some(old_proc) = procs.running.remove(&ap_virtid) {
-            printlnk!("proc {} exited: {}", old_proc.pid, code);
-        }
+        let pid = procs.0.iter().find(|(_, proc)| {
+            if let ProcState::Running(vid) = proc.state {
+                return vid == arch::phys_id();
+            }
+            return false;
+        }).map(|(pid, _)| *pid).unwrap_or(0);
+
+        procs.0.remove(&pid);
+
+        printlnk!("proc {} exited: {}", pid, code);
     }
 
     unsafe { arch::move_stack(stack_top()); }
