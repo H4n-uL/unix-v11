@@ -393,7 +393,7 @@ pub fn set(enabled: bool) {
 pub fn init() {
     let mut desc = Box::new(CPUDesc::new());
     desc.load(stack_top());
-    CPU_DESCS.write().insert(AP_LIST.virtid_self(), desc);
+    CPU_DESCS.write().insert(arch::phys_id(), desc);
 
     unsafe {
         // IDT

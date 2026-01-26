@@ -28,13 +28,13 @@ fn lapic_write(off: usize, val: u32) {
     unsafe { ((ic_va() + off) as *mut u32).write_volatile(val); }
 }
 
-pub fn init(cpu_idx: usize) {
+pub fn init(is_bsp: bool) {
     lapic_write(LAPIC_SVR, 0x1ff);
     lapic_write(LAPIC_TPR, 0);
     lapic_write(LAPIC_LVT_TIMER, 32 | (1 << 17));
     lapic_write(LAPIC_LVT_ERROR, 33);
 
-    if cpu_idx == 0 {
+    if is_bsp {
         calibrate_timer();
     }
 }

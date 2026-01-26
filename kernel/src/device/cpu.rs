@@ -109,6 +109,6 @@ pub fn init_cpu() {
 
     if let Some(phys) = ic_phys {
         GLACIER.write().map_range(ic_va(), phys, IC_SIZE, flags::D_RW);
-        intc::init(AP_LIST.virtid_self());
+        intc::init(AP_LIST.virtid_self() == 0);
     }
 }

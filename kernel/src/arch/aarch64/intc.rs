@@ -46,12 +46,12 @@ fn gic_ver() -> usize {
     return v;
 }
 
-pub fn init(cpu_idx: usize) {
+pub fn init(is_bsp: bool) {
     let v = gic_ver();
 
     match v {
         2 => init_v2(),
-        3 => init_v3(cpu_idx),
+        3 => init_v3(is_bsp),
         _ => crate::printlnk!("Unknown GIC version: {}", v)
     }
 }
@@ -68,10 +68,9 @@ fn init_v2() {
     }
 }
 
-fn init_v3(cpu_idx: usize) {
+fn init_v3(is_bsp: bool) {
     let gicd = GICD_BASE.load(AtomOrd::Relaxed);
     let gicr = GICR_BASE.load(AtomOrd::Relaxed);
-    let is_bsp = cpu_idx == 0;
 
     unsafe {
         if is_bsp {
