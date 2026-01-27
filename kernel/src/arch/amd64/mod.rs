@@ -26,9 +26,13 @@ pub fn phys_id() -> usize {
         asm!(
             "push rax",
             "push rbx",
+            "push rcx",
+            "push rdx",
             "mov eax, 1",
             "cpuid",
             "mov {0:e}, ebx",
+            "pop rdx",
+            "pop rcx",
             "pop rbx",
             "pop rax",
             out(reg) apic_id
