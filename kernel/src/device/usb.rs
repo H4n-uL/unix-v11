@@ -13,10 +13,10 @@ use usb_oxide::{Dma, UsbDevice, XhciCtrl};
 pub struct UsbAlloc;
 
 impl Dma for UsbAlloc {
-    unsafe fn alloc(&self, size: usize, align: usize) -> usize {
+    unsafe fn alloc(&self, size: usize, align: usize) -> Option<usize> {
         return PHYS_ALLOC.alloc(
             AllocParams::new(size).align(align)
-        ).map(|p| p.addr()).unwrap_or(0);
+        ).map(|p| p.addr());
     }
 
     unsafe fn free(&self, addr: usize, size: usize, _: usize) {
@@ -25,9 +25,9 @@ impl Dma for UsbAlloc {
         }
     }
 
-    unsafe fn map_mmio(&self, phys: usize, size: usize) -> usize {
+    unsafe fn map_mmio(&self, phys: usize, size: usize) -> Option<usize> {
         GLACIER.write().map_range(phys, phys, size, flags::D_RW);
-        return phys;
+        return Some(phys);
     }
 
     unsafe fn unmap_mmio(&self, virt: usize, size: usize) {
