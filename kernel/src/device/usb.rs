@@ -16,7 +16,7 @@ impl Dma for UsbAlloc {
     unsafe fn alloc(&self, size: usize, align: usize) -> usize {
         return PHYS_ALLOC.alloc(
             AllocParams::new(size).align(align)
-        ).map(|p| p.addr()).unwrap_or(0)
+        ).map(|p| p.addr()).unwrap_or(0);
     }
 
     unsafe fn free(&self, addr: usize, size: usize, _: usize) {
