@@ -39,7 +39,8 @@ impl Handler for KernelAcpiHandler {
                 *rcnt += 1;
             } else {
                 acpi_map.insert(addr, 1);
-                glacier.map_page(addr, addr, flags::K_RWO);
+                glacier.map_page(addr, addr, flags::K_RWO)
+                    .expect("Failed to map ACPI physical region");
             }
         }
 

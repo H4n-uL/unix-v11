@@ -39,7 +39,7 @@ pub fn reloc() -> ! {
     GLACIER.write().map_range(
         stack_va - stack_size(), stack_ptr.addr(),
         stack_size(), flags::K_RWO
-    );
+    ).expect("Failed to map Hi-Half Kernel Stack");
 
     // Kernel mapping
     for seg in elf_segments() {
@@ -53,7 +53,7 @@ pub fn reloc() -> ! {
         GLACIER.write().map_range(
             jump_target + seg.ptr, new_kbase.addr() + seg.ptr,
             seg.len, flags
-        );
+        ).expect("Failed to map Hi-Half Kernel");
     }
 
     // Kernel base update as physical address

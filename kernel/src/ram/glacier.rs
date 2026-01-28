@@ -70,6 +70,11 @@ impl RvmCfg {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
+pub enum GlacierErr {
+    Failed2Alloc
+}
+
 pub struct Glacier {
     cfg: RvmCfg,
     root_table: usize,
@@ -80,8 +85,8 @@ unsafe impl Send for Glacier {}
 unsafe impl Sync for Glacier {}
 
 impl Glacier {
-    pub const fn empty() -> Self {
-        Self {
+    const fn empty() -> Self {
+        return Self {
             cfg: RvmCfg {
                 psz: BPage::Size4kiB,
                 va_bits: 0,
@@ -89,7 +94,25 @@ impl Glacier {
             },
             root_table: 0,
             is_init: false
-        }
+        };
+    }
+
+    unsafe fn init(&mut self) {
+        // SAFETY: As this function is private, the is_init flag may be omitted.
+        // if self.is_init { return; }
+
+        self.cfg = RvmCfg::detect();
+
+        let table_size = self.cfg().psz.size();
+        let root_table = PHYS_ALLOC.alloc(
+            AllocParams::new(table_size)
+                .align(table_size)
+                .as_type(RAMType::KernelPTable)
+        ).expect("Failed to allocate root page table");
+
+        unsafe { root_table.ptr::<u8>().write_bytes(0, table_size); }
+        self.root_table = root_table.addr();
+        self.is_init = true;
     }
 
     pub fn new() -> Self {
@@ -113,23 +136,10 @@ impl Glacier {
         return new;
     }
 
-    unsafe fn init(&mut self) {
-        if self.is_init { return; }
-        self.cfg = RvmCfg::detect();
-        let table_size = self.cfg().psz.size();
-        let root_table = PHYS_ALLOC.alloc(
-            AllocParams::new(table_size)
-                .align(table_size)
-                .as_type(RAMType::KernelPTable)
-        ).expect("Failed to allocate root page table");
+    pub fn map_page(&mut self, va: usize, pa: usize, flags: usize) -> Result<(), GlacierErr> {
+        // SAFETY: As the `empty` and `init` functions are private, the is_init flag may be omitted.
+        // if !self.is_init { return; }
 
-        unsafe { root_table.ptr::<u8>().write_bytes(0, table_size); }
-        self.root_table = root_table.addr();
-        self.is_init = true;
-    }
-
-    pub fn map_page(&mut self, va: usize, pa: usize, flags: usize) {
-        if !self.is_init { return; }
         let page_mask = !(self.cfg().psz.size() - 1);
         let va = va & page_mask;
         let pa = pa & page_mask;
@@ -152,7 +162,7 @@ impl Glacier {
                     AllocParams::new(table_size)
                         .align(table_size)
                         .as_type(RAMType::KernelPTable)
-                ).expect("Failed to allocate page table");
+                ).ok_or(GlacierErr::Failed2Alloc)?;
 
                 unsafe {
                     next_table.ptr::<u8>().write_bytes(0, table_size);
@@ -165,10 +175,13 @@ impl Glacier {
         }
 
         self.flush(va);
+        return Ok(());
     }
 
     pub fn unmap_page(&mut self, va: usize) {
-        if !self.is_init { return; }
+        // SAFETY: As the `empty` and `init` functions are private, the is_init flag may be omitted.
+        // if !self.is_init { return; }
+
         let va = va & !(self.cfg().psz.size() - 1);
         let _ = self.unmap_rec(self.root_table, va, 0);
     }
@@ -205,8 +218,10 @@ impl Glacier {
         return false;
     }
 
-    pub fn map_range(&mut self, va: usize, pa: usize, size: usize, flags: usize) {
-        if !self.is_init { return; }
+    pub fn map_range(&mut self, va: usize, pa: usize, size: usize, flags: usize) -> Result<(), GlacierErr> {
+        // SAFETY: As the `empty` and `init` functions are private, the is_init flag may be omitted.
+        // if !self.is_init { return; }
+
         let page_size = self.cfg().psz.size();
         let page_mask = !(page_size - 1);
 
@@ -216,12 +231,16 @@ impl Glacier {
 
         for va in (va_start..va_end).step_by(page_size) {
             let pa = pa_start + (va - va_start);
-            self.map_page(va, pa, flags);
+            self.map_page(va, pa, flags)?;
         }
+
+        return Ok(());
     }
 
     pub fn unmap_range(&mut self, va: usize, size: usize) {
-        if !self.is_init { return; }
+        // SAFETY: As the `empty` and `init` functions are private, the is_init flag may be omitted.
+        // if !self.is_init { return; }
+
         let page_size = self.cfg().psz.size();
         let page_mask = !(page_size - 1);
 
@@ -234,7 +253,9 @@ impl Glacier {
     }
 
     pub fn get_pa(&self, va: usize) -> Option<usize> {
-        if !self.is_init { return None; }
+        // SAFETY: As the `empty` and `init` functions are private, the is_init flag may be omitted.
+        // if !self.is_init { return None; }
+
         let page_mask = !(self.cfg().psz.size() - 1);
         let va = va & page_mask;
 
@@ -330,7 +351,7 @@ pub fn init() {
         let size = desc.page_count as usize * 0x1000;
 
         if block_ty == RAMType::MMIO || block_ty == RAMType::MMIOPortSpace {
-            glacier.map_range(addr, addr, size, flags::D_RW);
+            glacier.map_range(addr, addr, size, flags::D_RW).unwrap();
             continue;
         }
 
@@ -338,7 +359,7 @@ pub fn init() {
             continue;
         }
 
-        glacier.map_range(addr, addr, size, flags::K_RWX);
+        glacier.map_range(addr, addr, size, flags::K_RWX).unwrap();
     }
 
     glacier.identity_map();
@@ -355,6 +376,6 @@ pub fn remap() {
             continue;
         }
 
-        glacier.map_range(addr, addr, size, flags::K_RWO);
+        glacier.map_range(addr, addr, size, flags::K_RWO).unwrap();
     }
 }

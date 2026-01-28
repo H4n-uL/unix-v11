@@ -94,7 +94,7 @@ impl ProcCtrlBlk {
                 glacier.map_range(
                     virt_addr, phys_addr,
                     mem_size, flags
-                );
+                ).map_err(|_| "Failed to map process")?;
 
                 vram_map.push(VRamMap {
                     va: virt_addr,
@@ -119,7 +119,7 @@ impl ProcCtrlBlk {
         glacier.map_range(
             lohalf_top - stack_size, stack_ptr.addr(),
             stack_size, flags::U_RWO
-        );
+        ).map_err(|_| "Failed to map user stack")?;
 
         vram_map.push(VRamMap {
             va: lohalf_top - stack_size,

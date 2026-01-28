@@ -8,13 +8,11 @@ use crate::{
     ram::{glacier::GLACIER, stack_top}
 };
 
-
-use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use alloc::{
     collections::btree_map::BTreeMap,
     string::String
 };
-use spin::RwLock;
+use spin::{Mutex, RwLock};
 
 pub struct ProcTables(pub BTreeMap<usize, ProcCtrlBlk>);
 
@@ -25,19 +23,20 @@ impl ProcTables {
 
     pub fn exec(&mut self, node: &dyn VirtFNode, args: &[&str]) -> Result<usize, String> {
         let proc = ProcCtrlBlk::new(node, args)?;
+        let mut pid_rr = PID_RR.lock();
         let pid = loop {
-            let pid = PID_RR.load(AtomOrd::Relaxed);
+            let pid = *pid_rr;
             if !self.0.contains_key(&pid) && pid != 0 {
                 break pid;
             }
-            PID_RR.fetch_add(1, AtomOrd::Relaxed);
+            *pid_rr = pid_rr.wrapping_add(1);
         };
         self.0.insert(pid, proc);
         return Ok(pid);
     }
 }
 
-pub static PID_RR: AtomicUsize = AtomicUsize::new(1);
+pub static PID_RR: Mutex<usize> = Mutex::new(1);
 pub static PROCS: RwLock<ProcTables> = RwLock::new(ProcTables::new());
 
 pub fn exec_aleph() {

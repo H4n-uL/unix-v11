@@ -26,7 +26,7 @@ impl Dma for UsbAlloc {
     }
 
     unsafe fn map_mmio(&self, phys: usize, size: usize) -> Option<usize> {
-        GLACIER.write().map_range(phys, phys, size, flags::D_RW);
+        GLACIER.write().map_range(phys, phys, size, flags::D_RW).ok()?;
         return Some(phys);
     }
 

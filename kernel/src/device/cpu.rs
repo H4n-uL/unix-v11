@@ -37,7 +37,8 @@ pub fn ic_va() -> usize {
 }
 
 fn map_doorbell(phys: usize) {
-    GLACIER.write().map_range(phys, phys, IC_DOORBELL_SIZE, flags::D_RW);
+    GLACIER.write().map_range(phys, phys, IC_DOORBELL_SIZE, flags::D_RW)
+        .expect("Failed to map Interrupt Controller Doorbell");
 }
 
 pub fn init_cpu() {
@@ -97,7 +98,9 @@ pub fn init_cpu() {
                 let len = gicr.discovery_range_length as usize;
                 if base != 0 {
                     GICR_BASE.store(base, AtomOrd::Relaxed);
-                    GLACIER.write().map_range(base, base, len, flags::D_RW);
+                    GLACIER.write()
+                        .map_range(base, base, len, flags::D_RW)
+                        .expect("Failed to map GIC Redistributor");
                 }
             }
 
@@ -108,7 +111,8 @@ pub fn init_cpu() {
     CPU_COUNT.store(cpu_count, AtomOrd::Relaxed);
 
     if let Some(phys) = ic_phys {
-        GLACIER.write().map_range(ic_va(), phys, IC_SIZE, flags::D_RW);
+        GLACIER.write().map_range(ic_va(), phys, IC_SIZE, flags::D_RW)
+            .expect("Failed to map Interrupt Controller");
         intc::init(AP_LIST.virtid_self() == 0);
     }
 }
