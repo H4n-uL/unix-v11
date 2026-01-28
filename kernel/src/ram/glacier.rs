@@ -7,22 +7,22 @@ use crate::{
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
 
-#[derive(Clone, Copy, Debug)]
-pub struct RvmCfg {
-    pub psz: PageSize,
-    pub va_bits: u8,
-    pub pa_bits: u8
-}
-
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum PageSize {
+pub enum BPage {
     Size4kiB  = 4096,
     Size16kiB = 16384,
     Size64kiB = 65536
 }
 
-impl PageSize {
+#[derive(Clone, Copy, Debug)]
+pub struct RvmCfg {
+    pub psz: BPage,
+    pub va_bits: u8,
+    pub pa_bits: u8
+}
+
+impl BPage {
     pub const fn size(&self) -> usize {
         *self as usize
     }
@@ -83,7 +83,7 @@ impl Glacier {
     pub const fn empty() -> Self {
         Self {
             cfg: RvmCfg {
-                psz: PageSize::Size4kiB,
+                psz: BPage::Size4kiB,
                 va_bits: 0,
                 pa_bits: 0
             },
@@ -299,7 +299,7 @@ impl Glacier {
 
 pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
-pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(PageSize::Size4kiB as usize);
+pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(BPage::Size4kiB as usize);
 
 #[inline(always)]
 pub fn hihalf() -> usize {

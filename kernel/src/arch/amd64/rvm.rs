@@ -1,4 +1,4 @@
-use crate::ram::glacier::{Glacier, PageSize, RvmCfg};
+use crate::ram::glacier::{Glacier, BPage, RvmCfg};
 
 use core::arch::asm;
 
@@ -24,7 +24,7 @@ pub mod flags {
 impl RvmCfg {
     pub fn detect() -> Self {
         return Self {
-            psz: PageSize::Size4kiB,
+            psz: BPage::Size4kiB,
             va_bits: 48, pa_bits: 52
         };
     }

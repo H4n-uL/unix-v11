@@ -1,4 +1,4 @@
-use crate::ram::glacier::{Glacier, PageSize, RvmCfg};
+use crate::ram::glacier::{Glacier, BPage, RvmCfg};
 
 use core::arch::asm;
 
@@ -31,11 +31,11 @@ impl RvmCfg {
         let tgran64 = (mmfr0 >> 24) & 0xf;
 
         let psz = if tgran4 != 0xf {
-            PageSize::Size4kiB
+            BPage::Size4kiB
         } else if tgran16 != 0 {
-            PageSize::Size16kiB
+            BPage::Size16kiB
         } else if tgran64 != 0xf {
-            PageSize::Size64kiB
+            BPage::Size64kiB
         } else {
             panic!("No supported page granule found");
         };
@@ -48,8 +48,8 @@ impl RvmCfg {
             48
         } else {
             match psz {
-                PageSize::Size4kiB  if tgran4  != 0x1 => 48,
-                PageSize::Size16kiB if tgran16 != 0x2 => 48,
+                BPage::Size4kiB  if tgran4  != 0x1 => 48,
+                BPage::Size16kiB if tgran16 != 0x2 => 48,
                 _ => 52
             }
         };
@@ -67,9 +67,9 @@ impl RvmCfg {
         let tnsz = usize::BITS as usize - self.va_bits as usize;
 
         let (tg0, tg1) = match self.psz {
-            PageSize::Size4kiB  => (0b00, 0b10),
-            PageSize::Size16kiB => (0b10, 0b01),
-            PageSize::Size64kiB => (0b01, 0b11)
+            BPage::Size4kiB  => (0b00, 0b10),
+            BPage::Size16kiB => (0b10, 0b01),
+            BPage::Size64kiB => (0b01, 0b11)
         };
 
         let mut tcr = 0;
