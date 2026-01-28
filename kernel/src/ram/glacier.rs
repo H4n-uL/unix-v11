@@ -7,12 +7,12 @@ use crate::{
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::RwLock;
 
-#[repr(u32)]
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BPage {
-    Size4kiB  = 4096,
-    Size16kiB = 16384,
-    Size64kiB = 65536
+    Size4kiB  = 12,
+    Size16kiB = 14,
+    Size64kiB = 16
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -23,20 +23,20 @@ pub struct RvmCfg {
 }
 
 impl BPage {
-    pub const fn size(&self) -> usize {
-        *self as usize
+    pub const fn shift(self) -> u8 {
+        return self as u8;
     }
 
-    pub const fn addr_mask(&self) -> usize {
-        !(self.size() - 1)
+    pub const fn size(self) -> usize {
+        return 1usize << self.shift();
     }
 
-    pub const fn shift(&self) -> u8 {
-        self.size().ilog2() as u8
+    pub const fn addr_mask(self) -> usize {
+        return !(self.size() - 1);
     }
 
-    pub const fn index_bits(&self) -> u8 {
-        self.shift() - size_of::<usize>().ilog2() as u8
+    pub const fn index_bits(self) -> u8 {
+        return self.shift() - size_of::<usize>().ilog2() as u8;
     }
 }
 
@@ -130,7 +130,7 @@ impl Glacier {
             (new_root as *mut u8)
                 .copy_from(krvm_root as *const u8, page_size);
             (new_root as *mut u8)
-                .write_bytes(0, hihalf_idx);
+                .write_bytes(0, hihalf_idx * size_of::<usize>());
         }
 
         return new;
@@ -320,7 +320,7 @@ impl Glacier {
 
 pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
-pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(BPage::Size4kiB as usize);
+pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(BPage::Size4kiB.size());
 
 #[inline(always)]
 pub fn hihalf() -> usize {
