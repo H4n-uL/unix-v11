@@ -22,7 +22,7 @@ impl Dma for NVMeAlloc {
         return PHYS_ALLOC.alloc(
             AllocParams::new(size)
                 .align(align)
-        ).unwrap().addr();
+        ).map(|p| p.addr()).unwrap_or(0);
     }
 
     unsafe fn free(&self, addr: usize, size: usize, _: usize) {
