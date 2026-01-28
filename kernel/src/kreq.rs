@@ -33,10 +33,14 @@ pub extern "C" fn kernel_requestee(
 
     match req {
         b"open" => {
-            check_fault!(arg1, arg2, u8);
-            for i in 0..arg2 {
-                let _ = unsafe { *(arg1 as *const u8).add(i) };
-            }
+            let path = unsafe {
+                let mut len = 0usize;
+                while *(arg1 as *const u8).add(len) != 0 {
+                    len += 1;
+                }
+                from_raw_parts(arg1 as *const u8, len)
+            };
+            check_fault!(arg1, (path.len() + 1), u8);
         }
         b"_print" => { // This syscall is for debugging purposes only
             check_fault!(arg1, arg2, u8);
