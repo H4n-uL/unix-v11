@@ -153,7 +153,7 @@ extern "C" fn exc_handler(exc_type: u64, frame: &mut ExcFrame) {
         5  => { /* irq el1h */
             let intid = intc::ack();
             match intid {
-                30 => { // timer
+                27 => { // timer
                     printlnk!("Timer IRQ");
                 }
                 _ => {

@@ -199,21 +199,21 @@ pub fn timer_freq() -> u64 {
 #[inline(always)]
 pub fn timer_enable() {
     unsafe {
-        asm!("msr CNTP_CTL_EL0, {}", in(reg) 1u64);
+        asm!("msr CNTV_CTL_EL0, {}", in(reg) 1u64);
     }
 }
 
 #[inline(always)]
 pub fn timer_disable() {
     unsafe {
-        asm!("msr CNTP_CTL_EL0, {}", in(reg) 0u64);
+        asm!("msr CNTV_CTL_EL0, {}", in(reg) 0u64);
     }
 }
 
 #[inline(always)]
 pub fn timer_set(ticks: u64) {
     unsafe {
-        asm!("msr CNTP_TVAL_EL0, {}", in(reg) ticks);
+        asm!("msr CNTV_TVAL_EL0, {}", in(reg) ticks);
     }
 }
 
