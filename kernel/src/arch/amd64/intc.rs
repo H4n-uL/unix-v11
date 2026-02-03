@@ -83,9 +83,8 @@ pub fn eoi(_intid: u32) {
     lapic_write(LAPIC_EOI, 0);
 }
 
-pub fn enable(_cpu_idx: usize, _intid: u32) {}
-pub fn disable(_cpu_idx: usize, _intid: u32) {}
-pub fn set_priority(_cpu_idx: usize, _intid: u32, _priority: u8) {}
+pub fn enable(_intid: u32) {}
+pub fn disable(_intid: u32) {}
 
 pub fn send_ipi_others(vector: u32) {
     lapic_write(LAPIC_ICR_HI, 0);

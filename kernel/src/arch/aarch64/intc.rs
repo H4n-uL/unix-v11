@@ -54,6 +54,8 @@ pub fn init(is_bsp: bool) {
         3 => init_v3(is_bsp),
         _ => crate::printlnk!("Unknown GIC version: {}", v)
     }
+
+    enable(27); // CNTV virtual timer
 }
 
 fn init_v2() {
@@ -127,28 +129,41 @@ pub fn eoi(intid: u32) {
     }
 }
 
-pub fn enable(_cpu_idx: usize, intid: u32) {
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
-    let reg_idx = (intid / u32::BITS) as usize;
+pub fn enable(intid: u32) {
     let bit = 1u32 << (intid % u32::BITS);
-    unsafe {
-        ((gicd + GICD_ISENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
+    if intid < 32 && gic_ver() == 3 {
+        let gicr_sgi = GICR_BASE.load(AtomOrd::Relaxed) + 0x10000;
+        unsafe {
+            // Group 1 (GICR_IGROUPR0)
+            let igroupr0 = (gicr_sgi + 0x80) as *mut u32;
+            igroupr0.write_volatile(igroupr0.read_volatile() | bit);
+            // Priority 0 (GICR_IPRIORITYR)
+            ((gicr_sgi + 0x400 + intid as usize) as *mut u8).write_volatile(0);
+            // Enable (GICR_ISENABLER0)
+            ((gicr_sgi + 0x100) as *mut u32).write_volatile(bit);
+        }
+    } else {
+        let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+        let reg_idx = (intid / u32::BITS) as usize;
+        unsafe {
+            ((gicd + GICD_ISENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
+        }
     }
 }
 
-pub fn disable(_cpu_idx: usize, intid: u32) {
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
-    let reg_idx = (intid / u32::BITS) as usize;
+pub fn disable(intid: u32) {
     let bit = 1u32 << (intid % u32::BITS);
-    unsafe {
-        ((gicd + GICD_ICENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
-    }
-}
-
-pub fn set_priority(_cpu_idx: usize, intid: u32, priority: u8) {
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
-    unsafe {
-        ((gicd + GICD_IPRIORITYR + intid as usize) as *mut u8).write_volatile(priority);
+    if intid < u32::BITS && gic_ver() == 3 {
+        let gicr_sgi = GICR_BASE.load(AtomOrd::Relaxed) + 0x10000;
+        unsafe {
+            ((gicr_sgi + 0x180) as *mut u32).write_volatile(bit);
+        }
+    } else {
+        let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+        let reg_idx = (intid / u32::BITS) as usize;
+        unsafe {
+            ((gicd + GICD_ICENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
+        }
     }
 }
 
