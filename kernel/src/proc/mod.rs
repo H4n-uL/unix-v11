@@ -38,6 +38,7 @@ impl ProcTables {
 
 pub static PID_RR: Mutex<usize> = Mutex::new(1);
 pub static PROCS: RwLock<ProcTables> = RwLock::new(ProcTables::new());
+pub static RQ: RwLock<BTreeMap<usize, usize>> = RwLock::new(BTreeMap::new());
 
 pub fn exec_aleph() {
     let path = "/mnt/block0p0/sbin/aleph";
@@ -64,7 +65,7 @@ fn exec_proc(pid: usize) -> String {
             return "Process not in ready state".into();
         }
 
-        proc.state = ProcState::Running(arch::phys_id());
+        RQ.write().insert(arch::phys_id(), pid);
         proc.glacier.activate();
         ctxt = *proc.ctxt;
     }
@@ -79,15 +80,8 @@ pub fn exit_proc(code: i32) -> ! {
     GLACIER.read().activate();
 
     {
-        let mut procs = PROCS.write();
-        let pid = procs.0.iter().find(|(_, proc)| {
-            if let ProcState::Running(vid) = proc.state {
-                return vid == arch::phys_id();
-            }
-            return false;
-        }).map(|(pid, _)| *pid).unwrap_or(0);
-
-        procs.0.remove(&pid);
+        let pid = RQ.write().remove(&arch::phys_id()).unwrap_or(0);
+        PROCS.write().0.remove(&pid);
 
         printlnk!("proc {} exited: {}", pid, code);
     }

@@ -8,7 +8,13 @@ use crate::{
     }
 };
 
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::btree_map::BTreeMap,
+    string::String,
+    sync::Arc,
+    vec::Vec
+};
 use xmas_elf::{ElfFile, program::Type};
 
 pub struct VRamMap {
@@ -20,7 +26,6 @@ pub struct VRamMap {
 
 #[derive(PartialEq, Eq)]
 pub enum ProcState {
-    Running(usize),
     Ready,
     Blocked,
     Sleeping
@@ -35,7 +40,7 @@ pub struct ProcCtrlBlk {
     pub ctxt: Box<ExcFrame>,
 
     pub state: ProcState,
-    pub fds: Vec<usize>
+    pub fds: BTreeMap<usize, Arc<dyn VirtFNode>>
 }
 
 fn get_proc_vaset(elf: &ElfFile) -> (usize, usize) {
@@ -140,7 +145,7 @@ impl ProcCtrlBlk {
             vram_map,
             ctxt: Box::new(ctxt),
             state: ProcState::Ready,
-            fds: Vec::new()
+            fds: BTreeMap::new()
         });
     }
 }
