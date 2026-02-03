@@ -377,7 +377,7 @@ pub fn get() -> bool {
     unsafe {
         asm!("pushfq; pop {}", out(reg) rflags, options(nomem, nostack, preserves_flags));
     }
-    return (rflags & (1 << 9)) == 0;
+    return (rflags & (1 << 9)) != 0;
 }
 
 pub fn set(enabled: bool) {

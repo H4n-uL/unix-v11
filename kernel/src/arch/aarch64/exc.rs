@@ -206,7 +206,7 @@ pub fn get() -> bool {
     unsafe {
         asm!("mrs {}, daif", out(reg) daif, options(nomem, nostack, preserves_flags));
     }
-    return (daif & (0b1111 << 6)) != 0;
+    return (daif & (0b1111 << 6)) == 0;
 }
 
 pub fn set(enabled: bool) {
