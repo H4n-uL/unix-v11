@@ -10,6 +10,11 @@ use crate::{
 
 use core::{arch::asm, fmt::{Result, Write}, hint::spin_loop};
 
+pub fn wfi() {
+    exc::set(true);
+    unsafe { asm!("wfi"); }
+}
+
 pub fn halt() {
     exc::set(false);
     unsafe { asm!("wfi"); }

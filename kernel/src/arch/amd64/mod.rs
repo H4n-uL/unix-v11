@@ -5,6 +5,11 @@ pub mod rvm;
 
 use core::{arch::asm, fmt::{Result, Write}};
 
+pub fn wfi() {
+    exc::set(true);
+    unsafe { asm!("hlt"); }
+}
+
 pub fn halt() {
     exc::set(false);
     unsafe { asm!("hlt"); }
