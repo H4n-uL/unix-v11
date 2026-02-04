@@ -112,16 +112,19 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-$QEMU_SYSTEM \
-    -cpu $QEMU_CPU \
-    -machine $QEMU_MACHINE \
-    -smp $CPU_COUNT \
-    -drive if=pflash,file="$PRJCT_ROOT/$FW_DIR/$EFI_CODE",format=raw,readonly=on \
-    -drive if=pflash,file="$PRJCT_ROOT/$FW_DIR/$EFI_VARS",format=raw \
-    -drive file="$DISK_NAME",if=none,id=drv0,format=raw \
-    -device nvme,drive=drv0,serial=unixv11nvme \
-    -device qemu-xhci,id=xhci \
-    -device usb-kbd,bus=xhci.0 \
-    -device usb-mouse,bus=xhci.0 \
-    -m ${RAM_SIZE}M \
+QEMU_ARGS="
+    -cpu \"$QEMU_CPU\"
+    -machine \"$QEMU_MACHINE\"
+    -smp \"$CPU_COUNT\"
+    -drive \"if=pflash,file=$PRJCT_ROOT/$FW_DIR/$EFI_CODE,format=raw,readonly=on\"
+    -drive \"if=pflash,file=$PRJCT_ROOT/$FW_DIR/$EFI_VARS,format=raw\"
+    -drive \"file=$DISK_NAME,if=none,id=drv0,format=raw\"
+    -device nvme,drive=drv0,serial=unixv11nvme
+    -device qemu-xhci,id=xhci
+    -device usb-kbd,bus=xhci.0
+    -device usb-mouse,bus=xhci.0
+    -m \"${RAM_SIZE}M\"
     -serial stdio
+"
+
+eval "\"$QEMU_SYSTEM\" $QEMU_ARGS" || eval "\"$QEMU_SYSTEM\" $QEMU_ARGS -display none"
