@@ -1,4 +1,4 @@
-use crate::device::cpu::{GICD_BASE, GICC_BASE, GICR_BASE, ic_va};
+use crate::{device::cpu::{GICC_BASE, GICD_BASE, GICR_BASE, ic_va}, kargs::AP_LIST};
 
 use core::{
     arch::asm, hint::spin_loop, num::NonZeroUsize,
@@ -46,12 +46,12 @@ fn gic_ver() -> usize {
     return v;
 }
 
-pub fn init(is_bsp: bool) {
+pub fn init() {
     let v = gic_ver();
 
     match v {
         2 => init_v2(),
-        3 => init_v3(is_bsp),
+        3 => init_v3(),
         _ => crate::printlnk!("Unknown GIC version: {}", v)
     }
 
@@ -70,12 +70,12 @@ fn init_v2() {
     }
 }
 
-fn init_v3(is_bsp: bool) {
+fn init_v3() {
     let gicd = GICD_BASE.load(AtomOrd::Relaxed);
     let gicr = GICR_BASE.load(AtomOrd::Relaxed);
 
     unsafe {
-        if is_bsp {
+        if AP_LIST.virtid_self() == 0 {
             // enable GICD (ARE_NS 0x10 | EnableGrp1NS 0x2 | EnableGrp0 0x1)
             ((gicd + GICD_CTRLR) as *mut u32).write_volatile(0x13);
         }

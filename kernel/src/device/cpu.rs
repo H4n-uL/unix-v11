@@ -1,6 +1,6 @@
 use crate::{
-    arch::{self, intc, rvm::flags},
-    device::ACPI, kargs::AP_LIST,
+    arch::{intc, phys_id, rvm::flags},
+    device::ACPI,
     ram::{
         glacier::GLACIER,
         per_cpu_data, stack_top
@@ -49,7 +49,7 @@ pub fn init_cpu() {
     let Some(madt) = acpi.find_table::<Madt>() else { return };
     let madt = madt.get();
 
-    let phys_id = arch::phys_id();
+    let phys_id = phys_id();
     let mut ic_phys = None;
     let mut cpu_count = 0usize;
 
@@ -113,6 +113,6 @@ pub fn init_cpu() {
     if let Some(phys) = ic_phys {
         GLACIER.write().map_range(ic_va(), phys, IC_SIZE, flags::D_RW)
             .expect("Failed to map Interrupt Controller");
-        intc::init(AP_LIST.virtid_self() == 0);
+        intc::init();
     }
 }
