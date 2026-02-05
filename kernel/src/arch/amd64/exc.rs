@@ -1,5 +1,5 @@
 use crate::{
-    arch::intc, kargs::AP_LIST,
+    arch::intc,
     kreq::kernel_requestee,
     printlnk, ram::stack_top
 };
