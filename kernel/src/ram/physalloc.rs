@@ -452,17 +452,10 @@ impl PhysAlloc {
                 }
 
                 let blocks = self.blocks_raw_mut();
-                let mut idx = 0;
-                for block in &mut *blocks {
-                    if block.valid() { idx += 1; continue; }
+                for block in blocks {
+                    if block.valid() { continue; }
                     *block = new_block;
                     break;
-                }
-
-                for i in (1..=idx).rev() {
-                    let (current, prev) = (blocks[i], blocks[i - 1]);
-                    if current.addr() >= prev.addr() { break; }
-                    blocks.swap(i, i - 1);
                 }
             }
         }
