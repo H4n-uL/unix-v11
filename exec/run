@@ -124,7 +124,7 @@ QEMU_ARGS="\\
     -device usb-kbd,bus=xhci.0 \\
     -device usb-mouse,bus=xhci.0 \\
     -m \"${RAM_SIZE}M\" \\
-    -serial stdio
+    -serial stdio \\
 "
 
 eval "\"$QEMU_SYSTEM\" $QEMU_ARGS" || eval "\"$QEMU_SYSTEM\" $QEMU_ARGS -display none"
