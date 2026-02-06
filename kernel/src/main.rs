@@ -16,6 +16,7 @@ mod kreq; mod proc; mod ram; mod sort;
 use crate::{
     kargs::{Kargs, RAMType},
     ram::{
+        glacier::{G_CFG, RvmCfg},
         physalloc::PHYS_ALLOC,
         stack_size, stack_top
     }
@@ -43,7 +44,9 @@ const _: () = {
 
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn ignite(kargs: Kargs) -> ! {
+    G_CFG.call_once(|| RvmCfg::detect());
     kargs::set_kargs(kargs);
+
     PHYS_ALLOC.init();
     ram::glacier::init();
     ram::init_heap();

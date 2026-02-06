@@ -4,7 +4,6 @@ use crate::{
     ram::{mutex::IntRwLock, physalloc::{AllocParams, PHYS_ALLOC}}
 };
 
-use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use spin::{Once, RwLock};
 
 #[repr(u8)]
@@ -312,32 +311,15 @@ impl Glacier {
 
 pub static G_CFG: Once<RvmCfg> = Once::new();
 pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
-pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
-pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(BPage::Size4kiB.size());
 
 #[inline(always)]
 pub fn hihalf() -> usize {
-    return HIHALF.load(AtomOrd::Relaxed);
+    unsafe { return !0 << (G_CFG.get_unchecked().va_bits - 1); }
 }
 
 #[inline(always)]
 pub fn page_size() -> usize {
-    return PAGE_SIZE.load(AtomOrd::Relaxed);
-}
-
-pub fn preinit() {
-    G_CFG.call_once(|| {
-        let cfg = RvmCfg::detect();
-        HIHALF.store(
-            !0 << (cfg.va_bits - 1),
-            AtomOrd::Relaxed
-        );
-        PAGE_SIZE.store(
-            cfg.psz.size(),
-            AtomOrd::Relaxed
-        );
-        return cfg;
-    });
+    unsafe { return G_CFG.get_unchecked().psz.size(); }
 }
 
 pub fn init() {
