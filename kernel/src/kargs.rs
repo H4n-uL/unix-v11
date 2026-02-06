@@ -1,4 +1,7 @@
-use crate::{arch::phys_id, ram::mutex::IntRwLock};
+use crate::{
+    arch::phys_id,
+    ram::{glacier::preinit, mutex::IntRwLock}
+};
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
@@ -223,6 +226,7 @@ pub fn elf_segments<'a>() -> &'a [Segment] {
 }
 
 pub fn set_kargs(kargs: Kargs) {
+    preinit();
     KINFO.write().clone_from(&kargs.kernel);
     SYSINFO.write().clone_from(&kargs.sys);
     KBASE.store(kargs.kbase, AtomOrd::Relaxed);

@@ -5,7 +5,7 @@ use crate::{
 };
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
-use spin::RwLock;
+use spin::{Once, RwLock};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -76,7 +76,6 @@ pub enum GlacierErr {
 }
 
 pub struct Glacier {
-    cfg: RvmCfg,
     root_table: usize,
     is_init: bool
 }
@@ -87,11 +86,6 @@ unsafe impl Sync for Glacier {}
 impl Glacier {
     const fn empty() -> Self {
         return Self {
-            cfg: RvmCfg {
-                psz: BPage::Size4kiB,
-                va_bits: 0,
-                pa_bits: 0
-            },
             root_table: 0,
             is_init: false
         };
@@ -100,8 +94,6 @@ impl Glacier {
     unsafe fn init(&mut self) {
         // SAFETY: As this function is private, the is_init flag may be omitted.
         // if self.is_init { return; }
-
-        self.cfg = RvmCfg::detect();
 
         let table_size = self.cfg().psz.size();
         let root_table = PHYS_ALLOC.alloc(
@@ -285,7 +277,7 @@ impl Glacier {
     }
 
     pub fn cfg(&self) -> RvmCfg {
-        return self.cfg;
+        unsafe { return *G_CFG.get_unchecked(); }
     }
 }
 
@@ -318,6 +310,7 @@ impl Glacier {
     }
 }
 
+pub static G_CFG: Once<RvmCfg> = Once::new();
 pub static GLACIER: IntRwLock<RwLock<()>, Glacier> = IntRwLock::new(Glacier::empty());
 pub static HIHALF: AtomicUsize = AtomicUsize::new(0);
 pub static PAGE_SIZE: AtomicUsize = AtomicUsize::new(BPage::Size4kiB.size());
@@ -332,18 +325,24 @@ pub fn page_size() -> usize {
     return PAGE_SIZE.load(AtomOrd::Relaxed);
 }
 
+pub fn preinit() {
+    G_CFG.call_once(|| {
+        let cfg = RvmCfg::detect();
+        HIHALF.store(
+            !0 << (cfg.va_bits - 1),
+            AtomOrd::Relaxed
+        );
+        PAGE_SIZE.store(
+            cfg.psz.size(),
+            AtomOrd::Relaxed
+        );
+        return cfg;
+    });
+}
+
 pub fn init() {
     let mut glacier = GLACIER.write();
-
     unsafe { glacier.init(); }
-    HIHALF.store(
-        !0 << (glacier.cfg().va_bits - 1),
-        AtomOrd::Relaxed
-    );
-    PAGE_SIZE.store(
-        glacier.cfg().psz.size(),
-        AtomOrd::Relaxed
-    );
 
     for desc in efi_ram_layout() {
         let block_ty = desc.ty;

@@ -4,7 +4,11 @@ use crate::{
         RAMDescriptor, RAMType, Segment,
         efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
-    ram::{PAGE_4KIB, align_up, glacier::page_size, mutex::IntLock},
+    ram::{
+        PAGE_4KIB,
+        align_up, size_align,
+        glacier::page_size, mutex::IntLock
+    },
     sort::HeaplessSort
 };
 
@@ -146,7 +150,7 @@ impl AllocParams {
 
     pub fn build(mut self) -> Self {
         self.addr = self.addr.map(|a| align_up(a, self.align));
-        self.size = self.size.next_power_of_two();
+        self.size = size_align(self.size);
         return self;
     }
 }

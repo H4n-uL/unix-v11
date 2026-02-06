@@ -252,6 +252,13 @@ pub fn align_up(val: usize, align: usize) -> usize {
     return val.div_ceil(align) * align;
 }
 
+pub fn size_align(val: usize) -> usize {
+    if val < page_size() {
+        return val.next_power_of_two();
+    }
+    return align_up(val, page_size());
+}
+
 pub fn dump_bytes(buf: &[u8]) {
     const LINE: usize = 16;
     let mut offset = 0;

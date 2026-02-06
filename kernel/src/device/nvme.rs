@@ -7,7 +7,8 @@ use crate::{
     ram::{
         PhysPageBuf,
         glacier::{GLACIER, page_size},
-        physalloc::{AllocParams, PHYS_ALLOC}
+        physalloc::{AllocParams, PHYS_ALLOC},
+        size_align
     }
 };
 
@@ -29,7 +30,7 @@ impl Dma for NVMeAlloc {
         unsafe {
             PHYS_ALLOC.free_raw(
                 addr as *mut u8,
-                size.next_power_of_two()
+                size_align(size)
             );
         }
     }
