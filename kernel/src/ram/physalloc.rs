@@ -173,8 +173,7 @@ impl PhysAlloc {
     const fn empty() -> Self {
         Self {
             ptr: OwnedPtr::null(),
-            is_init: false,
-            max: 0
+            is_init: false, max: 0
         }
     }
 
@@ -183,8 +182,8 @@ impl PhysAlloc {
             let efi_ram = efi_ram_layout_mut();
 
             let rb = unsafe {
-                let rb = &raw const RB_EMBEDDED;
-                core::slice::from_raw_parts_mut(rb as *mut RAMBlock, (*rb).len())
+                let rb = &raw mut RB_EMBEDDED;
+                core::slice::from_raw_parts_mut(rb, (*rb).len())
             };
             if self.is_init { return; }
             (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
