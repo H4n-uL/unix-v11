@@ -179,15 +179,15 @@ impl PhysAlloc {
     }
 
     fn init(&mut self) {
+        if self.is_init { return; }
+        let rb = unsafe {
+            let rb = &raw mut RB_EMBEDDED;
+            core::slice::from_raw_parts_mut(rb, (*rb).len())
+        };
+        (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
+
         {
             let efi_ram = efi_ram_layout_mut();
-
-            let rb = unsafe {
-                let rb = &raw mut RB_EMBEDDED;
-                core::slice::from_raw_parts_mut(rb, (*rb).len())
-            };
-            if self.is_init { return; }
-            (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
             efi_ram.sort_noheap_by_key(|desc| desc.page_count);
             for desc in efi_ram.iter().rev() {
                 if desc.ty == RAMType::Conv {
