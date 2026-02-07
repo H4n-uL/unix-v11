@@ -14,7 +14,7 @@ use crate::{
 use spin::Mutex;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RAMBlock {
     addr: usize,
     size: usize,
@@ -45,12 +45,13 @@ impl RAMBlock {
     fn invalidate(&mut self)            { self.size = 0; }
 
     fn is_mergable(&self, other: &RAMBlock) -> i8 {
-        let info_eq = {
-            self.valid() && other.valid() &&
-            self.ty == other.ty &&
-            self.used == other.used
-        };
-        if !info_eq { return 0; }
+        if self.invalid() || other.invalid() {
+            return 0;
+        }
+        let (mut b0, mut b1) = (*self, *other);
+        b0.set_addr(0); b1.set_addr(0);
+        b0.set_size(0); b1.set_size(0);
+        if b0 != b1 { return 0; }
         return
              if self.addr() + self.size == other.addr() { -1 } // self is before other
         else if other.addr() + other.size == self.addr() { 1 } // self is after other
