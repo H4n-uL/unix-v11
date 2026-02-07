@@ -275,8 +275,8 @@ impl PhysAlloc {
                 block.addr(), block.size(),
                 RAMType::Conv, false
             );
-            // SAFETY: self.add() can never fail because
-            // self.count() always decreases after invalidation above.
+            // SAFETY: self.count() before invalidation is guaranteed
+            // to be greater than or equal to after addition. thus, panic can never be triggered.
             self.add(new_blk);
         }
     }
