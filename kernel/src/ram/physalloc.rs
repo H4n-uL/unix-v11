@@ -5,9 +5,7 @@ use crate::{
         efi_ram_layout, efi_ram_layout_mut, elf_segments
     },
     ram::{
-        PAGE_4KIB,
-        align_up, size_align,
-        glacier::page_size, mutex::IntLock
+        PAGE_4KIB, align_up, glacier::page_size, mutex::IntLock, size_align
     },
     sort::HeaplessSort
 };
@@ -166,6 +164,8 @@ pub struct PhysAlloc {
 pub struct PhysAllocGlob(pub IntLock<Mutex<()>, PhysAlloc>);
 
 const BASE_RB_SIZE: usize = 128;
+const MIN_REQ: usize = 4;
+
 static mut RB_EMBEDDED: [RAMBlock; BASE_RB_SIZE] = [RAMBlock::new_invalid(); BASE_RB_SIZE];
 pub static PHYS_ALLOC: PhysAllocGlob = PhysAllocGlob::empty();
 
@@ -179,72 +179,48 @@ impl PhysAlloc {
     }
 
     fn init(&mut self) {
-        let efi_ram_layout = efi_ram_layout_mut();
+        {
+            let efi_ram = efi_ram_layout_mut();
 
-        let rb = unsafe {
-            let rb = &raw const RB_EMBEDDED;
-            core::slice::from_raw_parts_mut(rb as *mut RAMBlock, (*rb).len())
-        };
-        if self.is_init { return; }
-        (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
-        efi_ram_layout.sort_noheap_by_key(|desc| desc.page_count);
-        for desc in efi_ram_layout.iter().rev() {
-            if desc.ty == RAMType::Conv {
-                let size = desc.page_count as usize * PAGE_4KIB;
-                let addr = desc.phys_start as usize;
+            let rb = unsafe {
+                let rb = &raw const RB_EMBEDDED;
+                core::slice::from_raw_parts_mut(rb as *mut RAMBlock, (*rb).len())
+            };
+            if self.is_init { return; }
+            (self.ptr, self.max) = (OwnedPtr::from_slice(rb), rb.len());
+            efi_ram.sort_noheap_by_key(|desc| desc.page_count);
+            for desc in efi_ram.iter().rev() {
+                if desc.ty == RAMType::Conv {
+                    let size = desc.page_count as usize * PAGE_4KIB;
+                    let addr = desc.phys_start as usize;
 
-                let ty = cfg!(target_arch = "x86_64").then(|| {
-                    if addr < 0x100000 { RAMType::Reserved } else { desc.ty }
-                }).unwrap_or(desc.ty);
+                    let ty = cfg!(target_arch = "x86_64").then(|| {
+                        if addr < 0x100000 { RAMType::Reserved } else { desc.ty }
+                    }).unwrap_or(desc.ty);
 
-                let block = RAMBlock::new(addr, size, ty, false);
-                self.add(block);
-            }
-        }
-
-        if self.ptr == OwnedPtr::from_slice(rb) {
-            let new_rb = self.alloc(
-                AllocParams::new(size_of::<RAMBlock>() * self.max)
-            ).expect("Failed to relocate RAMBlocks");
-            unsafe { self.ptr.ptr::<RAMBlock>().copy_to(new_rb.ptr::<RAMBlock>(), self.max); }
-            self.ptr = new_rb;
-        }
-
-        efi_ram_layout.sort_noheap_by_key(|desc| desc.phys_start);
-        for desc in efi_ram_layout {
-            if desc.ty != RAMType::Conv {
-                let size = desc.page_count as usize * PAGE_4KIB;
-                let addr = desc.phys_start as usize;
-                let mut ty = desc.ty;
-
-                #[cfg(target_arch = "x86_64")]
-                if addr < 0x100000 { ty = RAMType::Reserved; }
-
-                if RECLAMABLE.contains(&desc.ty) {
-                    ty = RAMType::Reclaimable;
+                    let block = RAMBlock::new(addr, size, ty, false);
+                    self.add(block);
                 }
+            }
 
-                let block = RAMBlock::new(addr, size, ty, false);
-                self.add(block);
+            if self.ptr == OwnedPtr::from_slice(rb) {
+                let new_rb = self.alloc(
+                    AllocParams::new(size_of::<RAMBlock>() * self.max)
+                ).expect("Failed to relocate RAMBlocks");
+                unsafe { self.ptr.ptr::<RAMBlock>().copy_to(new_rb.ptr::<RAMBlock>(), self.max); }
+                self.ptr = new_rb;
             }
         }
-        self.is_init = true;
-    }
 
-    fn reclaim(&mut self) {
         let efi_ram = efi_ram_layout();
-        let layout_len = efi_ram.len() * size_of::<RAMDescriptor>();
-
-        let elf_seg = elf_segments();
-        let seg_len = elf_seg.len() * size_of::<Segment>();
-
         let efi_ptr = self.alloc(
-            AllocParams::new(layout_len)
+            AllocParams::new(efi_ram.len() * size_of::<RAMDescriptor>())
                 .as_type(RAMType::EfiRamLayout)
         ).unwrap();
 
+        let elf_seg = elf_segments();
         let elf_ptr = self.alloc(
-            AllocParams::new(seg_len)
+            AllocParams::new(elf_seg.len() * size_of::<Segment>())
                 .as_type(RAMType::ElfSegments)
         ).unwrap();
 
@@ -256,6 +232,32 @@ impl PhysAlloc {
         SYSINFO.write().layout_ptr = efi_ptr.addr();
         KINFO.write().seg_ptr = elf_ptr.addr();
 
+        {
+            let efi_ram = efi_ram_layout_mut();
+            efi_ram.sort_noheap_by_key(|desc| desc.phys_start);
+            for desc in efi_ram.iter() {
+                if desc.ty != RAMType::Conv {
+                    let size = desc.page_count as usize * PAGE_4KIB;
+                    let addr = desc.phys_start as usize;
+                    let mut ty = desc.ty;
+
+                    #[cfg(target_arch = "x86_64")]
+                    if addr < 0x100000 { ty = RAMType::Reserved; }
+
+                    if RECLAMABLE.contains(&desc.ty) {
+                        ty = RAMType::Reclaimable;
+                    }
+
+                    let block = RAMBlock::new(addr, size, ty, false);
+                    self.add(block);
+                }
+            }
+        }
+
+        self.is_init = true;
+    }
+
+    fn reclaim(&mut self) {
         use alloc::vec::Vec;
         // Heap allocation is permitted because PhysAlloc::reclaim
         // is called only after heap initialisation and only once.
@@ -273,6 +275,8 @@ impl PhysAlloc {
                 block.addr(), block.size(),
                 RAMType::Conv, false
             );
+            // SAFETY: self.add() can never fail because
+            // self.count() always decreases after invalidation above.
             self.add(new_blk);
         }
     }
@@ -341,53 +345,53 @@ impl PhysAlloc {
         if NON_RAM.contains(&args.from_type) || NON_RAM.contains(&args.as_type) {
             return None; // Cannot allocate from or as non-RAM types
         }
+
         let ptr = match args.addr {
-            Some(addr) => addr,
-            None => self.find_free_ram(args)?.addr()
+            Some(addr) => OwnedPtr::new_bytes(addr, args.size),
+            None => self.find_free_ram(args)?
         };
+
+        if self.count() + MIN_REQ > self.max {
+            // Every allocation can split a RAMBlock into 3 parts which will need 2 extra RAMBlocks.
+            // as allocation can happen twice (once for expansion, once for request itself)
+            // we need at least 4 extra RAMBlocks.
+            let new_size = (self.max << 1).max(self.max + MIN_REQ);
+            // SAFETY: ptr is cloned for a purpose of metadata, RAM access to ptr will never happen.
+            self.expand(new_size, unsafe { ptr.clone() })?;
+        }
 
         let filter = |block: &RAMBlock| {
             block.not_used() && args.from_type == block.ty() &&
-            ptr >= block.addr() && ptr + args.size <= block.addr() + block.size()
+            ptr.addr() >= block.addr() && ptr.addr() + ptr.size() <= block.addr() + block.size()
         };
 
-        struct AllocInfo {
-            from: RAMBlock,
-            to: RAMBlock
-        }
-
-        let mut alloc_info = None;
-        for block in self.blocks_iter_mut() {
-            if filter(block) {
-                if block.ty() == args.as_type && !args.used { break; }
-                alloc_info = Some(AllocInfo {
-                    from: *block,
-                    to: RAMBlock::new(ptr, args.size, args.as_type, args.used)
-                });
-                block.invalidate();
-                break;
+        let (from, to) = self.blocks_iter_mut().find(|block|
+            filter(block)
+        ).and_then(|block| {
+            if block.ty() == args.as_type && !args.used {
+                return None; // Allocation lost its purpose
             }
-        }
 
-        if let Some(ainfo) = alloc_info {
-            self.add(ainfo.to);
+            let from = *block;
+            let to = RAMBlock::new(ptr.addr(), ptr.size(), args.as_type, args.used);
+            block.invalidate();
+            return Some((from, to));
+        })?;
 
-            let before_block = RAMBlock::new(
-                ainfo.from.addr(), ptr - ainfo.from.addr(),
-                ainfo.from.ty(), false
-            );
-            let after_block = RAMBlock::new(
-                ptr + args.size,
-                ainfo.from.addr() + ainfo.from.size() - (ptr + args.size),
-                ainfo.from.ty(), false
-            );
-            self.add(before_block);
-            self.add(after_block);
+        let before_block = RAMBlock::new(
+            from.addr(), ptr.addr() - from.addr(),
+            from.ty(), false
+        );
+        let after_block = RAMBlock::new(
+            ptr.addr() + ptr.size(),
+            from.addr() + from.size() - (ptr.addr() + ptr.size()),
+            from.ty(), false
+        );
+        self.add(before_block);
+        self.add(after_block);
+        self.add(to);
 
-            return Some(ainfo.to.into_owned_ptr());
-        }
-
-        return None;
+        return Some(to.into_owned_ptr());
     }
 
     fn free(&mut self, ptr: OwnedPtr) {
@@ -447,8 +451,8 @@ impl PhysAlloc {
             (None, None) => {
                 let prereq = new_block.into_owned_ptr();
                 if self.count() >= self.max {
-                    let new_size = (self.max << 1).max(self.max + 2);
-                    self.expand(new_size, prereq);
+                    let new_size = (self.max << 1).max(self.max + MIN_REQ);
+                    self.expand(new_size, prereq).expect("Failed to expand RAMBlocks");
                 }
 
                 let blocks = self.blocks_raw_mut();
@@ -461,8 +465,8 @@ impl PhysAlloc {
         }
     }
 
-    fn expand(&mut self, new_max: usize, prereq: OwnedPtr) {
-        if new_max <= self.max { return; }
+    fn expand(&mut self, new_max: usize, prereq: OwnedPtr) -> Option<()> {
+        if new_max <= self.max { return Some(()); }
 
         let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
         let old_blocks = unsafe { self.ptr.clone() };
@@ -496,7 +500,7 @@ impl PhysAlloc {
             }
 
             return OwnedPtr::new_bytes(addr, alloc_param.size);
-        }).expect("Failed to expand RAMBlocks");
+        })?;
 
         unsafe {
             new_blocks.ptr::<RAMBlock>().write_bytes(0, new_max);
@@ -505,10 +509,12 @@ impl PhysAlloc {
         (self.ptr, self.max) = (new_blocks, new_max);
         self.free(old_blocks);
         self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>()));
+
+        return Some(());
     }
 
     fn shrink(&mut self, new_max: usize) {
-        if new_max >= self.max || new_max < self.count() {
+        if new_max >= self.max || new_max < self.count() || new_max < MIN_REQ {
             return;
         }
 
@@ -535,7 +541,6 @@ impl PhysAlloc {
         let freed_size = self.ptr.size() - kept_size;
 
         if freed_size == 0 { return; }
-
         let freed_ptr = OwnedPtr::new_bytes(freed_addr, freed_size);
 
         self.max = new_max;
