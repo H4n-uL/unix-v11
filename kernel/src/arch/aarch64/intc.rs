@@ -1,4 +1,7 @@
-use crate::{device::cpu::{GICC_BASE, GICD_BASE, GICR_BASE, ic_va}, kargs::AP_LIST};
+use crate::{
+    device::cpu::{GICC_BASE, GICD_BASE, GICR_BASE, ic_va},
+    kargs::AP_LIST
+};
 
 use core::{
     arch::asm, hint::spin_loop, num::NonZeroUsize,
