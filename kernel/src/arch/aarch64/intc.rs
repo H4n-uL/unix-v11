@@ -16,7 +16,6 @@ const GICC_EOIR: usize  = 0x010;
 
 // GICD common reg offsets
 const GICD_CTRLR: usize = 0x000;
-const GICD_PIDR2: usize = 0xffe8;
 const GICD_ISENABLER: usize = 0x100;
 const GICD_ICENABLER: usize = 0x180;
 const GICD_IPRIORITYR: usize = 0x400;
@@ -28,22 +27,24 @@ fn gic_ver() -> usize {
         return v.get();
     }
 
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
-    let gicr = GICR_BASE.load(AtomOrd::Relaxed);
-    let gicc = GICC_BASE.load(AtomOrd::Relaxed);
-
-    if gicd != 0 {
-        let pidr2 = unsafe { ((gicd + GICD_PIDR2) as *const u32).read_volatile() };
-        let hw_ver = ((pidr2 >> 4) & 0xf) as usize;
-        if hw_ver != 0 {
-            GIC_VERSION.store(hw_ver, AtomOrd::Relaxed);
-            return hw_ver;
-        }
+    // If GIC Distributor is not present, GIC is not present.
+    if GICD_BASE.get().is_none() {
+        return 0;
     }
 
-    let v = if gicr != 0 { 3 } else if gicc != 0 { 2 } else { 0 };
-    GIC_VERSION.store(v, AtomOrd::Relaxed);
-    return v;
+    // If GIC Redistributor is present, it is GICv3.
+    if GICR_BASE.get().is_some() {
+        GIC_VERSION.store(3, AtomOrd::Relaxed);
+        return 3;
+    }
+
+    // If no Redistributor but CPU Interface is present, it is GICv2.
+    if GICC_BASE.get().is_some() {
+        GIC_VERSION.store(2, AtomOrd::Relaxed);
+        return 2;
+    }
+
+    return 0;
 }
 
 pub fn init() {
@@ -59,7 +60,8 @@ pub fn init() {
 }
 
 fn init_v2() {
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+    // SAFETY: GICD_BASE must be present to reach here.
+    let gicd = unsafe { *GICD_BASE.get_unchecked() };
     let gicc = ic_va();
 
     unsafe {
@@ -71,8 +73,9 @@ fn init_v2() {
 }
 
 fn init_v3() {
-    let gicd = GICD_BASE.load(AtomOrd::Relaxed);
-    let gicr = GICR_BASE.load(AtomOrd::Relaxed);
+    // SAFETY: GICD_BASE and GICR_BASE must be present to reach here.
+    let gicd = unsafe { *GICD_BASE.get_unchecked() };
+    let gicr = unsafe { *GICR_BASE.get_unchecked() };
 
     unsafe {
         if AP_LIST.virtid_self() == 0 {
@@ -130,9 +133,13 @@ pub fn eoi(intid: u32) {
 }
 
 pub fn enable(intid: u32) {
+    if gic_ver() == 0 {
+        return;
+    }
+
     let bit = 1u32 << (intid % u32::BITS);
     if intid < 32 && gic_ver() == 3 {
-        let gicr_sgi = GICR_BASE.load(AtomOrd::Relaxed) + 0x10000;
+        let gicr_sgi = unsafe { *GICR_BASE.get_unchecked() } + 0x10000;
         unsafe {
             // Group 1 (GICR_IGROUPR0)
             let igroupr0 = (gicr_sgi + 0x80) as *mut u32;
@@ -143,7 +150,7 @@ pub fn enable(intid: u32) {
             ((gicr_sgi + 0x100) as *mut u32).write_volatile(bit);
         }
     } else {
-        let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+        let gicd = unsafe { *GICD_BASE.get_unchecked() };
         let reg_idx = (intid / u32::BITS) as usize;
         unsafe {
             ((gicd + GICD_ISENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
@@ -152,14 +159,18 @@ pub fn enable(intid: u32) {
 }
 
 pub fn disable(intid: u32) {
+    if gic_ver() == 0 {
+        return;
+    }
+
     let bit = 1u32 << (intid % u32::BITS);
     if intid < u32::BITS && gic_ver() == 3 {
-        let gicr_sgi = GICR_BASE.load(AtomOrd::Relaxed) + 0x10000;
+        let gicr_sgi = unsafe { *GICR_BASE.get_unchecked() } + 0x10000;
         unsafe {
             ((gicr_sgi + 0x180) as *mut u32).write_volatile(bit);
         }
     } else {
-        let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+        let gicd = unsafe { *GICD_BASE.get_unchecked() };
         let reg_idx = (intid / u32::BITS) as usize;
         unsafe {
             ((gicd + GICD_ICENABLER + reg_idx * size_of::<u32>()) as *mut u32).write_volatile(bit);
@@ -171,7 +182,7 @@ pub fn send_ipi_others(intid: u32) {
     match gic_ver() {
         2 => unsafe {
             // GICD_SGIR: TargetListFilter=01 (wildcard except self)
-            let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+            let gicd = *GICD_BASE.get_unchecked();
             ((gicd + 0xf00) as *mut u32).write_volatile((1 << 24) | intid);
         },
         3 => unsafe {
@@ -186,7 +197,7 @@ pub fn send_ipi_others(intid: u32) {
 pub fn send_ipi(intid: u32, target: u32) {
     match gic_ver() {
         2 => unsafe {
-            let gicd = GICD_BASE.load(AtomOrd::Relaxed);
+            let gicd = *GICD_BASE.get_unchecked();
             ((gicd + 0xf00) as *mut u32).write_volatile(((target & 0xff) << 16) | intid);
         },
         3 => unsafe {

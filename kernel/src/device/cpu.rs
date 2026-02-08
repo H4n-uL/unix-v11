@@ -9,10 +9,11 @@ use crate::{
 
 use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use acpi::sdt::madt::{Madt, MadtEntry};
+use spin::Once;
 
-pub static GICD_BASE: AtomicUsize = AtomicUsize::new(0);
-pub static GICC_BASE: AtomicUsize = AtomicUsize::new(0); // GICv2 GIC CPU intfce
-pub static GICR_BASE: AtomicUsize = AtomicUsize::new(0); // GICv3 GIC redistrib
+pub static GICD_BASE: Once<usize> = Once::new();
+pub static GICC_BASE: Once<usize> = Once::new(); // GICv2 GIC CPU intfce
+pub static GICR_BASE: Once<usize> = Once::new(); // GICv3 GIC redistrib
 pub static CPU_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 // AMD64:   LAPIC Doorbell  4KB
@@ -72,14 +73,7 @@ pub fn init_cpu() {
             // AArch64
             Gicc(gicc) => {
                 cpu_count += 1;
-                // GICv2: GICC base
-                if GICC_BASE.load(AtomOrd::Relaxed) == 0 && gicc.gic_registers_address != 0 {
-                    GICC_BASE.store(gicc.gic_registers_address as usize, AtomOrd::Relaxed);
-                }
-                // GICv3: GICR base
-                if GICR_BASE.load(AtomOrd::Relaxed) == 0 && gicc.gicr_base_address != 0 {
-                    GICR_BASE.store(gicc.gicr_base_address as usize, AtomOrd::Relaxed);
-                }
+                GICC_BASE.call_once(|| gicc.gic_registers_address as usize);
                 if (gicc.mpidr as usize & 0xffff) == phys_id {
                     ic_phys = Some(if gicc.gicr_base_address != 0 {
                         gicc.gicr_base_address as usize
@@ -90,18 +84,16 @@ pub fn init_cpu() {
             }
             Gicd(gicd) => {
                 let base = gicd.physical_base_address as usize;
-                GICD_BASE.store(base, AtomOrd::Relaxed);
+                GICD_BASE.call_once(|| base);
                 map_doorbell(base);
             }
             GicRedistributor(gicr) => {
                 let base = gicr.discovery_range_base_address as usize;
                 let len = gicr.discovery_range_length as usize;
-                if base != 0 {
-                    GICR_BASE.store(base, AtomOrd::Relaxed);
-                    GLACIER.write()
-                        .map_range(base, base, len, flags::D_RW)
-                        .expect("Failed to map GIC Redistributor");
-                }
+                GICR_BASE.call_once(|| base);
+                GLACIER.write()
+                    .map_range(base, base, len, flags::D_RW)
+                    .expect("Failed to map GIC Redistributor");
             }
 
             _ => {}
