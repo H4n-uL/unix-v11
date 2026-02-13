@@ -1,4 +1,5 @@
 pub mod ctrlblk;
+pub mod kstack;
 
 use crate::{
     arch,
@@ -92,8 +93,10 @@ pub fn exit_proc(code: i32) -> ! {
 
 fn schedule() -> ! {
     printlnk!("scheduling...");
+    arch::intc::timer_set_ms(1000);
+    arch::intc::timer_enable();
 
     loop {
-        arch::halt();
+        arch::wfi();
     }
 }

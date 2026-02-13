@@ -1,6 +1,7 @@
 use crate::{
     arch::{exc::ExcFrame, rvm::flags},
     filesys::vfn::VirtFNode,
+    proc::kstack::KernelStack,
     ram::{
         PhysPageBuf,
         glacier::{Glacier, hihalf},
@@ -35,6 +36,7 @@ pub struct ProcCtrlBlk {
     pub ppid: usize,
 
     pub glacier: Glacier,
+    pub kstack: KernelStack,
     pub phys_alloc: Vec<OwnedPtr>,
     pub vram_map: Vec<VRamMap>,
     pub ctxt: Box<ExcFrame>,
@@ -141,6 +143,7 @@ impl ProcCtrlBlk {
         return Ok(Self {
             ppid: 0,
             glacier,
+            kstack: KernelStack::new().ok_or("Failed to create kernel stack")?,
             phys_alloc,
             vram_map,
             ctxt: Box::new(ctxt),

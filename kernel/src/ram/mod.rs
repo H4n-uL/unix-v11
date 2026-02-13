@@ -119,6 +119,9 @@ pub struct VirtPageBuf {
     layout: Layout
 }
 
+unsafe impl Send for VirtPageBuf {}
+unsafe impl Sync for VirtPageBuf {}
+
 impl VirtPageBuf {
     pub fn new(size: usize) -> Option<Self> {
         let layout = Layout::from_size_align(size, page_size()).ok()?;
