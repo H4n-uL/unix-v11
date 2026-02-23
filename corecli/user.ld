@@ -8,9 +8,9 @@ PHDRS {
 }
 
 SECTIONS {
-    . = 0x1000;
-    .text   ALIGN(0x1000) : { *(.text*) }   : text
-    .rodata ALIGN(0x1000) : { *(.rodata*) } : rodata
-    .data   ALIGN(0x1000) : { *(.data*) }   : data
-    .bss    ALIGN(0x1000) : { *(.bss*) }    : bss
+    . = 0x10000;
+    .text   ALIGN(0x10000) : { *(.text*) }   : text
+    .rodata ALIGN(0x10000) : { *(.rodata*) } : rodata
+    .data   ALIGN(0x10000) : { *(.data*) }   : data
+    .bss    ALIGN(0x10000) : { *(.bss*) }    : bss
 }
