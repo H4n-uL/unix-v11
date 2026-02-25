@@ -54,6 +54,7 @@ pub fn exec_aleph() {
 
 fn exec_proc(pid: usize) -> String {
     let ctxt;
+    let kstk_top;
 
     {
         let mut procs = PROCS.write();
@@ -69,11 +70,10 @@ fn exec_proc(pid: usize) -> String {
         RQ.write().insert(arch::phys_id(), pid);
         proc.glacier.activate();
         ctxt = *proc.ctxt;
+        kstk_top = proc.kstack.top();
     }
 
-    unsafe {
-        arch::proc::rstr_ctxt(&ctxt);
-    }
+    unsafe { arch::proc::rstr_ctxt(&ctxt, kstk_top); }
 }
 
 pub fn exit_proc(code: i32) -> ! {
@@ -87,6 +87,7 @@ pub fn exit_proc(code: i32) -> ! {
         printlnk!("proc {} exited: {}", pid, code);
     }
 
+    arch::exc::set_kstk(stack_top());
     unsafe { arch::move_stack(stack_top()); }
     schedule();
 }

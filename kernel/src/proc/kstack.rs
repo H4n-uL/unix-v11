@@ -17,6 +17,10 @@ impl KernelStack {
         glacier.unmap_page(va);
         return Some(Self { buf, pa });
     }
+
+    pub fn top(&self) -> usize {
+        return self.buf.as_ptr() as usize + page_size() + stack_size();
+    }
 }
 
 impl Drop for KernelStack {

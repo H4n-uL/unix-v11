@@ -224,6 +224,7 @@ impl CPUDesc {
 
     fn load(&mut self, stack_top: usize) {
         self.tss.rsp0 = stack_top as u64;
+        self.tss.ist1 = stack_top as u64;
         self.percpu.kernel_rsp = stack_top as u64;
         self.percpu.user_rsp = 0;
         self.load_tss();
@@ -401,7 +402,8 @@ pub fn init() {
         for i in 0..256 {
             let handler = ISR_STUBS[i] as u64;
             let attr = if [0x20, 0x80].contains(&i) { 0xee } else { 0x8e };
-            idt[i].set(handler, 0x08, 0, attr);
+            let ist = if i == 8 { 1 } else { 0 };
+            idt[i].set(handler, 0x08, ist, attr);
         }
 
         let idtr = IdtPtr {
@@ -450,5 +452,13 @@ pub fn init() {
             in("eax") 0x200,
             in("edx") 0
         );
+    }
+}
+
+pub fn set_kstk(kstk_top: usize) {
+    let mut descs = CPU_DESCS.write();
+    if let Some(desc) = descs.get_mut(&crate::arch::phys_id()) {
+        desc.tss.rsp0 = kstk_top as u64;
+        desc.percpu.kernel_rsp = kstk_top as u64;
     }
 }

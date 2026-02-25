@@ -1,4 +1,4 @@
-use crate::{arch::exc::ExcFrame, ram::stack_top};
+use crate::arch::exc::ExcFrame;
 
 use core::arch::asm;
 
@@ -42,18 +42,16 @@ impl ExcFrame {
 }
 
 #[inline(always)]
-pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
+pub unsafe fn rstr_ctxt(ctxt: &ExcFrame, kstk_top: usize) -> ! {
     unsafe {
         asm!(
             "mov x9, {ctxt}",
-            "mov x8, {ksp}",
+            "msr tpidr_el1, {ksp}",
 
             "ldr x10, [x9, #256]",
             "msr elr_el1, x10",
             "ldr x10, [x9, #264]",
             "msr spsr_el1, x10",
-            "ldr x10, [x9, #248]",
-            "msr sp_el0, x10",
             "ldr x10, [x9, #800]",
             "msr fpcr, x10",
             "ldr x10, [x9, #808]",
@@ -76,10 +74,15 @@ pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
             "ldp q28, q29, [x9, #736]",
             "ldp q30, q31, [x9, #768]",
 
+            "msr spsel, #1",
+            "ldr x10, [x9, #248]",
+            "msr sp_el0, x10",
+
             "ldp x0, x1, [x9, #0]",
             "ldp x2, x3, [x9, #16]",
             "ldp x4, x5, [x9, #32]",
             "ldp x6, x7, [x9, #48]",
+            "ldr x8, [x9, #64]",
             "ldp x10, x11, [x9, #80]",
             "ldp x12, x13, [x9, #96]",
             "ldp x14, x15, [x9, #112]",
@@ -91,13 +94,10 @@ pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
             "ldp x26, x27, [x9, #208]",
             "ldp x28, x29, [x9, #224]",
             "ldr x30, [x9, #240]",
-
-            "mov sp, x8",
-            "ldr x8, [x9, #64]",
             "ldr x9, [x9, #72]",
             "eret",
             ctxt = in(reg) ctxt,
-            ksp = in(reg) stack_top(),
+            ksp = in(reg) kstk_top,
             options(noreturn)
         );
     }

@@ -1,4 +1,4 @@
-use crate::{arch::exc::ExcFrame, ram::stack_top};
+use crate::arch::exc::ExcFrame;
 
 use core::arch::asm;
 
@@ -59,7 +59,7 @@ impl ExcFrame {
 }
 
 #[inline(always)]
-pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
+pub unsafe fn rstr_ctxt(ctxt: &ExcFrame, kstk_top: usize) -> ! {
     unsafe {
         asm!(
             "mov r14, {ksp}",
@@ -111,7 +111,7 @@ pub unsafe fn rstr_ctxt(ctxt: &ExcFrame) -> ! {
 
             "iretq",
             ctxt = in(reg) ctxt,
-            ksp = in(reg) stack_top(),
+            ksp = in(reg) kstk_top,
             options(noreturn)
         );
     }
