@@ -254,26 +254,21 @@ impl PhysAlloc {
     }
 
     fn reclaim(&mut self) {
-        use alloc::vec::Vec;
-        // Heap allocation is permitted because PhysAlloc::reclaim
-        // is called only after heap initialisation and only once.
+        loop { // O(n^2) but called only once.
+            let pair = self.blocks_raw().iter().enumerate()
+                .find(|(_, blk)| blk.valid() && blk.ty() == RAMType::Reclaimable)
+                .map(|(idx, &blk)| (idx, blk));
 
-        let iter = self.blocks_raw().iter().enumerate()
-            .filter(|(_, blk)| blk.valid() && blk.ty() == RAMType::Reclaimable)
-            .map(|(idx, &blk)| (idx, blk)).collect::<Vec<(usize, RAMBlock)>>();
-
-        for (idx, _) in iter.iter() {
-            self.blocks_raw_mut()[*idx].invalidate();
-        }
-
-        for (_, block) in iter.iter() { // O(kn)
-            let new_blk = RAMBlock::new(
-                block.addr(), block.size(),
-                RAMType::Conv, false
-            );
-            // SAFETY: self.count() before invalidation is guaranteed
-            // to be greater than or equal to after addition. thus, panic can never be triggered.
-            self.add(new_blk);
+            if let Some((idx, blk)) = pair {
+                self.blocks_raw_mut()[idx].invalidate();
+                let new_blk = RAMBlock::new(
+                    blk.addr(), blk.size(),
+                    RAMType::Conv, false
+                );
+                // SAFETY: self.count() before invalidation is guaranteed to be
+                // greater than or equal to after addition. thus, panic can never be triggered.
+                self.add(new_blk);
+            } else { break; }
         }
     }
 
