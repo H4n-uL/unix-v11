@@ -501,8 +501,12 @@ impl PhysAlloc {
             old_blocks.ptr::<RAMBlock>().copy_to(new_blocks.ptr::<RAMBlock>(), self.max);
         }
         (self.ptr, self.max) = (new_blocks, new_max);
+
+        // SAFETY: The block backing self.ptr was already located by self.find() and is valid, free Conv RAMBlock.
+        // self.alloc() returns the page-aligned size that self.ptr must adopt.
+        // Therefore, overwriting self.ptr and unwrapping the result is safe and will never fail.
+        self.ptr = self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>())).unwrap();
         self.free(old_blocks);
-        self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>()));
 
         return Some(());
     }
@@ -530,7 +534,7 @@ impl PhysAlloc {
         }
 
         let kept_addr = kept.as_ptr() as usize;
-        let kept_size = align_up(kept.len() * size_of::<RAMBlock>(), page_size());
+        let kept_size = size_align(kept.len() * size_of::<RAMBlock>());
         let freed_addr = align_up(kept_addr + kept_size, page_size());
         let freed_size = self.ptr.size() - kept_size;
 
