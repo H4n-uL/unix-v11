@@ -319,12 +319,10 @@ impl PhysAlloc {
         return self.find(|block| {
             let aligned = align_up(block.addr(), args.align);
 
-            block.not_used()
+            return block.not_used()
             && aligned + args.size <= block.end()
-            && block.size() >= args.size
-            && block.ty() == args.from_type
-        }
-        ).map(|block|{
+            && block.ty() == args.from_type;
+        }).map(|block|{
             let addr = align_up(block.addr(), args.align);
             OwnedPtr::new_bytes(addr, args.size)
         });
@@ -462,38 +460,40 @@ impl PhysAlloc {
     fn expand(&mut self, new_max: usize, prereq: OwnedPtr) -> Option<()> {
         if new_max <= self.max { return Some(()); }
 
-        let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>());
+        let alloc_param = AllocParams::new(new_max * size_of::<RAMBlock>()).build();
         let old_blocks = unsafe { self.ptr.clone() };
 
         let p = prereq; // pre-requested ptr(henceforth P)
+        let p_end_aligned = align_up(p.end(), alloc_param.align);
         let new_blocks = self.find(|block| {
+            let block_addr_aligned = align_up(block.addr(), alloc_param.align);
+            let fits_from_start = block_addr_aligned + alloc_param.size <= block.end();
+        
             return {
-                block.size() >= alloc_param.size // block is large enough
-                && !block.used()                 // block is free
-                && block.ty() == alloc_param.from_type // block is Conv
+                !block.used()
+                && block.ty() == alloc_param.from_type
                 && {
-                    block.end() <= p.addr() // block is before P
-                    || block.addr() >= p.end()  // block is after P
-                    || p.addr().saturating_sub(block.addr()) >= alloc_param.size
-                    || (block.end()).saturating_sub(p.end()) >= alloc_param.size
-                    // has enough space before or after P
+                    (fits_from_start && {
+                        block.end() <= p.addr()
+                        || block.addr() >= p.end()
+                        || p.addr().saturating_sub(block_addr_aligned) >= alloc_param.size
+                    }) || (p_end_aligned >= block.addr()
+                    && block.end().saturating_sub(p_end_aligned) >= alloc_param.size)
                 }
             };
         }).map(|block| {
-            let addr;
+            let block_addr_aligned = align_up(block.addr(), alloc_param.align);
             if {
                 block.end() <= p.addr() // block is before P
                 || block.addr() >= p.end()  // block is after P
-                || p.addr().saturating_sub(block.addr()) >= alloc_param.size
-                // has enough space before P
+                || p.addr().saturating_sub(block_addr_aligned) >= alloc_param.size
             } {
-                addr = block.addr();
+                // has enough space before P
+                return OwnedPtr::new_bytes(block_addr_aligned, alloc_param.size);
             } else {
                 // has enough space after P
-                addr = p.end();
+                return OwnedPtr::new_bytes(p_end_aligned, alloc_param.size);
             }
-
-            return OwnedPtr::new_bytes(addr, alloc_param.size);
         })?;
 
         unsafe {
@@ -502,9 +502,10 @@ impl PhysAlloc {
         }
         (self.ptr, self.max) = (new_blocks, new_max);
 
-        // SAFETY: The block backing self.ptr was already located by self.find() and is valid, free Conv RAMBlock.
-        // self.alloc() returns the page-aligned size that self.ptr must adopt.
-        // Therefore, overwriting self.ptr and unwrapping the result is safe and will never fail.
+        // SAFETY: The block backing self.ptr was already located by self.find()
+        // and is proven to be a valid, free Conv RAMBlock. Therefore,
+        // overwriting self.ptr and unwrapping the result is safe and will never
+        // fail.
         self.ptr = self.alloc(alloc_param.at(self.ptr.ptr::<RAMBlock>())).unwrap();
         self.free(old_blocks);
 
