@@ -69,14 +69,14 @@ impl RvmCfg {
     }
 }
 
+pub struct Glacier /* ˈɡlɑːˌsɪˑəh */ {
+    root_table: usize,
+    is_init: bool
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum GlacierErr {
     Failed2Alloc
-}
-
-pub struct Glacier {
-    root_table: usize,
-    is_init: bool
 }
 
 unsafe impl Send for Glacier {}
